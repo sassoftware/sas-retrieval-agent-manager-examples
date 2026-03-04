@@ -18,12 +18,7 @@ Not all sections are required, though we recommend including as many as possible
 Consider using a table of contents to make lengthy and complex README files easier to navigate.
 -->
 
-# PROJECT_NAME
-
-<!--
-Replace `PROJECT_NAME` with your project's name.
-Your project's name is the first thing people will see when browsing your project.
--->
+# sas-retrieval-agent-manager-examples
 
 ## Overview
 
