@@ -4,7 +4,6 @@
 
 This repository contains code examples for using the APIs provided by SAS Retrieval Agent Manager.
 
-
 <!--
 ### What's New
 If applicable to your project, list new features you want users to be aware of.
