@@ -1,36 +1,12 @@
-<!--
-Use this template to structure your project's README.md file.
-Not all sections are required, though we recommend including as many as possible.
-
-* Project_Name (required)
-* Overview (required)
-  * What's new (optional)
-  * Prerequisites (optional)
-* Installation (required)
-  * Getting Started (optional)
-  * Running (optional)
-  * Examples (optional)
-  * Troubleshooting (optional)
-* Contributing (required)
-* License (required)
-* Additional Resources (required)
-
-Consider using a table of contents to make lengthy and complex README files easier to navigate.
--->
-
 # sas-retrieval-agent-manager-examples
 
 ## Overview
 
-<!--
-Include a brief project description, written from the perspective of the value your project provides users.
-Be sure to define terms; links to resources where necessary and appropriate.
-A good overview is clear, short, and to the point.
--->
+This repository contains code examples for using the APIs provided by SAS Retrieval Agent Manager.
 
+
+<!--
 ### What's New
-
-<!--
 If applicable to your project, list new features you want users to be aware of.
 This section might supplement the Changelog file from the repository and only highlight important changes.
 -->
