@@ -6,7 +6,7 @@ This example demonstrates how to build a web-based chat interface to interact wi
 
 ## Use Case
 
-Organizations need to provide employees with the ability to ask questions about internal documentation, knowledge bases, or private document repositories. This example demonstrates how to build a user-friendly chat interface that connects to SAS Retrieval Agent Manager and enables users to do the following:
+Organizations need to provide employees with the ability to ask questions about internal documentation, knowledge bases, or private document repositories. This example demonstrates how to build a user-friendly chat interface that connects to SAS Retrieval Agent Manager and enables users to do the following tasks:
 
 - Authenticate using your SAS Retrieval Agent Manager credentials
 - Browse available document collections
@@ -16,7 +16,7 @@ Organizations need to provide employees with the ability to ask questions about 
 
 ## Prerequisites
 
-Before running this example, make sure you have the following:
+Before running this example, make sure you have the following prerequisites:
 
 - Access to a running SAS Retrieval Agent Manager instance
 - Your user login credentials for the SAS Retrieval Agent Manager instance
@@ -25,7 +25,7 @@ Before running this example, make sure you have the following:
 
 ## Technologies Used
 
-This example web application is built using React v19, Next.js v15, Redux v2.9 and Material UI components v7.3.2.
+This example web application is built using React v19, Next.js v15, Redux v2.9 and Material UI components v7.3.2.  See [third party libraries](./THIRDPARTY.md) for a complete list of the libraries used and links to their respective licenses.
 
 ### Application Structure
 
@@ -44,7 +44,7 @@ The following list describes the main components of the application:
 
 ### Configuration
 
-1. Create a `.env` file in the website directory based on the `.env.example` file by using the following command:
+1. Create a `.env` file in the website directory based on the `.env.example` file by running the following command:
 
 ```bash
 cp .env.example .env
@@ -57,15 +57,15 @@ cp .env.example .env
 RAM_URL=https://<your host here>
 ```
 
-**NOTE:** Replace `<your host here>` with the host name of your SAS Retrieval Agent Manager deployment (e.g., `https://ram-server.example.com`).
+**NOTE:** Replace `<your host here>` with the host name of your SAS Retrieval Agent Manager deployment (for example, `https://ram-server.example.com`).
 
-1. Build the Docker image from the website directory by using the following command:
+1. Build the Docker image from the website directory by running the following command:
 
 ```bash
 docker build -t chat-app .
 ```
 
-2. Run the container by using the following command:
+2. Run the container by running the following command:
 
 ```bash
 docker run -it --rm -p 3000:3000 --env-file .env chat-app
@@ -73,40 +73,40 @@ docker run -it --rm -p 3000:3000 --env-file .env chat-app
 
 3. Open your browser and navigate to `http://localhost:3000`. You should see a login page with a **Sign In with Device Code** button.
 
-4. Click the sign in button to initiate authentication. You'll then see a page wtih the following:
+4. Click the **Sign In with Device Code** button to initiate authentication. A page then opens with the following information:
 
    - A user code
    - A verification URL
 
-5. Click the COPY button next to the user code.
+5. Click the **COPY** button next to the user code.
 
-6. Clck on the Verification URL link and a new tab will open in your browser.
+6. Click the **Verification URL** link and a new tab opens in your browser.
 
-7. Paste the user code in the Device Login field and and click Submit.
+7. Paste the user code in the **Device Login** field and click **Submit**.
 
-8. Click Yes to the "Do you grant these access privileges?" prompt.
+8. Click **Yes** when prompted **"Do you grant these access privileges?"**.
 
 ### Running with Node.js
 
-1. Install dependencies by using the following command:
+1. Install dependencies by running the following command:
 
 ```bas
 npm install
 ```
 
-2. Start the development server by using the following command:
+2. Start the development server by running the following command:
 
 ```bash
 npm run dev
 ```
 
-3. Open your browser and navigate to `http://localhost:3000` and follow the device code authentication flow as described in the Docker instructions above.
+1. Open your browser and navigate to `http://localhost:3000` and follow the device code authentication flow as described in the preceeding Docker instructions.
 
 ## Using the Application
 
-After successfully logging in to the example web application, the collections page displays all your available document collections from SAS Retrieval Agent Manager. On the collections page, do any of the following:
+After successfully logging in to the example web application, the **Collections** page displays all of your available document collections from SAS Retrieval Agent Manager. On the **Collections** page, do any of the following:
 
-- Select a collection by clicking on its name.
+- Select a collection by clicking its name.
 - Start a new chat session by clicking the **START NEW CHAT** button.
 - Continue a previous conversation by clicking <img src="img/3-line-menu-icon.png" alt="3 line menu" style="width: 17px; height: 19px;"> and selecting the initial prompt text.
 
@@ -127,19 +127,6 @@ In the event that an error occurs, detailed technical error information is logge
 ### "Failed to send message" on the Chat Page
 
 - Check the technical error information logged.
-- Check the Network tab in the browser's developer tools.
+- Check the **Network** tab in the browser's developer tools.
 - Perform the same query using the SAS RAW web UI.
-- If problem persists and is unique to the example web application, submit a GitHub issue or contact SAS Support via the [SAS Retrieval Agent Manager Learn and Support Page](https://support.sas.com/en/software/retrieval-agent-manager-support.html).
-
-## Contributing
-
-Maintainers are accepting patches and contributions to this project.
-Please read [CONTRIBUTING.md](CONTRIBUTING.md) for details about submitting contributions to this project.
-
-## License
-
-This project is licensed under the [Apache 2.0 License](LICENSE).
-
-## Additional Resources
-
-[SAS Retrieval Agent Manager Help Center](https://go.documentation.sas.com/doc/en/ragntmgrcdc/default/ragntmgrug/titlepage.htm)
+- If the problem persists and is unique to the example web application, submit a GitHub issue or contact SAS Support via the [SAS Retrieval Agent Manager Learn and Support Page](https://support.sas.com/en/software/retrieval-agent-manager-support.html).
