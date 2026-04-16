@@ -16,6 +16,7 @@ This section might supplement the Changelog file from the repository and only hi
 | Example | Description |
 | ------ | ------ |
 | [chat web app](/chat-webapp/) | This example demonstrates how to build a web-based chat interface to interact with SAS Retrieval Agent Manager (RAM). The application allows users to authenticate with their SAS RAM credentials, select from available document collections, and ask questions about private documents that have been added to SAS RAM Agent Manager. It provides a complete implementation of a Next.js-based chat application with authentication, session management, and real-time query capabilities. |
+| [financial agent](/examples/agents/financial_agent/) | This example demonstrates a RAM agent that combines structured financial data queries with unstructured document search to generate client-specific daily market updates. |
 
 ## Contributing
 
