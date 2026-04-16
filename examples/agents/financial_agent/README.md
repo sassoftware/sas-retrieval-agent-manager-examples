@@ -19,6 +19,7 @@ Configure these tools in the agent experiment:
 	- `list_schemas`
 	- `list_tables`
 - Finance market tools (Code MCP server):
+	- See [finance_tools Code MCP server](../../code_mcp_servers/finance_tools/)
 	- `fetch_current_price`
 	- `fetch_price_history`
 - Chart tools (Container MCP server):
