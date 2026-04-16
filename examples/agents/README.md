@@ -35,6 +35,11 @@ Only required if you define them in the agent's code template. Any specific
 environment variables used by the agent. The agent examples will document if
 these are required and how to use them.
 
+### Aliases (optional)
+
+Only required if you define them in the agent's code template. Aliases allow
+you to configure multiple sets of LLMs, collections, or tools that your agent can use.
+
 ## Automation Hook (Optional)
 
 The `init(client)` function in [run.py](run.py) is intended for scheduled RAM automation.
