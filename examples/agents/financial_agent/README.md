@@ -32,6 +32,7 @@ Configure these tools in the agent experiment:
 Configure these collections:
 
 - Minimum recommendation: a daily financial news collection.
+	- See [financial_news_fetcher custom source](../../custom_sources/financial_news_fetcher/) for an example of generating daily financial news documents for this collection.
 - Recommended setting: turn ON agentic retrieval.
 
 ### Environment Variables (optional)

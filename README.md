@@ -22,13 +22,11 @@ This section might supplement the Changelog file from the repository and only hi
 
 | Example | Description |
 | ------ | ------ |
-| [agent orchestrators](/examples/agent_orchestrators/) | Folder for agent orchestrator examples and related setup guidance. |
 
 #### Agents
 
 | Example | Description |
 | ------ | ------ |
-| [agents](/examples/agents/) | Collection of RAM code agent template examples and general setup guidance. |
 | [banking agent](/examples/agents/banking_agent/) | Banking climate-risk analysis agent that queries bank report collections, supports templated questions, compares bank groups, and can generate chart output. |
 | [default tool calling agent](/examples/agents/default_tool_calling_agent/) | Default RAM code agent template that uses experiment-configured tools, collections, and retrieval settings. |
 | [doc metadata augmentation agent](/examples/agents/doc_metadata_augmentation_agent/) | Demonstrates retrieval with metadata-aware prompting by injecting file name, page number, and chunk details into LLM context. |
@@ -40,7 +38,6 @@ This section might supplement the Changelog file from the repository and only hi
 
 | Example | Description |
 | ------ | ------ |
-| [code mcp servers](/examples/code_mcp_servers/) | Collection of Code MCP server templates and generic setup guidance for RAM. |
 | [finance tools](/examples/code_mcp_servers/finance_tools/) | Finance and quantitative analysis tools, including market data lookup, regression, summary statistics, and arithmetic helpers. |
 | [simple calculator](/examples/code_mcp_servers/simple_calculator/) | Minimal single-tool MCP server example that adds two integers. |
 | [web search](/examples/code_mcp_servers/web_search/) | Lightweight web search MCP server example built on DuckDuckGo search via the `ddgs` package. |
@@ -49,13 +46,11 @@ This section might supplement the Changelog file from the repository and only hi
 
 | Example | Description |
 | ------ | ------ |
-| [container mcp servers](/examples/container_mcp_servers/) | Folder for container-based MCP server examples and related setup guidance. |
 
 #### Custom Sources
 
 | Example | Description |
 | ------ | ------ |
-| [custom sources](/examples/custom_sources/) | Folder for custom source examples and related setup guidance. |
 | [financial news fetcher](/examples/custom_sources/financial_news_fetcher/) | Custom source example that fetches technology-sector financial news, generates a PDF digest, and saves it into a RAM source for downstream collection ingestion. |
 
 ## Contributing
