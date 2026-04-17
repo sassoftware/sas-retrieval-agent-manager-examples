@@ -15,13 +15,16 @@ system prompt content from `SYSTEM_PROMPT.txt`
 Configure these tools in the agent experiment:
 
 - Database tools (Container MCP server connected to the financial client database):
+	- See [postgres_db_connection_template](../../container_mcp_servers/postgres_db_connection_template/) for the container MCP server used by this agent.
 	- `execute_sql`
 	- `list_schemas`
 	- `list_tables`
 - Finance market tools (Code MCP server):
+	- See [finance_tools Code MCP server](../../code_mcp_servers/finance_tools/)
 	- `fetch_current_price`
 	- `fetch_price_history`
 - Chart tools (Container MCP server):
+	- See [chart_generator](../../container_mcp_servers/chart_generator/) for the container MCP server used by this agent.
 	- `generate_bar_chart`
 	- `generate_line_chart`
 	- `generate_pie_chart`
@@ -31,6 +34,7 @@ Configure these tools in the agent experiment:
 Configure these collections:
 
 - Minimum recommendation: a daily financial news collection.
+	- See [financial_news_fetcher custom source](../../custom_sources/financial_news_fetcher/) for an example of generating daily financial news documents for this collection.
 - Recommended setting: turn ON agentic retrieval.
 
 ### Environment Variables (optional)
