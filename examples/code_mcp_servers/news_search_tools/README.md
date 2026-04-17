@@ -15,21 +15,12 @@ orchestrator example.
 
 ## Setup
 
-1. On the `Code Templates` pane, click `Code MCP Server`.
-2. Add [run.py](./run.py) and [requirements.txt](./requirements.txt)
-3. Save and publish the tool server.
+Follow the [general Code MCP server instructions](../README.md) with these specifics:
 
-## Environment Variables
-
-| Variable | Required | Description |
-| -------- | -------- | ----------- |
-| `NYT_API_KEY` | Yes (for `search_nyt_headlines`) | New York Times API key. Get one at [developer.nytimes.com](https://developer.nytimes.com/). |
-
-Set this as a secret environment variable on the MCP tool server in RAM.
+- **Environment variables:** Add `NYT_API_KEY` as a secret environment variable, set to
+  your NYT API key (get one at [developer.nytimes.com](https://developer.nytimes.com/)).
 
 ## Dependencies
-
-The `requirements.txt` lists all Python packages needed by the tools:
 
 - `httpx` — async HTTP client (NYT API)
 - `requests` — HTTP client (Reddit RSS)

@@ -19,7 +19,7 @@ agents from the [agents examples](../../agents/), or any other agents you have s
 
 1. On the `Agents` pane, click **Create an Agent Orchestrator**.
 2. Create a new experiment. Everything can be left as default besides the `Agents` tab.
-3. **Agents:** Add any sub-agents you'd like (at least two recommeneded).
+3. **Agents:** Add any sub-agents you'd like (at least two recommended).
 4. Click `Create`.
 5. Start the orchestrator's server.
 
