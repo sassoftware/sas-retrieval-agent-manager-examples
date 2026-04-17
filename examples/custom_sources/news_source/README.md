@@ -29,43 +29,40 @@ When the source runs, it:
 
 ### 1. Create the Source Template
 
-1. In RAM, go to **Source Templates** and create a new custom source template.
-2. Copy `run.py` into the template's `run.py`.
-3. Copy the contents of `requirements.txt` into the template's `requirements.txt`.
-4. **Before copying `run.py`**, edit the `CATEGORY` variable at the top to match the news
+1. On the `Code Templates` pane, click `Custom Source`.
+2. Add [run.py](./run.py) and [requirements.txt](./requirements.txt)
+3. In run.py, edit the `CATEGORY` variable at the top to match the news
    domain you want (see "Available Categories" below).
+4. Add an environment variable called `NYT_API_KEY` and set it to your NYT api key (which you can get from [developer.nytimes.com])
 5. Save and publish the template.
 
 ### 2. Create a Source from the Template
 
-1. Go to the **Sources** tab and create a new source using the template you just published.
+1. Go to the **Sources** pane and create a new source using the template you just published.
 2. Name the source to match the category (e.g., "Business news", "Health news").
+3. On the `File Update Schedule` of the source, set it to a schedule and set it to update as often as you'd like. It's recommended to have it update everyday at some hour and minute of your choosing.
+4. Click Save and open your newly created source.
+5. On the Files tab, click `Syncronize`.
+6. On the Jobs tab, you should see your synconization executing. This is where you can see its status.
 
 ### 3. Create a Collection
 
-1. Go to the **Collections** tab and create a new collection (e.g., "Business News").
+1. Go to the **Collections** pane and create a new collection (e.g., "Business News").
 2. Add the source you just created to the collection.
-3. Vectorize the collection.
+3. Create a new configuration and set the `Configuration update strategy` to `Append, sync, and delete`.
+4. Vectorize the collection.
 
 ### 4. Set Up Automation
 
-1. Go to the **Automations** tab.
-2. Create a new automation that triggers re-vectorization of the collection whenever the
-   source's cron job runs.
-3. The default schedule is `0 13 * * *` (daily at 1:00 PM UTC). You can change this in
-   the source's settings.
-
-This ensures your news collection stays up to date: the source fetches fresh articles on
-schedule, and the automation re-vectorizes the collection with the new content.
+1. Go to the **Automation** pane.
+2. Click on the pipeline of your news source's name
+3. Hover over the dot on the right side of the yellow rectangle until you see your cursor become a +. Then click and drag your cursor to the right side of the blue rectangle. This tells RAM to re-vectorize your collection every time your custom source updates.
 
 ## Environment Variables
 
 | Variable | Required | Description |
 | -------- | -------- | ----------- |
-| `NYT_API_KEY` | Yes | New York Times API key. Get one at [developer.nytimes.com](https://developer.nytimes.com/). Set this in the `run.py` file where indicated. |
-
-> **Important:** Replace the placeholder `YOUR_NYT_API_KEY_HERE` in `run.py` with your
-> own NYT API key. Do not commit API keys to version control.
+| `NYT_API_KEY` | Yes | New York Times API key. Get one at [developer.nytimes.com](https://developer.nytimes.com/)|
 
 ## Available Categories
 

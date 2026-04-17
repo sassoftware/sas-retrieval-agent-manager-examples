@@ -15,10 +15,9 @@ orchestrator example.
 
 ## Setup
 
-1. In RAM, go to **MCP Tool Servers** and create a new **Code** MCP server.
-2. Copy `run.py` into the server's `run.py`.
-3. Copy the contents of `requirements.txt` into the server's `requirements.txt`.
-4. Save and publish the tool server.
+1. On the `Code Templates` pane, click `Code MCP Server`.
+2. Add [run.py](./run.py) and [requirements.txt](./requirements.txt)
+3. Save and publish the tool server.
 
 ## Environment Variables
 

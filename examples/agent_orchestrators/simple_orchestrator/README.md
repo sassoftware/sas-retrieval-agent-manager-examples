@@ -17,17 +17,11 @@ agents from the [agents examples](../../agents/), or any other agents you have s
 
 ## Setting Up the Orchestrator
 
-1. Create a new agent in RAM and set its type to **Orchestrator**.
-2. Add your sub-agents (at least two recommended).
-3. Create a **no-code** experiment. No code template is needed for this example since it
-   uses the built-in orchestrator behavior.
-4. **System prompt:** Use the content from `SYSTEM_PROMPT.txt`, or write your own. The
-   system prompt should describe the sub-agents and how the orchestrator should route
-   queries.
-5. **Collections:** None required.
-6. **Tools:** None required.
-7. **LLM:** Configure the default LLM.
-8. Start the orchestrator's server.
+1. On the `Agents` pane, click **Create an Agent Orchestrator**.
+2. Create a new experiment. Everything can be left as default besides the `Agents` tab.
+3. **Agents:** Add any sub-agents you'd like (at least two recommeneded).
+4. Click `Create`.
+5. Start the orchestrator's server.
 
 ## How It Works
 
@@ -41,9 +35,3 @@ The no-code orchestrator uses RAM's built-in orchestrator agent, which:
 This is the simplest way to set up an orchestrator in RAM. For more control over the
 orchestration logic (custom routing, multi-step research, specialized prompts), see the
 [News Orchestrator](../news_orchestrator/) example which uses a code template.
-
-## Files
-
-| File | Description |
-| ---- | ----------- |
-| `SYSTEM_PROMPT.txt` | System prompt for the orchestrator |

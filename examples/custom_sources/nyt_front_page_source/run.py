@@ -2,14 +2,12 @@
 # SPDX-License-Identifier: Apache-2.0
 
 from datetime import date
+import os
 import time
 
 import requests
 
-# ---------------------------------------------------------------------------
-# REPLACE THIS with your own NYT API key from https://developer.nytimes.com/
-# ---------------------------------------------------------------------------
-API_KEY = "YOUR_NYT_API_KEY_HERE"
+API_KEY = os.environ.get("NYT_API_KEY")
 
 SECTORS = [
     "arts", "automobiles", "books%2Freview", "business", "fashion", "food",

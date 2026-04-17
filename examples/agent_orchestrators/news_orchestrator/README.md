@@ -51,21 +51,20 @@ and use any sub-agents assigned to it.
 1. Create and publish the **News Search Tools** MCP server.
 2. Create **custom sources** for each news domain and an NYT front page source (see above).
 3. Create **collections** for each source, vectorize them, and set up **automations** to
-   re-vectorize on the source's schedule.
+   re-vectorize whenever the source updates.
 4. Create and start each **sub-agent** (Business, Health, Science/Tech, Information Finder).
 5. Verify each sub-agent is running and responsive.
 6. Create the **orchestrator** (this agent).
 
 ## Setting Up the Orchestrator
 
-1. Create a new agent in RAM and set its type to **Orchestrator**.
-2. Add all the sub-agents listed above.
-3. Create a **code template** experiment (type: `code_orchestrator`).
-4. Copy `run.py` into the template's `run.py`.
-5. **Collections:** None required on the orchestrator itself.
-6. **Tools:** None required on the orchestrator itself.
-7. **LLM:** Configure the default LLM. A capable model (e.g., GPT-4, Claude) is
-   recommended since the orchestrator needs strong reasoning for multi-agent coordination.
+1. Create a **code template** by clicking `Code Orchestrator Agent` on the `Code Templates` page
+2. Add [run.py](./run.py)
+3. On the `Agents` pane, click **Create an Agent Orchestrator**.
+4. Create a new experiment. Everything can be left as default except for the following:
+5. **Details:** Set `Experiment Type` to `Code template experiment` and select the code template you just made.
+6. **Agents:** Add all the agents listed above.
+7. Click `Create`.
 8. Start the orchestrator's server.
 
 ## How It Works
@@ -101,4 +100,3 @@ configured on the sub-agents' MCP tool server.
 | File | Description |
 | ---- | ----------- |
 | `run.py` | Orchestrator code template |
-| `SYSTEM_PROMPT.txt` | System prompt for the orchestrator (also embedded in `run.py`) |

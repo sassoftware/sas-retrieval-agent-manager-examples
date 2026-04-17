@@ -25,13 +25,12 @@ synthesizes their responses into a unified answer.
 1. In RAM, create the sub-agents first. Each sub-agent should be a separate agent with its own
    experiment, code template, system prompt, and any required tools or collections.
 2. Start each sub-agent's server so it is running and available.
-3. Create a new agent and set its type to **Orchestrator**.
-4. In the orchestrator's configuration, add the sub-agents by selecting them from the list of
-   available agents.
+3. On the `Agents` pane, click **Create an Agent Orchestrator**.
+4. Create a new experiment.
 5. Choose between a **no-code** experiment (uses built-in orchestrator behavior) or a
    **code template** experiment (for custom orchestration logic).
-6. Configure the orchestrator's system prompt to describe how it should route queries and
-   synthesize responses.
+6. On the `Agents` tab of the experiment, add the sub-agents by selecting them from the list of
+   available agents.
 7. Start the orchestrator's server.
 
 ## Examples
