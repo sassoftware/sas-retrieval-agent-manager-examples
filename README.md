@@ -21,6 +21,15 @@ This section might supplement the Changelog file from the repository and only hi
 | [financial agent](/examples/agents/financial_agent/) | This example demonstrates a RAM agent that combines structured financial data queries with unstructured document search to generate client-specific daily market updates. |
 | [image render agent](/examples/agents/image_render_agent/) | Demonstrates how to render tool-generated images in RAM chat using base64-encoded image output. |
 | [multiple llms agent](/examples/agents/multiple_llms_agent/) | Routes prompts between low- and high-reasoning LLM aliases to show dynamic multi-model selection in a single agent template. |
+| [news search tools](/examples/code_mcp_servers/news_search_tools/) | A Code MCP server providing web search tools (DuckDuckGo, Reddit, NYT, Yahoo Finance) used by the news agent examples. |
+| [news custom source](/examples/custom_sources/news_source/) | A custom source template that fetches daily news from NYT, Reddit, and Yahoo Finance for a configurable news domain. |
+| [NYT front page source](/examples/custom_sources/nyt_front_page_source/) | A custom source template that fetches daily headlines from all 26 NYT Top Stories sections. |
+| [business news agent](/examples/agents/business_news_agent/) | A no-code agent specialized in business and financial news, with access to a news collection and search tools. |
+| [health news agent](/examples/agents/health_news_agent/) | A no-code agent specialized in health and medical news, with access to a news collection and search tools. |
+| [science and tech news agent](/examples/agents/science_tech_news_agent/) | A no-code agent specialized in science and technology news, with access to a news collection and search tools. |
+| [news information finder](/examples/agents/news_information_finder/) | A general-purpose news search agent with access to all news collections and web search tools. |
+| [simple orchestrator](/examples/agent_orchestrators/simple_orchestrator/) | A minimal no-code orchestrator example that demonstrates the basic sub-agent coordination pattern. |
+| [news orchestrator](/examples/agent_orchestrators/news_orchestrator/) | An advanced orchestrator that coordinates domain-specific news agents to produce cross-domain news analysis and insight-driven narratives. |
 
 ## Contributing
 
