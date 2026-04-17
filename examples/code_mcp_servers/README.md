@@ -1,6 +1,7 @@
-# Generic Code MCP Server Instructions
+# Code MCP Servers
 
-This folder contains examples of Code MCP server templates for RAM.
+This folder contains examples of Code MCP tool servers built with RAM. Code MCP servers
+let you write Python code that exposes tools (functions) your agents can call at runtime.
 
 A Code MCP server in RAM is a lightweight Python project made up of:
 
@@ -8,12 +9,12 @@ A Code MCP server in RAM is a lightweight Python project made up of:
 - `requirements.txt`: optional third-party Python packages used by the tools.
 - Environment variables (optional): runtime configuration values used by the server.
 
-## Creating a new Code MCP server template
+## Creating a Code MCP Server
 
-1. In RAM Code Templates, create a new Code MCP server template.
+1. On the `Code Templates` pane, click `Code MCP Server`.
 2. Copy the example `run.py` into the template's `run.py`.
 3. If needed, copy the example `requirements.txt` into the template's `requirements.txt`.
-4. Configure any required environment variables.
+4. Configure any required environment variables (see the example's README).
 5. Save and publish the template.
 
 ## What to include in run.py
@@ -35,15 +36,18 @@ Use environment variables for configuration that should not be hardcoded, such a
 - API keys or tokens
 - Feature flags or runtime options
 
-## Examples
-
-- [finance_tools](c:\Users\josand\Projects\sas-retrieval-agent-manager-examples\examples\code_mcp_servers\finance_tools\README.md): Finance and quantitative analysis tools, including market data lookup, regression, summary statistics, and arithmetic helpers.
-- [simple_calculator](c:\Users\josand\Projects\sas-retrieval-agent-manager-examples\examples\code_mcp_servers\simple_calculator\README.md): Minimal single-tool MCP server example that adds two integers.
-- [web_search](c:\Users\josand\Projects\sas-retrieval-agent-manager-examples\examples\code_mcp_servers\web_search\README.md): Lightweight web search tool example built on DuckDuckGo search via the `ddgs` package.
-
 ## Testing and usage
 
 After publishing the Code MCP server template, you will need to create a new
 "MCP Tool Server" that uses the template in the "MCP Tools" page of RAM. After
 creating and starting the tool server successfully, you can then register the tools
 with your agent.
+
+## Examples
+
+| Example | Description |
+| ------- | ----------- |
+| [Finance Tools](./finance_tools/) | Finance and quantitative analysis tools, including market data lookup, regression, summary statistics, and arithmetic helpers |
+| [News Search Tools](./news_search_tools/) | Web search tools for finding news from NYT, Reddit, DuckDuckGo, and Yahoo Finance |
+| [Simple Calculator](./simple_calculator/) | Minimal single-tool MCP server example that adds two integers |
+| [Web Search](./web_search/) | Lightweight web search tool example built on DuckDuckGo search via the `ddgs` package |

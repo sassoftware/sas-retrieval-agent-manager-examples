@@ -1,0 +1,8 @@
+# Add your tool's Python dependencies here
+httpx
+requests
+feedparser
+beautifulsoup4
+trafilatura
+ddgs
+yfinance
