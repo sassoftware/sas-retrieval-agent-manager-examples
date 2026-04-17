@@ -15,6 +15,7 @@ system prompt content from `SYSTEM_PROMPT.txt`
 Configure these tools in the agent experiment:
 
 - Database tools (Container MCP server connected to the financial client database):
+	- See [postgres_db_connection_template](../../container_mcp_servers/postgres_db_connection_template/) for the container MCP server used by this agent.
 	- `execute_sql`
 	- `list_schemas`
 	- `list_tables`
@@ -23,6 +24,7 @@ Configure these tools in the agent experiment:
 	- `fetch_current_price`
 	- `fetch_price_history`
 - Chart tools (Container MCP server):
+	- See [chart_generator](../../container_mcp_servers/chart_generator/) for the container MCP server used by this agent.
 	- `generate_bar_chart`
 	- `generate_line_chart`
 	- `generate_pie_chart`
