@@ -2,8 +2,13 @@
 
 This folder contains examples of custom source templates built with RAM. Custom sources
 let you write Python code that fetches data from external APIs and saves it as documents
-for vectorization. Each example includes the code needed (`run.py`/`requirements.txt`)
-and details on how to configure the source.
+for vectorization.
+
+Each example documents:
+
+- What data it fetches or generates
+- Which dependencies it requires
+- What files it writes to the source
 
 ## Creating a Custom Source
 
@@ -12,9 +17,10 @@ Every custom source follows the same steps to set up.
 ### 1. Create the Source Template
 
 1. On the `Code Templates` pane, click `Custom Source`.
-2. Add `run.py` and `requirements.txt` from the example.
-3. Add any environment variables the example requires (see the example's README).
-4. Save and publish the template.
+2. Copy the example `run.py` into the template's `run.py`.
+3. If needed, copy the example `requirements.txt` into the template's `requirements.txt`.
+4. Configure any required environment variables or LLM aliases (see the example's README).
+5. Save and publish the template.
 
 ### 2. Create a Source from the Template
 
@@ -40,9 +46,17 @@ Every custom source follows the same steps to set up.
    become a +. Then click and drag your cursor to the right side of the blue rectangle.
    This tells RAM to re-vectorize your collection every time your custom source updates.
 
+## Expected structure
+
+A custom source example will typically contain:
+
+- `run.py`: source implementation
+- `requirements.txt`: optional third-party dependencies
+
 ## Examples
 
 | Example | Description |
 | ------- | ----------- |
+| [Financial News Fetcher](./financial_news_fetcher/) | Fetches daily financial news articles for use in a financial news collection |
 | [News Source](./news_source/) | Parameterized news source that fetches from NYT, Reddit, and Yahoo Finance for a configurable news domain |
 | [NYT Front Page Source](./nyt_front_page_source/) | Fetches daily headlines from all 26 NYT Top Stories sections |
