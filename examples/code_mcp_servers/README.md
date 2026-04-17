@@ -35,6 +35,12 @@ Use environment variables for configuration that should not be hardcoded, such a
 - API keys or tokens
 - Feature flags or runtime options
 
+## Examples
+
+- [finance_tools](c:\Users\josand\Projects\sas-retrieval-agent-manager-examples\examples\code_mcp_servers\finance_tools\README.md): Finance and quantitative analysis tools, including market data lookup, regression, summary statistics, and arithmetic helpers.
+- [simple_calculator](c:\Users\josand\Projects\sas-retrieval-agent-manager-examples\examples\code_mcp_servers\simple_calculator\README.md): Minimal single-tool MCP server example that adds two integers.
+- [web_search](c:\Users\josand\Projects\sas-retrieval-agent-manager-examples\examples\code_mcp_servers\web_search\README.md): Lightweight web search tool example built on DuckDuckGo search via the `ddgs` package.
+
 ## Testing and usage
 
 After publishing the Code MCP server template, you will need to create a new
