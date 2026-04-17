@@ -8,11 +8,11 @@ database connections. This example uses the prebuilt postgres tools configuratio
 
 ### Template Settings (required fields)
 
-Container image: us-central1-docker.pkg.dev/database-toolbox/toolbox/toolbox:latest
-Arguments: --address 0.0.0.0 --prebuilt postgres --log-level debug
-Transport: HTTP
-Port: 5000
-Base Path: /mcp
+- Container image: us-central1-docker.pkg.dev/database-toolbox/toolbox/toolbox:latest
+- Arguments: --address 0.0.0.0 --prebuilt postgres --log-level debug
+- Transport: HTTP
+- Port: 5000
+- Base Path: /mcp
 
 ### Authentication
 

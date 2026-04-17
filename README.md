@@ -46,6 +46,8 @@ This section might supplement the Changelog file from the repository and only hi
 
 | Example | Description |
 | ------ | ------ |
+| [chart generator](/examples/container_mcp_servers/chart_generator/) | Container MCP server that generates charts and returns base64-encoded images for use in RAM agents. |
+| [postgres db connection template](/examples/container_mcp_servers/postgres_db_connection_template/) | Container MCP server template using Google GenAI Toolbox prebuilt Postgres tools for database connectivity. |
 
 #### Custom Sources
 

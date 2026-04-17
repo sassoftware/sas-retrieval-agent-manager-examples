@@ -12,11 +12,11 @@ create a template that does this.
 
 ### Template Settings (required fields)
 
-Container image: TODO
-Arguments: --transport sse --port 3000
-Transport: Server-Sent Events
-Port: 3000
-Base Path: /sse
+- Container image: TODO
+- Arguments: --transport sse --port 3000
+- Transport: Server-Sent Events
+- Port: 3000
+- Base Path: /sse
 
 ### Authentication
 
