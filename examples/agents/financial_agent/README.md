@@ -1,9 +1,9 @@
 # Financial Agent (MCP + RAM)
 
-This folder contains a financial agent example built with RAM. It combines structured data (database + market tools)
-and unstructured retrieval (financial news collection) to generate client-specific daily updates.
+This folder contains a financial agent example built with SAS Retrieval Agent Manager (RAM). It combines structured data (the database and market tools)
+and unstructured retrieval (from the financial news collection) to generate client-specific daily updates.
 
-## Input to this agent experiment
+## Input to This Agent Experiment
 
 ### Retrieval Settings - System Prompt
 
@@ -34,23 +34,23 @@ Configure these tools in the agent experiment:
 Configure these collections:
 
 - Minimum recommendation: a daily financial news collection.
-	- See [financial_news_fetcher custom source](../../custom_sources/financial_news_fetcher/) for an example of generating daily financial news documents for this collection.
-- Recommended setting: turn ON agentic retrieval.
+	- See [financial_news_fetcher custom source](../../custom_sources/financial_news_fetcher/) for an example of generating daily financial news documents for the collection.
+- Recommended setting: turn on agentic retrieval.
 
 ### Environment Variables (optional)
 
-None required for this example.
+No environment variables are required for this example.
 
-## Agent-specific configuration
+## Agent-specific Configuration
 
 Edit [run.py](run.py) to set the target client values:
 
 - `CLIENT_NAME`
 - `CLIENT_ID`
 
-These values are used by the daily summary flow. Update them to match your target environment and client data.
+These values are used by the daily summary flow. Update the values to match your target environment and client data.
 
-## Runtime commands
+## Runtime Commands
 
 This agent supports the following commands:
 

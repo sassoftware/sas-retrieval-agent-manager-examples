@@ -5,7 +5,7 @@ This folder contains a custom source template that fetches daily news from three
 vectorization. The source is parameterized by a `CATEGORY` variable that determines which
 news domain to fetch.
 
-This custom source is used by the domain-specific news agent examples:
+This custom source is used by these domain-specific news agent examples:
 
 - [Business News Agent](../../agents/business_news_agent/) — `CATEGORY = 'business'`
 - [Health News Agent](../../agents/health_news_agent/) — `CATEGORY = 'health'`

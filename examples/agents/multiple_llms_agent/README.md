@@ -1,22 +1,22 @@
 # Multiple LLMs Agent
 
 This folder contains an agent example that routes user prompts to different LLM
-endpoints based on requested reasoning effort.
+endpoints based on the requested reasoning effort.
 
 At a high level, this template shows how to:
 
-- Define multiple model names in a single code agent.
-- Select a model dynamically from user input.
+- Define multiple model names in a single code agent
+- Select a model dynamically from user input
 
-## Input to this agent experiment
+## Input to This Agent Experiment
 
 ### Retrieval Settings - System Prompt
 
-Any system prompt will work for this template.
+Any system prompt works for this template.
 
 ### Tools
 
-None required for this example. This agent does not perform MCP tool calling.
+No tools are required for this example. This agent does not perform MCP tool calling.
 
 ### Collections
 
@@ -25,7 +25,7 @@ The agent sends queries with `collection_name='default'`.
 
 ### Environment Variables
 
-None required for this example.
+No environment variables are required for this example.
 
 ### Aliases
 
@@ -39,15 +39,15 @@ Edit [run.py](run.py) to configure which aliases are used:
 - `high_reasoning_llm`
 
 
-## Runtime behavior
+## Runtime Behavior
 
 The agent routes prompts as follows:
 
-- Prompts tagged for high reasoning are sent to `high_reasoning_llm`.
-- Prompts tagged for low reasoning (or unspecified) are sent to `low_reasoning_llm`.
+- Prompts tagged for high reasoning are sent to `high_reasoning_llm`
+- Prompts tagged for low reasoning (or unspecified) are sent to `low_reasoning_llm`
 
 
-## Example prompts
+## Example Prompts
 
 - `Summarize this document set in 5 bullets #low`
 - `Analyze trade-offs and provide a detailed recommendation #high`

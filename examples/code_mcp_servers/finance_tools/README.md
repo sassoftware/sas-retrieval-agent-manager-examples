@@ -1,6 +1,6 @@
 # Finance Tools Code MCP Server
 
-This folder contains a Code MCP server template for finance and basic quantitative analysis workflows in RAM.
+This folder contains a Code MCP server template for finance and basic quantitative analysis workflows in SAS Retrieval Agent Manager (RAM).
 
 The server exposes tools for:
 
@@ -10,7 +10,7 @@ The server exposes tools for:
 - Computing summary statistics for numeric inputs
 - Performing basic arithmetic helpers
 
-## Template files
+## Template Files
 
 - `run.py`: MCP tool implementations and tool definitions
 - `requirements.txt`: optional third-party dependencies for this server template
@@ -67,7 +67,7 @@ Returns the product of two numbers.
 
 ## Environment Variables (optional)
 
-None required for this example.
+No environment variables are required for this example.
 
 ## Notes
 

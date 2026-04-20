@@ -1,6 +1,6 @@
 # Custom Sources
 
-This folder contains examples of custom source templates built with RAM. Custom sources
+This folder contains examples of custom source templates built with SAS Retrieval Agent Manager (RAM). Custom sources
 let you write Python code that fetches data from external APIs and saves it as documents
 for vectorization.
 
@@ -25,9 +25,9 @@ Every custom source follows the same steps to set up.
 ### 2. Create a Source from the Template
 
 1. Go to the **Sources** pane and create a new source using the template you just published.
-2. Click Save and open your newly created source.
-3. On the Files tab, click `Synchronize`.
-4. On the Jobs tab, you should see your synchronization executing. This is where you can
+2. Click **Save** and open your newly created source.
+3. On the **Files** tab, click `Synchronize`.
+4. On the **Jobs** tab, you should see your synchronization executing. This is where you can
    see its status.
 
 ### 3. Create a Collection
@@ -42,11 +42,11 @@ Every custom source follows the same steps to set up.
 
 1. Go to the **Automation** pane.
 2. Click on the pipeline of your source's name.
-3. Hover over the dot on the right side of the yellow rectangle until you see your cursor
+3. Hover over the dot on the right side of the yellow rectangle until you see your pointer
    become a +. Then click and drag your cursor to the right side of the blue rectangle.
    This tells RAM to re-vectorize your collection every time your custom source updates.
 
-## Expected structure
+## Expected Structure
 
 A custom source example will typically contain:
 
@@ -57,6 +57,6 @@ A custom source example will typically contain:
 
 | Example | Description |
 | ------- | ----------- |
-| [Financial News Fetcher](./financial_news_fetcher/) | Fetches daily financial news articles for use in a financial news collection |
-| [News Source](./news_source/) | Parameterized news source that fetches from NYT, Reddit, and Yahoo Finance for a configurable news domain |
-| [NYT Front Page Source](./nyt_front_page_source/) | Fetches daily headlines from all 26 NYT Top Stories sections |
+| [Financial News Fetcher](./financial_news_fetcher/) | A source that fetches daily financial news articles for use in a financial news collection |
+| [News Source](./news_source/) | A parameterized news source that fetches from NYT, Reddit, and Yahoo Finance for a configurable news domain |
+| [NYT Front Page Source](./nyt_front_page_source/) | A source that fetches daily headlines from all 26 NYT Top Stories sections |
