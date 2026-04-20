@@ -1,17 +1,17 @@
-# Image render image
+# Image Render Agent
 
-This folder contains an agent template that will render any images created via tools
-to the RAM chat interface as a base64 encoded string.
+This folder contains an agent template that will render any images created through tools
+to the SAS Retrieval Agent Manager (RAM) chat interface as a base64 encoded string.
 
-## Input to this agent experiment
+## Input to This Agent Experiment
 
 ### Retrieval Settings - System Prompt
 
-Any system prompt will work for this template.
+Any system prompt works for this template.
 
 ### Tools
 
-Any tools that generate images. For example, the graphing tools from the Charts MCP container.
+This agent can use any tools that generate images. For example, it can use the graphing tools from the Charts MCP container.
 
 ### Collections
 
@@ -19,8 +19,8 @@ Any collection will work for this template.
 
 ### Environment Variables (optional)
 
-None required for this example.
+No environment variables are required for this example.
 
 ## Automation Hook (Optional)
 
-None.
+There are no automations for this agent.

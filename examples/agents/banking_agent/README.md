@@ -1,14 +1,14 @@
 # Banking Agent (ESG Analysis)
 
-This folder contains a banking agent example built with RAM for Environmental, Social, and Governance (ESG) analysis. It uses document collections
+This folder contains a banking agent example built with SAS Retrieval Agent Manager (RAM) for Environmental, Social, and Governance (ESG) analysis. It uses document collections
 containing annual and pillar reports from multiple European banks to answer ESG and climate
 risk questions, generate comparison tables, and produce charts.
 
-## Input to this agent experiment
+## Input to This Agent Experiment
 
 ### Retrieval Settings - System Prompt
 
-Any system prompt will work with this template.
+Any system prompt works with this template.
 
 ### Tools
 
@@ -18,7 +18,7 @@ This agent does not require any MCP tool servers. It uses RAM's built-in retriev
 ### Collections
 
 Each supported bank requires its own collection, named to match the alias used in the code.
-Configure collections AND aliases for:
+Configure collections and aliases for:
 
 - `ABN`
 - `BBVA`
@@ -32,13 +32,13 @@ Configure collections AND aliases for:
 - `UniCredit`
 
 Populate each collection with the corresponding bank's report documents.
-Do not enable Agentic retrieval. standard retrieval is used by the agent directly.
+Do not enable agentic retrieval. Standard retrieval is used by the agent directly.
 
 ### Environment Variables (optional)
 
-None required for this example.
+No environment variables are required for this example.
 
-## Runtime commands
+## Runtime Commands
 
 This agent supports the following commands:
 
@@ -56,13 +56,13 @@ This agent supports the following commands:
 For any other input, the agent runs a standard retrieval query across all collections
 and returns the answer.
 
-## Template questions
+## Template Questions
 
-The agent includes a set of pre-defined ESG template questions covering:
+The agent includes a set of pre-defined ESG template questions that covers:
 
-- Data sources used for climate-related physical risk analysis.
-- Granularity level of climate-related physical risk analysis.
-- Time horizons considered in climate-related physical risk analysis.
+- Data sources used for climate-related physical risk analysis
+- Granularity level of climate-related physical risk analysis
+- Time horizons considered in climate-related physical risk analysis
 
-Use the question index and a bank alias (or `ALL`) to run these against the document collections.
+Use the question index and a bank alias (or `ALL`) to run these questions against the document collections.
 

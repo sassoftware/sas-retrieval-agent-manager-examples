@@ -13,25 +13,25 @@ insight-driven narratives that connect stories across domains.
 
 ### Required Custom Sources and Collections
 
-Before setting up the sub-agents, create the news sources and collections they depend on:
+Before setting up the sub-agents, create the news sources and collections that they depend on:
 
 - **Domain news sources** — Create one source per news domain using the
   [News Custom Source](../../custom_sources/news_source/) template. Set `CATEGORY` to
   `business`, `health`, `tech`, etc. Create a collection for each source and set up an
   automation to re-vectorize on the source's schedule.
-- **NYT front pages source** — Create using the
+- **NYT front pages source** — Create a source using the
   [NYT Front Page Custom Source](../../custom_sources/nyt_front_page_source/) template.
   Create a collection and automation for it as well.
 
 ### Required MCP Tool Server
 
-- **[News Search Tools](../../code_mcp_servers/news_search_tools/)** — provides web
+- **[News Search Tools](../../code_mcp_servers/news_search_tools/)** — Provides web
   search tools (`search_nyt_headlines`, `search_reddit`, `search_internet`,
-  `search_yahoo_finance_news`). Set this up first since the sub-agents depend on it.
+  `search_yahoo_finance_news`). Set this up first because the sub-agents depend on it.
 
 ### Required Sub-Agents
 
-Set up each of the following agents. Each is a no-code agent with its own news collection,
+Set up each of the following agents. Each one is a no-code agent with its own news collection,
 the search tools from the News Search Tools MCP server, and agentic retrieval enabled.
 See each agent's README for detailed setup instructions.
 
@@ -42,7 +42,7 @@ See each agent's README for detailed setup instructions.
 | [Science and Technology News Agent](../../agents/science_tech_news_agent/) | AI, space, computing, research | Science and tech news articles |
 | [News Information Finder](../../agents/news_information_finder/) | General-purpose cross-domain search | All news collections |
 
-You can also add more domain-specific sub-agents (e.g., Culture, Global Affairs, Industrial)
+You can also add more domain-specific sub-agents, such as Culture, Global Affairs, and Industrial,
 following the same pattern as the agents above. The orchestrator will automatically discover
 and use any sub-agents assigned to it.
 
@@ -52,14 +52,14 @@ and use any sub-agents assigned to it.
 2. Create **custom sources** for each news domain and an NYT front page source (see above).
 3. Create **collections** for each source, vectorize them, and set up **automations** to
    re-vectorize whenever the source updates.
-4. Create and start each **sub-agent** (Business, Health, Science/Tech, Information Finder).
-5. Verify each sub-agent is running and responsive.
-6. Create the **orchestrator** (this agent).
+4. Create and start each **sub-agent** (Business, Health, Science/Tech, and Information Finder).
+5. Verify that each sub-agent is running and responsive.
+6. Create the **orchestrator**.
 
 ## Setting Up the Orchestrator
 
-1. Create a **code template** by clicking `Code Orchestrator Agent` on the `Code Templates` page
-2. Add [run.py](./run.py)
+1. Create a **code template** by clicking `Code Orchestrator Agent` on the `Code Templates` page.
+2. Add [run.py](./run.py).
 3. On the `Agents` pane, click **Create an Agent Orchestrator**.
 4. Create a new experiment. Everything can be left as default except for the following:
 5. **Details:** Set `Experiment Type` to `Code template experiment` and select the code template you just made.
@@ -72,8 +72,8 @@ and use any sub-agents assigned to it.
 The orchestrator operates in two phases:
 
 1. **Research phase** — The orchestrator queries its sub-agents to gather information
-   relevant to the user's question. It asks targeted, specific questions rather than broad
-   "tell me everything" requests. It queries multiple sub-agents when the question spans
+   relevant to the user's question. It asks targeted, specific questions rather than broad,
+   open-ended requests such as “tell me everything.” It queries multiple sub-agents when the question spans
    domains and follows up with additional queries when initial findings raise new questions.
 
 2. **Composition phase** — The orchestrator synthesizes all research into a compelling
@@ -92,7 +92,7 @@ The orchestrator operates in two phases:
 
 ## Environment Variables
 
-None required on the orchestrator itself. Environment variables (like `NYT_API_KEY`) are
+The orchestrator does not require any environment variables. Environment variables (like `NYT_API_KEY`) are
 configured on the sub-agents' MCP tool server.
 
 ## Files

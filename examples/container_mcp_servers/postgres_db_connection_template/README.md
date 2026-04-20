@@ -1,12 +1,12 @@
 ## Postgres DB Connection Template
 
 This README.md documents how to setup the GenAI toolbox MCP server
-for use in RAM. It uses the MCP toolbox server from Google: https://github.com/googleapis/genai-toolbox
+for use in SAS Retrieval Agent Manager (RAM). It uses the MCP toolbox server from Google: https://github.com/googleapis/genai-toolbox
 
 The MCP toolbox server contains many prebuilt tool configurations for various
 database connections. This example uses the prebuilt postgres tools configuration.
 
-### Template Settings (required fields)
+### Template Settings (Required Fields)
 
 - Container image: us-central1-docker.pkg.dev/database-toolbox/toolbox/toolbox:latest
 - Arguments: --address 0.0.0.0 --prebuilt postgres --log-level debug
@@ -16,13 +16,13 @@ database connections. This example uses the prebuilt postgres tools configuratio
 
 ### Authentication
 
-None.
+No authentication is required.
 
 ### Environment Variables
 
 These environment variables are used by the container. You do not need to set a default value
 for them. You can specify your specific DB connection parameters when you instantiate this template
-in the MCP Tools page.
+in the "MCP Tools" page.
 
 - POSTGRES_HOST
 - POSTGRES_PORT
@@ -32,4 +32,4 @@ in the MCP Tools page.
 
 ### Configuration File
 
-Leave empty.
+Leave this file empty.

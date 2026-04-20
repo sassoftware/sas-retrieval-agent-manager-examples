@@ -10,11 +10,35 @@ agent, which has access to all news collections including the NYT front pages co
 
 ## How It Works
 
-When the source runs, it fetches headlines from all 26 NYT Top Stories sections (arts,
-automobiles, books, business, fashion, food, health, home, insider, magazine, movies,
-nyregion, obituaries, opinion, politics, realestate, science, sports, sundayreview,
-technology, theater, t-magazine, travel, upshot, us, world) and saves each section's
+When the source runs, it fetches headlines from all 26 of the following NYT Top Stories sections and saves each section's
 headlines as a separate `.txt` file.
+
+ - arts
+ - automobiles
+ - books
+ - business
+ - fashion
+ - food
+ - health
+ - home
+ - insider
+ - magazine
+ - movies
+ - nyregion
+ - obituaries
+ - opinion
+ - politics
+ - realestate
+ - science
+ - sports
+ - sundayreview
+ - technology
+ - theater
+ - t-magazine
+ - travel
+ - upshot
+ - us
+ - world
 
 ## Setup
 

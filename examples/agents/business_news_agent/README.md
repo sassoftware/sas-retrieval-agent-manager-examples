@@ -1,12 +1,12 @@
 # Business News Agent
 
-A no-code agent specialized in business and financial news. This agent has access to a
+This folder contains a no-code agent specialized in business and financial news. This agent has access to a
 business news document collection and web search tools to answer questions about markets,
 corporate news, mergers and acquisitions, and economic trends.
 
 This agent is designed to be used as a **sub-agent** of the
-[News Orchestrator](../../agent_orchestrators/news_orchestrator/), but can also be used
-standalone.
+[News Orchestrator](../../agent_orchestrators/news_orchestrator/), but can also be used as a
+standalone agent.
 
 > **Note:** Before configuring this agent, you must set up:
 > 1. The [News Search Tools](../../code_mcp_servers/news_search_tools/) MCP server.
@@ -14,11 +14,11 @@ standalone.
 >    [News Custom Source](../../custom_sources/news_source/) example (use `CATEGORY = 'business'`).
 >    Make sure to set up an automation to re-vectorize the collection on the source's schedule.
 
-## Input to this agent experiment
+## Input to This Agent Experiment
 
 ### Retrieval Settings - System Prompt
 
-Any system prompt will work. This is a no-code agent, so the LLM uses the agent card
+Any system prompt works. This is a no-code agent, so the LLM uses the agent card
 and tools to determine how to respond.
 
 ### Tools
@@ -32,13 +32,13 @@ From the [News Search Tools](../../code_mcp_servers/news_search_tools/) MCP serv
 
 ### Collections
 
-Add the **Business News** collection you created from the
+Add the **Business News** collection that you created from the
 [News Custom Source](../../custom_sources/news_source/) (with `CATEGORY = 'business'`).
 Use alias `default`. Enable **agentic retrieval**.
 
 ### Environment Variables (optional)
 
-None required for this example.
+No environment variables are required for this example.
 
 ## Agent Card
 

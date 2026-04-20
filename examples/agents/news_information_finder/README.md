@@ -1,8 +1,8 @@
 # News Information Finder
 
-A no-code agent that acts as a general-purpose news research tool. Unlike the domain-specific
+This folder contains a no-code agent that acts as a general-purpose news research tool. Unlike the domain-specific
 news agents, this agent has access to **all** news collections and all web search tools,
-making it useful for cross-domain queries or topics that don't fall neatly into one category.
+making it useful for cross-domain queries or topics that span multiple categories.
 
 This agent is designed to be used as a **sub-agent** of the
 [News Orchestrator](../../agent_orchestrators/news_orchestrator/), but can also be used
@@ -17,11 +17,11 @@ standalone.
 >    [NYT Front Page Custom Source](../../custom_sources/nyt_front_page_source/) example.
 > 4. Make sure to set up automations to re-vectorize each collection on its source's schedule.
 
-## Input to this agent experiment
+## Input to This Agent Experiment
 
 ### Retrieval Settings - System Prompt
 
-Any system prompt will work. This is a no-code agent, so the LLM uses the agent card
+Any system prompt works for this agent. This is a no-code agent, so the LLM uses the agent card
 and tools to determine how to respond.
 
 ### Tools
@@ -38,11 +38,11 @@ From the [News Search Tools](../../code_mcp_servers/news_search_tools/) MCP serv
 Add **all** of your news collections. These should include collections created from
 the [News Custom Source](../../custom_sources/news_source/) (Business, Health, Science
 and Tech, etc.) as well as the [NYT Front Page](../../custom_sources/nyt_front_page_source/)
-collection. Enable **agentic retrieval** on each.
+collection. Enable **agentic retrieval** on each collection.
 
 ### Environment Variables (optional)
 
-None required for this example.
+No environment variables are required for this example.
 
 ## Agent Card
 

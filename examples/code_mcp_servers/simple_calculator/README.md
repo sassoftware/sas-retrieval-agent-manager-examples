@@ -1,11 +1,11 @@
 # Simple Calculator Code MCP Server
 
-This folder contains a minimal Code MCP server template for RAM.
+This folder contains a minimal Code MCP server template for SAS Retrieval Agent Manager (RAM).
 
 It demonstrates the smallest useful MCP server setup: one tool implemented in
 `run.py` and no external dependencies.
 
-## Template files
+## Template Files
 
 - `run.py`: MCP tool implementation and definition
 
@@ -18,9 +18,9 @@ Adds two integers and returns the result.
 - Input: `a`, `b` (integers)
 - Output: integer sum of `a + b`
 
-## Environment Variables (optional)
+## Environment Variables (Optional)
 
-None required for this example.
+No environment variables are required for this example.
 
 ## Notes
 

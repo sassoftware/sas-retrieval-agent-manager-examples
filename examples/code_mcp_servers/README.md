@@ -1,9 +1,9 @@
 # Code MCP Servers
 
-This folder contains examples of Code MCP tool servers built with RAM. Code MCP servers
-let you write Python code that exposes tools (functions) your agents can call at runtime.
+This folder contains examples of Code MCP tool servers built with SAS Retrieval Agent Manager (RAM). Code MCP servers
+enable you to write Python code that exposes tools (functions) that your agents can call at runtime.
 
-A Code MCP server in RAM is a lightweight Python project made up of:
+A Code MCP server in RAM is a lightweight Python project that consists of:
 
 - `run.py`: tool implementations and tool definitions.
 - `requirements.txt`: optional third-party Python packages used by the tools.
@@ -17,26 +17,26 @@ A Code MCP server in RAM is a lightweight Python project made up of:
 4. Configure any required environment variables (see the example's README).
 5. Save and publish the template.
 
-## What to include in run.py
+## What to Include in run.py
 
 At minimum, `run.py` should include:
 
 - A definition for each exposed tool (name, description, and expected inputs/outputs).
 - The Python implementation for each tool.
 
-## requirements.txt (optional)
+## requirements.txt (Optional)
 
-Additional packages that are required by your tool implementations.
+You can include additional packages that are required by your tool implementations.
 
-## Environment Variables (optional)
+## Environment Variables (Optional)
 
-Use environment variables for configuration that should not be hardcoded, such as:
+Use environment variables for configurations that should not be hardcoded, such as:
 
 - API endpoints
 - API keys or tokens
 - Feature flags or runtime options
 
-## Testing and usage
+## Testing and Usage
 
 After publishing the Code MCP server template, you will need to create a new
 "MCP Tool Server" that uses the template in the "MCP Tools" page of RAM. After
@@ -49,5 +49,5 @@ with your agent.
 | ------- | ----------- |
 | [Finance Tools](./finance_tools/) | Finance and quantitative analysis tools, including market data lookup, regression, summary statistics, and arithmetic helpers |
 | [News Search Tools](./news_search_tools/) | Web search tools for finding news from NYT, Reddit, DuckDuckGo, and Yahoo Finance |
-| [Simple Calculator](./simple_calculator/) | Minimal single-tool MCP server example that adds two integers |
-| [Web Search](./web_search/) | Lightweight web search tool example built on DuckDuckGo search via the `ddgs` package |
+| [Simple Calculator](./simple_calculator/) | A minimal single-tool MCP server example that adds two integers |
+| [Web Search](./web_search/) | A lightweight web search tool example built on DuckDuckGo search via the `ddgs` package |
