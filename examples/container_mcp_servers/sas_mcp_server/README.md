@@ -2,7 +2,7 @@
 
 This README.md documents how to setup the SAS Viya MCP container from
 [sassoftware/sas-mcp-server](https://github.com/sassoftware/sas-mcp-server)
-for use in RAM.
+for use in Retrieval Agent Manager.
 
 ### Viya Setup
 
@@ -28,21 +28,21 @@ for instructions to register a custom application.  The client should be registe
 
 ### Authentication
 
-OAuth client credentials.
+Authenticaion requires OAuth client credentials.
 
-- Client ID and Client Secret should correspond to the client in Viya.
-- OAuth Token URL should be set to `<Viya URL>/SASLogon/oauth/token`.
-- OAuth Scope can be left empty.
+- The Client ID and Client Secret should correspond to the client in Viya.
+- The OAuth Token URL should be set to `<Viya URL>/SASLogon/oauth/token`.
+- The OAuth Scope can be left empty.
 
 ### Environment Variables
 
 These environment variables are used by the container. You do not need to set a default value
-for them. You can specify your specific Viya URL when you instantiate this template
-in the "MCP Tools" page.
+for them. You can set your specific Viya URL when you instantiate this template
+in the **MCP Tools** view in Retrieval Agent Manager.
 
 - VIYA_ENDPOINT
 - ALLOW_RAW_BEARER: true
 
 ### Configuration File
 
-Leave empty.
+Leave the configuration file empty.
