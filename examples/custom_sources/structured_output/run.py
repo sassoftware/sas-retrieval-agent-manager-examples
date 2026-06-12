@@ -178,10 +178,6 @@ def exec(client):
     output_content_str: str = invocation.response
     output_content_dict: dict = ast.literal_eval(output_content_str)
 
-    print("output content:")
-    print(output_content_dict)
-    print(type(output_content_dict))
-
     structured_output: GeneratedData = GeneratedData.model_validate(output_content_dict)
     print(f"Generated {len(structured_output.patient_records)} patient records.")
     print(f"Generated {len(structured_output.medications)} medications.")
