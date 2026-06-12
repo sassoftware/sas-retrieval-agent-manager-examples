@@ -39,4 +39,4 @@ Follow the [general custom source instructions](../README.md) with these specifi
 
 ## Dependencies
 
-- `pydantic` — Schema definition and output validation
+No extra dependencies are required.
