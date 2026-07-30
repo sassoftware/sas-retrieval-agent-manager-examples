@@ -16,6 +16,9 @@ const geistMono = Geist_Mono({
   subsets: ['latin'],
 });
 
+// List of standard RTL language codes
+const RTL_LANGUAGES = new Set(['ar', 'he', 'fa', 'ur', 'yi', 'ps', 'dv', 'ug', 'iw']);
+
 export default async function RootLayout({
   children,
 }: Readonly<{
@@ -25,11 +28,12 @@ export default async function RootLayout({
   const headersList = await headers();
   const acceptLanguage = headersList.get('accept-language') || 'en';
 
-  // Determine if the user's preferred language is Hebrew ('he')
-  const isHebrew = acceptLanguage.startsWith('he') || acceptLanguage.includes('he-IL');
+  // Get the primary language tag (e.g., "he-IL" -> "he", "ar-EG" -> "ar")
+  const primaryLocale = acceptLanguage.split(',')[0].split('-')[0].toLowerCase().trim();
 
-  const locale = isHebrew ? 'he' : 'en';
-  const direction = isHebrew ? 'rtl' : 'ltr';
+  const isRtl = RTL_LANGUAGES.has(primaryLocale);
+  const locale = primaryLocale;
+  const direction = isRtl ? 'rtl' : 'ltr';
 
   return (
     <html lang={locale} dir={direction}>
