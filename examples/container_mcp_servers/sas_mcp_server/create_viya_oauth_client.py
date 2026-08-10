@@ -7,8 +7,8 @@ if not VIYA_URL:
     raise Exception("VIYA_URL is not set.")
 CLIENT_ID = os.getenv("CLIENT_ID", "ram-client")
 CLIENT_SECRET = os.getenv("CLIENT_SECRET", "ram-secret")
-UID = int(os.getenv("UID", "2001"))
-GID = int(os.getenv("GID", "2001"))
+UID = int(os.getenv("CUID", "2001"))
+GID = int(os.getenv("CGID", "2001"))
 
 
 def get_token():
