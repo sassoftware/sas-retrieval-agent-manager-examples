@@ -33,7 +33,7 @@ the following optional variables:
 
 - `CLIENT_ID`: OAuth client ID. Defaults to `ram-client`.
 - `CLIENT_SECRET`: OAuth client secret. Defaults to `ram-secret`.
-- `GROUP`: Viya group assigned to the client. Defaults to `ram-group`.
+- `GROUP`: Viya group assigned to the client. Defaults to `ram-group`. **The group must be created manually (e.g. via SAS Environment Manager) before running this python script.**
 - `UID`: User ID assigned to the client. Defaults to `2001`.
 - `GID`: Group ID assigned to the client. Defaults to `2001`.
 - `ACCESS_TOKEN`: bearer token used to authenticate the client-creation request.
