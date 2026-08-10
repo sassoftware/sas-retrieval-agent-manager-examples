@@ -55,6 +55,7 @@ This section might supplement the Changelog file from the repository and only hi
 | ------ | ------ |
 | [chart generator](/examples/container_mcp_servers/chart_generator/) | A container MCP server that generates charts and returns base64-encoded images for use in RAM agents. |
 | [Postgres db connection template](/examples/container_mcp_servers/postgres_db_connection_template/) | A container MCP server template that uses Google GenAI Toolbox prebuilt Postgres tools for database connectivity. |
+| [SAS Viya connection](/examples/container_mcp_servers/sas_mcp_server/) | A container MCP server template that uses sassoftware/sas-mcp-server tools for connectivity with SAS Viya. |
 
 #### Custom Sources
 
