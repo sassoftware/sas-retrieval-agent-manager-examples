@@ -7,7 +7,6 @@ if not VIYA_URL:
     raise Exception("VIYA_URL is not set.")
 CLIENT_ID = os.getenv("CLIENT_ID", "ram-client")
 CLIENT_SECRET = os.getenv("CLIENT_SECRET", "ram-secret")
-GROUP = os.getenv("GROUP", "ram-group")
 UID = int(os.getenv("UID", "2001"))
 GID = int(os.getenv("GID", "2001"))
 
@@ -15,11 +14,35 @@ GID = int(os.getenv("GID", "2001"))
 def get_token():
     token = os.getenv("ACCESS_TOKEN")
     if not token:
-        ACCESS_TOKEN_BROWSER_URL = (
-            f"{VIYA_URL}/SASLogon/oauth/authorize?client_id=sas.cli&response_type=token"
-        )
-        msg = f"ACCESS_TOKEN is not set. Please load the following URL in your browser and copy the 'access_token' parameter from the URL bar: {ACCESS_TOKEN_BROWSER_URL}"
-        raise Exception(msg)
+        username = os.getenv("USERNAME", "sasboot")
+        password = os.getenv("PASSWORD")
+        if username and password:
+            response = requests.post(
+                f"{VIYA_URL}/SASLogon/oauth/token",
+                auth=("sas.cli", ""),
+                headers={"Content-Type": "application/x-www-form-urlencoded"},
+                data={
+                    "grant_type": "password",
+                    "username": username,
+                    "password": password,
+                },
+                verify=False,
+            )
+            response.raise_for_status()
+            token = response.json().get("access_token")
+            if not token:
+                raise Exception(
+                    "Failed to retrieve access_token from password grant response."
+                )
+        else:
+            ACCESS_TOKEN_BROWSER_URL = f"{VIYA_URL}/SASLogon/oauth/authorize?client_id=sas.cli&response_type=token"
+            msg = (
+                "ACCESS_TOKEN is not set. "
+                "Either set USERNAME and PASSWORD environment variables for password-based authentication, "
+                "or load the following URL in your browser and copy the 'access_token' parameter from the URL bar: "
+                f"{ACCESS_TOKEN_BROWSER_URL}"
+            )
+            raise Exception(msg)
 
     return token
 
@@ -27,7 +50,7 @@ def get_token():
 CLIENT_BODY = {
     "client_id": CLIENT_ID,
     "client_secret": CLIENT_SECRET,
-    "authorities": [GROUP],
+    "authorities": [CLIENT_ID],
     "authorized_grant_types": ["client_credentials"],
     "uid": UID,
     "gid": GID,

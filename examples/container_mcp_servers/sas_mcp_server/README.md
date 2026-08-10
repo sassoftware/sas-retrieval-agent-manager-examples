@@ -12,7 +12,7 @@ for instructions to register a custom application.  The client should be registe
 {
     "client_id": "client-id",
     "client_secret": "client-secret",
-    "authorities": ["group-id"],
+    "authorities": ["client-id"],
     "authorized_grant_types": ["client_credentials"],
     "uid": "2001",
     "gid": "2001",
@@ -31,9 +31,8 @@ pip install requests
 Set `VIYA_URL` to the base URL of the Viya deployment. The script also accepts
 the following optional variables:
 
-- `CLIENT_ID`: OAuth client ID. Defaults to `ram-client`.
+- `CLIENT_ID`: OAuth client ID. Defaults to `ram-client`. This client ID must match the ID of the Viya group to be assigned to this client. **The group must be created manually (e.g. via SAS Environment Manager) before running this python script.**
 - `CLIENT_SECRET`: OAuth client secret. Defaults to `ram-secret`.
-- `GROUP`: Viya group assigned to the client. Defaults to `ram-group`. **The group must be created manually (e.g. via SAS Environment Manager) before running this python script.**
 - `UID`: User ID assigned to the client. Defaults to `2001`.
 - `GID`: Group ID assigned to the client. Defaults to `2001`.
 - `ACCESS_TOKEN`: bearer token used to authenticate the client-creation request.
