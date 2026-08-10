@@ -2,7 +2,7 @@ import os
 
 import requests
 
-VIYA_URL = os.getenv("VIYA_URL")
+VIYA_URL = os.getenv("VIYA_URL", "").rstrip("/")
 if not VIYA_URL:
     raise Exception("VIYA_URL is not set.")
 CLIENT_ID = os.getenv("CLIENT_ID", "ram-client")
