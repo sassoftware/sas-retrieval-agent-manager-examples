@@ -94,7 +94,7 @@ SSL_CERT_FILE=/tmp/config/bundle.pem
 
 The bundle should be a PEM file containing the custom CA certificate, along
 with any required intermediate CA certificates. Obtain it from the Viya
-platform administrator or from the CA/ certificate chain used by the Viya
+platform administrator or from the CA certificate chain used by the Viya
 ingress. If Viya uses an organization-managed private CA, the administrator
 can usually provide the CA bundle or identify the Kubernetes secret or
 certificate authority that contains it.
