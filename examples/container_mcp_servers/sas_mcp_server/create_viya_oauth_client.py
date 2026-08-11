@@ -11,7 +11,7 @@ VIYA_URL = os.getenv("VIYA_URL", "").rstrip("/")
 if not VIYA_URL:
     print("Error: VIYA_URL environment variable is not set.")
     sys.exit(1)
-CLIENT_ID = os.getenv("CLIENT_ID", "ram-client")
+CLIENT_ID = os.getenv("CLIENT_ID", "ram-app")
 CLIENT_SECRET = os.getenv("CLIENT_SECRET", "ram-secret")
 UID = os.getenv("CUID", "2001")
 GID = os.getenv("CGID", "2001")
