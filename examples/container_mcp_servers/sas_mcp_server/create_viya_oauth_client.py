@@ -118,7 +118,7 @@ def get_token():
                 if isinstance(error_info, dict)
                 else error_info
             )
-            print(f"Failed to obtain access token via username/password.")
+            print("Failed to obtain access token via username/password.")
             print(f"Status: {response.status_code} - {error_msg}\n")
 
     CODE_URL = (
@@ -140,8 +140,8 @@ def get_token():
     print(f"  (obtain from: {CODE_URL})")
     print()
     print("Option 3 - Username and password:")
-    print("  export USERNAME=<username>")
-    print("  export PASSWORD=<password>")
+    print("  export VIYA_USERNAME=<username>")
+    print("  export VIYA_PASSWORD=<password>")
     sys.exit(1)
 
 
