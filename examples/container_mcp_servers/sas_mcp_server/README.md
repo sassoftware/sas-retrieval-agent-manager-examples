@@ -12,7 +12,7 @@ for instructions to register a custom application.  The client should be registe
 {
     "client_id": "client-id",
     "client_secret": "client-secret",
-    "authorities": ["group-id"],
+    "authorities": ["client-id"],
     "authorized_grant_types": ["client_credentials"],
     "uid": "2001",
     "gid": "2001",
@@ -31,21 +31,46 @@ pip install requests
 Set `VIYA_URL` to the base URL of the Viya deployment. The script also accepts
 the following optional variables:
 
-- `CLIENT_ID`: OAuth client ID. Defaults to `ram-client`.
+- `CLIENT_ID`: OAuth client ID. Defaults to `ram-client`. This client ID must match the ID of the Viya group to be assigned to this client. **The group must be created manually (e.g. via SAS Environment Manager) before running this python script.**
 - `CLIENT_SECRET`: OAuth client secret. Defaults to `ram-secret`.
-- `GROUP`: Viya group assigned to the client. Defaults to `ram-group`.
-- `UID`: User ID assigned to the client. Defaults to `2001`.
-- `GID`: Group ID assigned to the client. Defaults to `2001`.
+- `CUID`: User ID assigned to the client. Defaults to `2001`.
+- `CGID`: Group ID assigned to the client. Defaults to `2001`.
 - `ACCESS_TOKEN`: bearer token used to authenticate the client-creation request.
+- `CODE`: authorization code used to obtain a bearer token.
+- `VIYA_USERNAME`: Viya username used to obtain a bearer token. Defaults to `sasboot`.
+- `VIYA_PASSWORD`: password for `VIYA_USERNAME`.
 
-If `ACCESS_TOKEN` is not set, run the script once to print a SASLogon URL. Open
-that URL in a browser authenticated to Viya, then set `ACCESS_TOKEN` to the
-`access_token` value returned in the browser URL. Run the script again with the
-same environment variables:
+To authenticate the request that creates the OAuth client, use one of the
+following options. Set `VIYA_URL` in every case:
+
+1. Provide an access token directly. Open the URL printed by the script in a
+   browser authenticated to Viya, then set `ACCESS_TOKEN` to the
+   `access_token` value returned in the browser URL.
 
 ```bash
 export VIYA_URL="https://viya.example.com"
 export ACCESS_TOKEN="<access-token>"
+python create_viya_oauth_client.py
+```
+
+2. Provide an authorization code. Open the authorization-code URL printed by
+   the script in a browser authenticated to Viya, then set `CODE` to the
+   returned code. Authorization codes expire after approximately 10 minutes and
+   can be used only once.
+
+```bash
+export VIYA_URL="https://viya.example.com"
+export CODE="<authorization-code>"
+python create_viya_oauth_client.py
+```
+
+3. Provide Viya user credentials. If `VIYA_USERNAME` is not set, the script
+   uses `sasboot`.
+
+```bash
+export VIYA_URL="https://viya.example.com"
+export VIYA_USERNAME="<username>"
+export VIYA_PASSWORD="<password>"
 python create_viya_oauth_client.py
 ```
 
