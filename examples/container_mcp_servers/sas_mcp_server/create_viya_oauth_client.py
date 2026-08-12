@@ -270,6 +270,9 @@ def add_group_members(token, group_id, users):
 
 
 if ADD_MEMBERS_ONLY:
+    if not GROUP_USERS:
+        print("Error: --add-members-only requires GROUP_USERS to be set.")
+        sys.exit(1)
     access_token = get_token()
     add_group_members(access_token, CLIENT_ID, GROUP_USERS)
 else:
