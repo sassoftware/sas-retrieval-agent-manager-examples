@@ -90,6 +90,22 @@ The script prints the created client details. If the client already exists, it
 prints a message and does not modify it. Update an existing client using the
 [SASLogon update client API](https://developer.sas.com/rest-apis/SASLogon/updateClient).
 
+#### Clean Up with the Example Script
+
+The `delete_viya_oauth_client.py` script removes the group and OAuth client
+created above. It uses the same `VIYA_URL`, `CLIENT_ID`, and authentication
+variables (`ACCESS_TOKEN`, `CODE`, or `VIYA_USERNAME`/`VIYA_PASSWORD`) as
+`create_viya_oauth_client.py`. If the group or client don't exist, the script
+prints a message and continues without error.
+
+```bash
+export VIYA_URL="https://viya.example.com"
+export CLIENT_ID="<client-id>"
+export VIYA_USERNAME="<username>"
+export VIYA_PASSWORD="<password>"
+python delete_viya_oauth_client.py
+```
+
 ### Template Settings (required fields)
 
 - Container image: ghcr.io/sassoftware/sas-mcp-server:latest
