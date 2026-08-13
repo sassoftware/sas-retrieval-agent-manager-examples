@@ -1,6 +1,7 @@
 import os
 import sys
 import warnings
+from urllib.parse import quote
 
 import requests
 import urllib3
@@ -18,6 +19,8 @@ GID = os.getenv("CGID", "2001")
 CODE = os.getenv("CODE")
 username = os.getenv("VIYA_USERNAME", "sasboot")
 password = os.getenv("VIYA_PASSWORD")
+GROUP_USERS = [u.strip() for u in os.getenv("GROUP_USERS", "").split(",") if u.strip()]
+ADD_MEMBERS_ONLY = "--add-members-only" in sys.argv
 
 
 def get_token():
@@ -155,8 +158,7 @@ CLIENT_BODY = {
 }
 
 
-def create_client():
-    token = get_token()
+def create_client(token):
     headers = {"Authorization": f"Bearer {token}"}
     response = requests.post(
         f"{VIYA_URL}/SASLogon/oauth/clients",
@@ -186,4 +188,95 @@ def create_client():
     print(response.json())
 
 
-create_client()
+GROUP_BODY = {
+    "id": CLIENT_ID,
+    "name": f"RAM Application Group ({CLIENT_ID})",
+}
+
+
+def create_group(token):
+    headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
+    response = requests.post(
+        f"{VIYA_URL}/identities/groups",
+        json=GROUP_BODY,
+        headers=headers,
+        verify=False,
+    )
+    if response.status_code == 409:
+        print(f"Group '{CLIENT_ID}' already exists.")
+        return
+    if response.status_code not in (200, 201):
+        print(f"Failed to create group '{CLIENT_ID}'.")
+        print(f"Status: {response.status_code}")
+        error_info = (
+            response.json()
+            if "application/json" in response.headers.get("content-type", "")
+            else response.text
+        )
+        error_msg = (
+            error_info.get("message", error_info)
+            if isinstance(error_info, dict)
+            else error_info
+        )
+        print(f"Error: {error_msg}")
+        return
+    print(f"Group '{CLIENT_ID}' created successfully.")
+
+
+def add_group_members(token, group_id, users):
+    if not users:
+        return
+    headers = {"Authorization": f"Bearer {token}"}
+    failed_users = []
+    for user in users:
+        # Viya user IDs are case-sensitive lowercase; match the SAS Environment
+        # Manager UI, which also percent-encodes the ID (e.g. "@" -> "%40").
+        encoded_user = quote(user.lower(), safe="")
+        response = requests.put(
+            f"{VIYA_URL}/identities/groups/{group_id}/userMembers/{encoded_user}",
+            headers=headers,
+            verify=False,
+        )
+        if response.status_code in (200, 201, 204):
+            print(f"Added user '{user}' to group '{group_id}'.")
+        elif response.status_code == 409:
+            print(f"User '{user}' is already a member of group '{group_id}'.")
+        else:
+            # Ignore per-user errors so one bad user doesn't block the rest
+            print(
+                f"Warning: failed to add user '{user}' to group '{group_id}' "
+                f"(HTTP {response.status_code}). Skipping."
+            )
+            if response.status_code == 404:
+                print(
+                    "  A 404 here usually means Viya's identities service does not "
+                    "know this user yet (it only lists users after their first "
+                    "login/sync) or the ID doesn't match their Viya user ID exactly. "
+                    f"Verify with: GET {VIYA_URL}/identities/users/{encoded_user}"
+                )
+            failed_users.append(user)
+
+    if failed_users:
+        failed_list = ",".join(failed_users)
+        print()
+        print(
+            f"Could not add the following users to group '{group_id}': {failed_list}"
+        )
+        print("To retry adding just these users later, run:")
+        print(
+            f'  CLIENT_ID={group_id} GROUP_USERS="{failed_list}" '
+            f"python {os.path.basename(__file__)} --add-members-only"
+        )
+
+
+if ADD_MEMBERS_ONLY:
+    if not GROUP_USERS:
+        print("Error: --add-members-only requires GROUP_USERS to be set.")
+        sys.exit(1)
+    access_token = get_token()
+    add_group_members(access_token, CLIENT_ID, GROUP_USERS)
+else:
+    access_token = get_token()
+    create_group(access_token)
+    add_group_members(access_token, CLIENT_ID, GROUP_USERS)
+    create_client(access_token)

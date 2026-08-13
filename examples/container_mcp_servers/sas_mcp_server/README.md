@@ -6,7 +6,7 @@ for use in Retrieval Agent Manager.
 
 ### Viya Setup
 
-See [Register a Custom Application (OAuth Client)](https://go.documentation.sas.com/doc/en/sasadmincdc/v_076/calauthmdl/n1iyx40th7exrqn1ej8t12gfhm88.htm#n0ce1kz53qzmukn165fzrqdsws3e) 
+See [Register a Custom Application (OAuth Client)](https://go.documentation.sas.com/doc/en/sasadmincdc/v_076/calauthmdl/n1iyx40th7exrqn1ej8t12gfhm88.htm#n0ce1kz53qzmukn165fzrqdsws3e)
 for instructions to register a custom application.  The client should be registered with a custom group, UID, and GID.  An example client might look like this:
 ```json
 {
@@ -22,7 +22,8 @@ for instructions to register a custom application.  The client should be registe
 #### Create the OAuth Client with the Example Script
 
 The `create_viya_oauth_client.py` script creates the OAuth client in Viya with the
-`client_credentials` grant type. It requires Python and the `requests` package:
+`client_credentials` grant type, along with a matching custom group. It requires
+Python and the `requests` package:
 
 ```bash
 pip install requests
@@ -31,14 +32,25 @@ pip install requests
 Set `VIYA_URL` to the base URL of the Viya deployment. The script also accepts
 the following optional variables:
 
-- `CLIENT_ID`: OAuth client ID. Defaults to `ram-client`. This client ID must match the ID of the Viya group to be assigned to this client. **The group must be created manually (e.g. via SAS Environment Manager) before running this python script.**
+- `CLIENT_ID`: OAuth client ID. Defaults to `ram-client`. The script also creates a Viya group with this same ID/name and assigns it to the client.
 - `CLIENT_SECRET`: OAuth client secret. Defaults to `ram-secret`.
 - `CUID`: User ID assigned to the client. Defaults to `2001`.
 - `CGID`: Group ID assigned to the client. Defaults to `2001`.
+- `GROUP_USERS`: comma-separated list of Viya user IDs to add as members of the group.
 - `ACCESS_TOKEN`: bearer token used to authenticate the client-creation request.
 - `CODE`: authorization code used to obtain a bearer token.
 - `VIYA_USERNAME`: Viya username used to obtain a bearer token. Defaults to `sasboot`.
 - `VIYA_PASSWORD`: password for `VIYA_USERNAME`.
+
+If a user listed in `GROUP_USERS` cannot be added (for example, an invalid
+user ID), the script prints a warning and continues rather than failing. Any
+users that could not be added are listed at the end along with a ready-to-run
+command, using the `--add-members-only` flag, to retry adding just those users
+once the issue is fixed:
+
+```bash
+CLIENT_ID=<client-id> GROUP_USERS="<user1>,<user2>" python create_viya_oauth_client.py --add-members-only
+```
 
 To authenticate the request that creates the OAuth client, use one of the
 following options. Set `VIYA_URL` in every case:
@@ -77,6 +89,22 @@ python create_viya_oauth_client.py
 The script prints the created client details. If the client already exists, it
 prints a message and does not modify it. Update an existing client using the
 [SASLogon update client API](https://developer.sas.com/rest-apis/SASLogon/updateClient).
+
+#### Clean Up with the Example Script
+
+The `delete_viya_oauth_client.py` script removes the group and OAuth client
+created above. It uses the same `VIYA_URL`, `CLIENT_ID`, and authentication
+variables (`ACCESS_TOKEN`, `CODE`, or `VIYA_USERNAME`/`VIYA_PASSWORD`) as
+`create_viya_oauth_client.py`. If the group or client don't exist, the script
+prints a message and continues without error.
+
+```bash
+export VIYA_URL="https://viya.example.com"
+export CLIENT_ID="<client-id>"
+export VIYA_USERNAME="<username>"
+export VIYA_PASSWORD="<password>"
+python delete_viya_oauth_client.py
+```
 
 ### Template Settings (required fields)
 
