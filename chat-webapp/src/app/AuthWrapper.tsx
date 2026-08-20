@@ -5,6 +5,7 @@ import { useJwt } from "react-jwt";
 import LoginPage from "./LoginPage";
 import { invalidateToken, useRefreshTokenMutation } from "@/services/auth";
 import { useRouter } from "next/navigation";
+import { appPath } from "@/lib/app-path";
 
 interface DecodedToken {
     exp?: number;
@@ -62,14 +63,14 @@ function TokenValidator({ children, access_token, refresh_token, isRefreshingRef
                 } catch (error) {
                     console.error('Failed to refresh token:', error);
                     dispatch(invalidateToken());
-                    router.replace('/');
+                    router.replace(appPath('/'));
                 } finally {
                     isRefreshingRef.current = false;
                 }
             } else if (tokenIsExpired) {
                 console.log('Token expired, logging out');
                 dispatch(invalidateToken());
-                router.replace('/');
+                router.replace(appPath('/'));
             }
         };
 

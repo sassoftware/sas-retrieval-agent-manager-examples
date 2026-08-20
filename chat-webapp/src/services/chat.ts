@@ -2,19 +2,23 @@ import { ListQuerySessionsResponse, GetQuerySessionResponse, QuerySession } from
 import { Query, QueryRequest } from "@/types/query";
 import { createApi, fetchBaseQuery } from "@reduxjs/toolkit/query/react";
 import { Collection } from "@/types/collection";
+import { Agent } from "@/types/agent";
 import { createSlice, PayloadAction } from "@reduxjs/toolkit";
 import { AuthState } from "./auth";
+import { appPath } from "@/lib/app-path";
 
 export interface ChatState {
     sessions: QuerySession[];
     queryMap: { [sessionId: string]: Query[] };
     collections: Collection[];
+    agents: Agent[];
 }
 
 const initialState: ChatState = {
     sessions: [],
     queryMap: {},
     collections: [],
+    agents: [],
 }
 
 
@@ -22,7 +26,7 @@ export const chatApi = createApi({
     reducerPath: 'chatApi',
     tagTypes: ['QuerySession'],
     baseQuery: fetchBaseQuery({
-        baseUrl: '/custom-chat-api',
+        baseUrl: appPath('/custom-chat-api'),
         prepareHeaders: (headers, { getState }) => {
             const state = getState() as { auth: AuthState };
             const token = state.auth.access_token;
@@ -74,6 +78,15 @@ export const chatApi = createApi({
                 }
             })
         }),
+        getAgents: builder.query<{ count: number; limit: number; name: string; start: number; items: Agent[] }, void>({
+            query: () => ({
+                url: '',
+                method: 'GET',
+                params: {
+                    endpoint: '/agents',
+                }
+            })
+        }),
     }),
 });
 
@@ -88,6 +101,9 @@ const chatSlice = createSlice({
         builder.addMatcher(chatApi.endpoints.getCollections.matchFulfilled, (state, action) => {
             state.collections = action.payload.items.sort((a, b) => a.name.localeCompare(b.name));
         });
+        builder.addMatcher(chatApi.endpoints.getAgents.matchFulfilled, (state, action) => {
+            state.agents = action.payload.items.sort((a, b) => a.name.localeCompare(b.name));
+        });
         builder.addMatcher(chatApi.endpoints.getQuerySession.matchFulfilled, (state, action) => {
             state.queryMap[action.payload.sessionId] = action.payload.items;
         });
@@ -100,7 +116,7 @@ const chatSlice = createSlice({
     }
 })
 
-export const { useGetSessionsQuery, useGetQuerySessionQuery, useSendQueryMutation, useGetCollectionsQuery } = chatApi;
+export const { useGetSessionsQuery, useGetQuerySessionQuery, useSendQueryMutation, useGetCollectionsQuery, useGetAgentsQuery } = chatApi;
 
 
 export default chatSlice.reducer as (state: ChatState, action: PayloadAction) => ChatState;

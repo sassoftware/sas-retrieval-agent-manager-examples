@@ -3,6 +3,7 @@ import './globals.css';
 import App from './App';
 import AuthWrapper from './AuthWrapper';
 import StoreWrapper from './StoreWrapper';
+import ThemeRegistry from './ThemeRegistry';
 import { RTLProvider } from '../providers/RTLProvider';
 import { headers } from 'next/headers';
 
@@ -38,13 +39,15 @@ export default async function RootLayout({
   return (
     <html lang={locale} dir={direction}>
       <body className={`${geistSans.variable} ${geistMono.variable}`}>
-        <StoreWrapper>
-          <AuthWrapper>
-            <RTLProvider direction={direction}>
-              <App>{children}</App>
-            </RTLProvider>
-          </AuthWrapper>
-        </StoreWrapper>
+        <ThemeRegistry>
+          <StoreWrapper>
+            <AuthWrapper>
+              <RTLProvider direction={direction}>
+                <App>{children}</App>
+              </RTLProvider>
+            </AuthWrapper>
+          </StoreWrapper>
+        </ThemeRegistry>
       </body>
     </html>
   );
