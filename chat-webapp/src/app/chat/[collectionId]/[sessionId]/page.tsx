@@ -484,29 +484,12 @@ export default function Page({ params }: { params: Promise<{ collectionId: strin
                             >
                                 {formatTimestamp(message.timestamp)}
                             </Typography>
-                            {message.imageUrls?.map((imageUrl, index) => (
-                                <Box
-                                    component="img"
-                                    key={`${message.id}-image-${index}`}
-                                    src={imageUrl}
-                                    alt={`Attached image ${index + 1}`}
-                                    sx={{
-                                        display: "block",
-                                        maxWidth: 240,
-                                        maxHeight: 180,
-                                        objectFit: "contain",
-                                        borderRadius: 1,
-                                        mt: 1,
-                                    }}
-                                />
-                            ))}
                             {message.attachments?.map((attachment, index) => (
-                            <Box
+                                <Box
                                     key={`${message.id}-attachment-${index}`}
                                     sx={{
                                         display: "flex",
                                         alignItems: "center",
-                                        gap: 1,
                                         mt: 1,
                                         px: 1.25,
                                         py: 0.75,
@@ -514,7 +497,6 @@ export default function Page({ params }: { params: Promise<{ collectionId: strin
                                         backgroundColor: message.isUser ? "rgba(255,255,255,0.16)" : "action.hover",
                                     }}
                                 >
-                                    {attachment.kind === "image" ? <ImageIcon fontSize="small" /> : <FileIcon fontSize="small" />}
                                     <Typography variant="caption" sx={{ wordBreak: "break-word" }}>
                                         {attachment.name}
                                     </Typography>

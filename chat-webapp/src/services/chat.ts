@@ -1,11 +1,58 @@
 import { ListQuerySessionsResponse, GetQuerySessionResponse, QuerySession } from "@/types/query-session";
 import { Query, QueryRequest } from "@/types/query";
-import { createApi, fetchBaseQuery } from "@reduxjs/toolkit/query/react";
+import { createApi, fetchBaseQuery, FetchArgs, FetchBaseQueryError, FetchBaseQueryMeta } from "@reduxjs/toolkit/query/react";
 import { Collection } from "@/types/collection";
 import { Agent } from "@/types/agent";
 import { createSlice, PayloadAction } from "@reduxjs/toolkit";
 import { AuthState } from "./auth";
 import { appPath } from "@/lib/app-path";
+
+interface PagedListResponse<T> {
+    count: number;
+    limit: number;
+    name: string;
+    start: number;
+    items: T[];
+}
+
+// The custom-chat-api GET proxy only forwards the `endpoint` search param, so
+// pagination params (limit/start) must be embedded directly in the endpoint
+// string rather than passed as separate `params`.
+const PAGE_SIZE = 100;
+
+async function fetchAllPages<T>(
+    fetchWithBQ: (args: string | FetchArgs) => { data?: unknown; error?: FetchBaseQueryError; meta?: FetchBaseQueryMeta } | PromiseLike<{ data?: unknown; error?: FetchBaseQueryError; meta?: FetchBaseQueryMeta }>,
+    path: string,
+): Promise<{ data: PagedListResponse<T> } | { error: FetchBaseQueryError }> {
+    const items: T[] = [];
+    let start = 0;
+    let total = Infinity;
+
+    while (start < total) {
+        const separator = path.includes('?') ? '&' : '?';
+        const result = await Promise.resolve(fetchWithBQ({
+            url: '',
+            method: 'GET',
+            params: {
+                endpoint: `${path}${separator}limit=${PAGE_SIZE}&start=${start}`,
+            },
+        }));
+
+        if (result.error) {
+            return { error: result.error };
+        }
+
+        const page = result.data as PagedListResponse<T>;
+        items.push(...page.items);
+        total = page.count;
+
+        // Guard against an unexpected empty page causing an infinite loop.
+        if (page.items.length === 0) break;
+        start += page.items.length;
+    }
+
+    return { data: { count: total, limit: PAGE_SIZE, name: '', start: 0, items } };
+}
 
 export interface ChatState {
     sessions: QuerySession[];
@@ -70,22 +117,14 @@ export const chatApi = createApi({
             invalidatesTags: () => [{ type: 'QuerySession' }]
         }),
         getCollections: builder.query<{ count: number; limit: number; name: string; start: number; items: Collection[] }, void>({
-            query: () => ({
-                url: '',
-                method: 'GET',
-                params: {
-                    endpoint: '/collections',
-                }
-            })
+            async queryFn(_arg, _api, _extraOptions, fetchWithBQ) {
+                return fetchAllPages<Collection>(fetchWithBQ, '/collections');
+            },
         }),
         getAgents: builder.query<{ count: number; limit: number; name: string; start: number; items: Agent[] }, void>({
-            query: () => ({
-                url: '',
-                method: 'GET',
-                params: {
-                    endpoint: '/agents',
-                }
-            })
+            async queryFn(_arg, _api, _extraOptions, fetchWithBQ) {
+                return fetchAllPages<Agent>(fetchWithBQ, '/agents');
+            },
         }),
     }),
 });
