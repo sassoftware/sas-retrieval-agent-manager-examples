@@ -39,6 +39,7 @@ This section might supplement the Changelog file from the repository and only hi
 | [multiple llms agent](/examples/agents/multiple_llms_agent/) | An agent that routes prompts between low- and high-reasoning LLM aliases to show dynamic multi-model selection in a single agent template. |
 | [news information finder](/examples/agents/news_information_finder/) | A general-purpose news search agent with access to all news collections and web search tools. |
 | [science and tech news agent](/examples/agents/science_tech_news_agent/) | A no-code agent specialized in science and technology news, with access to a news collection and search tools. |
+| [tool timeout configuration agent](/examples/agents/timeout_agent/) | A code agent template that configures tool and query timeout values through environment variables. |
 
 #### Code MCP Servers
 
