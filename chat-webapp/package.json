@@ -4,6 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
+    "dev:basepath": "NODE_ENV=development node server.js",
     "build": "next build",
     "start": "next start",
     "lint": "eslint"

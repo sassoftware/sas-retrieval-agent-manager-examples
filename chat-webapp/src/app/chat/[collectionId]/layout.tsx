@@ -1,12 +1,13 @@
 'use client';
 import { useAppSelector } from "@/store";
-import { AppBar, Box, Drawer, IconButton, List, ListItem, ListItemButton, ListItemText, Toolbar, Typography } from "@mui/material";
+import { Box, Drawer, IconButton, List, ListItem, ListItemButton, ListItemText } from "@mui/material";
 import MenuIcon from '@mui/icons-material/Menu';
 import FirstPage from '@mui/icons-material/FirstPage';
 import { use, useMemo, useState } from "react";
 import { useRouter, useParams } from "next/navigation";
 import { useGetAgentsQuery, useGetCollectionsQuery, useGetSessionsQuery } from "@/services/chat";
 import { appPath } from "@/lib/app-path";
+import TopBar from "@/app/TopBar";
 
 export default function Layout({ params, children }: { params: Promise<{ collectionId: string }>, children: React.ReactNode }) {
     const allCollections = useAppSelector(state => state.chat.collections ?? []);
@@ -46,19 +47,19 @@ export default function Layout({ params, children }: { params: Promise<{ collect
 
     return (
         <Box>
-            <AppBar >
-                <Toolbar>
-                    <IconButton size='large' edge="start" onClick={() => setShowSidebar(true)} >
+            <TopBar
+                title={thisCollection?.name ?? thisAgent?.name}
+                leftAction={
+                    <IconButton size='large' edge="start" onClick={() => setShowSidebar(true)} sx={{ color: 'inherit' }}>
                         <MenuIcon />
                     </IconButton>
-                     <Typography sx={{ flexGrow: 1 }}>
-                         {thisCollection?.name ?? thisAgent?.name}
-                     </Typography>
-                     <IconButton size='large' edge="end" onClick={() => router.replace(appPath(thisAgent ? '/agents' : '/chat'))} >
+                }
+                rightAction={
+                    <IconButton size='large' onClick={() => router.replace(appPath(thisAgent ? '/agents' : '/chat'))} sx={{ color: 'inherit' }}>
                         <FirstPage />
                     </IconButton>
-                </Toolbar>
-            </AppBar>
+                }
+            />
             <Box sx={{ flexDirection: 'row', }}>
                 <Drawer
                     anchor="left"

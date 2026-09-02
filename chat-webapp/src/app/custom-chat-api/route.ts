@@ -1,18 +1,19 @@
 import { NextRequest } from "next/server";
 import { getFetchConfig } from "@/lib/fetch-config";
+import { getSsoAccessToken } from "@/services/sso";
 
 /**
  * Extract and forward only necessary headers to the backend API
  */
-function getForwardHeaders(request: NextRequest): HeadersInit {
-  const headers: HeadersInit = {
+function getForwardHeaders(request: NextRequest): Headers {
+  const headers = new Headers({
     "Content-Type": "application/json",
-  };
+  });
 
   // Forward the Authorization header if present
   const authHeader = request.headers.get("authorization");
   if (authHeader) {
-    headers["Authorization"] = authHeader;
+    headers.set("Authorization", authHeader);
   }
 
   return headers;
@@ -86,11 +87,32 @@ export async function GET(request: NextRequest) {
   const url = apiUrl + request.nextUrl.searchParams.get("endpoint");
 
   const forwardHeaders = getForwardHeaders(request);
+  if (!request.headers.get("authorization")) {
+    const token = await getSsoAccessToken();
+    if (token) forwardHeaders.set("Authorization", `Bearer ${token}`);
+  }
 
   const response = await fetch(url, {
     ...getFetchConfig(),
     headers: forwardHeaders,
+    redirect: "manual",
   });
+
+  // The RAM backend's oauth2-proxy gateway responds with a redirect to the
+  // identity provider's login page (rather than a 401) when the request is
+  // missing a valid Authorization header. `fetch` follows redirects by
+  // default, so without `redirect: "manual"` this would silently end up
+  // forwarding the login page's HTML back to the client as if it were a
+  // `200` API response — the caller then fails to parse it as JSON with no
+  // indication of what actually went wrong. Treat any redirect here as an
+  // auth failure instead.
+  if (response.type === "opaqueredirect" || (response.status >= 300 && response.status < 400)) {
+    console.error("Chat API request redirected (likely unauthenticated) - Location:", response.headers.get("location"));
+    return new Response(JSON.stringify({ error: "Not authenticated with RAM backend" }), {
+      status: 401,
+      headers: { "Content-Type": "application/json" },
+    });
+  }
 
   if (!response.ok) {
     console.error("Chat API request failed - Status:", response.status);
@@ -126,12 +148,30 @@ export async function POST(request: NextRequest) {
   logCurlRequest(fullUrl, requestBody, request.headers.get("authorization"));
   const body = JSON.stringify(requestBody);
 
+  const forwardHeaders = getForwardHeaders(request);
+  if (!request.headers.get("authorization")) {
+    const token = await getSsoAccessToken();
+    if (token) forwardHeaders.set("Authorization", `Bearer ${token}`);
+  }
+
   const response = await fetch(fullUrl, {
     ...getFetchConfig(),
     method: "POST",
-    headers: getForwardHeaders(request),
+    headers: forwardHeaders,
     body: body,
+    redirect: "manual",
   });
+
+  // See the comment in GET() above: treat a redirect (the RAM gateway's way
+  // of saying "not authenticated") as a 401 instead of silently following it
+  // and forwarding the resulting login-page HTML as a bogus `200`.
+  if (response.type === "opaqueredirect" || (response.status >= 300 && response.status < 400)) {
+    console.error("Chat API request redirected (likely unauthenticated) - Location:", response.headers.get("location"));
+    return new Response(JSON.stringify({ error: "Not authenticated with RAM backend" }), {
+      status: 401,
+      headers: { "Content-Type": "application/json" },
+    });
+  }
 
   if (!response.ok) {
     console.error("Chat API request failed - Status:", response.status);

@@ -84,6 +84,10 @@ const LoginPage = () => {
   const [initiateDeviceAuth] = useInitiateDeviceAuthMutation();
   const [pollDeviceToken] = usePollDeviceTokenMutation();
 
+  const startSso = () => {
+    window.location.assign(appPath("/auth/login"));
+  };
+
   const startAuth = async () => {
     setIsLoading(true);
     setError("");
@@ -102,6 +106,16 @@ const LoginPage = () => {
       setIsLoading(false);
     }
   };
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("error") === "sso_failed") {
+      setError("Single sign-on failed. Please try again, or check the server logs for details.");
+      params.delete("error");
+      const query = params.toString();
+      window.history.replaceState(null, "", `${window.location.pathname}${query ? `?${query}` : ""}`);
+    }
+  }, []);
 
   useEffect(() => {
     if (!deviceCode || !codeVerifier) return;
@@ -237,13 +251,27 @@ const LoginPage = () => {
                   )}
 
                   <GradientButton
+                    onClick={startSso}
+                    fullWidth
+                    size="large"
+                  >
+                    Sign in
+                  </GradientButton>
+                  <Button
                     onClick={startAuth}
                     fullWidth
                     size="large"
+                    variant="outlined"
                     disabled={isLoading}
+                    sx={{
+                      py: 1.25,
+                      textTransform: "none",
+                      fontWeight: 600,
+                      borderColor: "primary.main",
+                    }}
                   >
                     {isLoading ? "Initializing..." : "Sign in with device code"}
-                  </GradientButton>
+                  </Button>
                 </Stack>
               ) : (
                 <Stack spacing={3}>

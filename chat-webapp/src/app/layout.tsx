@@ -37,7 +37,7 @@ export default async function RootLayout({
   const direction = isRtl ? 'rtl' : 'ltr';
 
   return (
-    <html lang={locale} dir={direction}>
+    <html lang={locale} dir={direction} suppressHydrationWarning>
       <body className={`${geistSans.variable} ${geistMono.variable}`}>
         <ThemeRegistry>
           <StoreWrapper>

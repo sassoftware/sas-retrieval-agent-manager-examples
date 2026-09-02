@@ -18,6 +18,7 @@ import ChatIcon from '@mui/icons-material/Chat';
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { appPath } from "@/lib/app-path";
+import TopBar from "@/app/TopBar";
 
 const StyledCard = styled(Card)(({ theme }) => ({
     height: '100%',
@@ -52,7 +53,9 @@ export default function Page() {
     const router = useRouter();
 
     return (
-        <Container maxWidth="lg" sx={{ py: { xs: 3, md: 5 } }}>
+        <>
+            <TopBar title="SAS Retrieval Agent Manager" />
+            <Container maxWidth="lg" sx={{ py: { xs: 3, md: 5 }, pt: { xs: 11, md: 13 } }}>
             <Box sx={{ mb: 4, display: 'flex', alignItems: { xs: 'flex-start', md: 'center' }, justifyContent: 'space-between', flexWrap: 'wrap', gap: 3 }}>
                 <Box>
                     <Typography variant="h4" component="h1" sx={{ fontWeight: 700, letterSpacing: '-0.02em', mb: 0.5 }}>
@@ -167,6 +170,7 @@ export default function Page() {
                     ))}
                 </Box>
             )}
-        </Container>
+            </Container>
+        </>
     );
 }
