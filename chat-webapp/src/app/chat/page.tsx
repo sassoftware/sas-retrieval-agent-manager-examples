@@ -10,20 +10,28 @@ import {
     CardActionArea,
     Chip,
     Stack,
+    ToggleButton,
+    ToggleButtonGroup,
 } from "@mui/material";
 import { useRouter } from "next/navigation";
 import { styled } from "@mui/material/styles";
 import ChatIcon from '@mui/icons-material/Chat';
+import SmartToyIcon from '@mui/icons-material/SmartToy';
+import Link from "next/link";
+import { appPath } from "@/lib/app-path";
+import TopBar from "@/app/TopBar";
 
 const StyledCard = styled(Card)(({ theme }) => ({
     height: '100%',
     display: 'flex',
     flexDirection: 'column',
-    transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+    border: `1px solid ${theme.palette.divider}`,
+    borderRadius: 2,
+    transition: 'transform 0.2s ease, box-shadow 0.2s ease',
     cursor: 'pointer',
     '&:hover': {
-        transform: 'translateY(-4px)',
-        boxShadow: theme.shadows[8],
+        transform: 'translateY(-2px)',
+        boxShadow: theme.shadows[3],
     },
     '&:active': {
         transform: 'translateY(-2px)',
@@ -44,12 +52,12 @@ const IconContainer = styled(Box)(({ theme }) => ({
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
-    width: 48,
-    height: 48,
-    borderRadius: '50%',
+    width: 40,
+    height: 40,
+    borderRadius: 1.5,
     backgroundColor: theme.palette.primary.main,
     color: theme.palette.primary.contrastText,
-    marginBottom: theme.spacing(2),
+    marginBottom: theme.spacing(1.5),
 }));
 
 export default function Page() {
@@ -62,18 +70,30 @@ export default function Page() {
     const router = useRouter();
 
     const handleCardClick = (collectionId: string) => {
-        router.push(`/chat/${collectionId}`);
+        router.push(appPath(`/chat/${collectionId}`));
     };
 
     return (
-        <Container maxWidth="lg" sx={{ py: 4 }}>
-            <Box sx={{ mb: 4 }}>
-                <Typography variant="h4" component="h1" gutterBottom fontWeight={600}>
-                    Collections
-                </Typography>
-                <Typography variant="body1">
-                    Select a collection to start chatting
-                </Typography>
+        <>
+            <TopBar title="SAS Retrieval Agent Manager" />
+            <Container maxWidth="lg" sx={{ py: { xs: 3, md: 5 }, pt: { xs: 11, md: 13 } }}>
+            <Box sx={{ mb: 4, display: 'flex', alignItems: { xs: 'flex-start', md: 'center' }, justifyContent: 'space-between', flexWrap: 'wrap', gap: 3 }}>
+                <Box>
+                    <Typography variant="h4" component="h1" sx={{ fontWeight: 700, letterSpacing: '-0.02em', mb: 0.5 }}>
+                        Collections
+                    </Typography>
+                    <Typography variant="body1" color="text.secondary">
+                        Select a collection to start chatting
+                    </Typography>
+                </Box>
+                <ToggleButtonGroup exclusive value="collections" size="small" aria-label="Browse agents or collections">
+                    <ToggleButton value="agents" component={Link} href={appPath("/agents")} sx={{ px: 2, minWidth: 108, textTransform: 'none' }}>
+                        <SmartToyIcon sx={{ mr: 0.75, fontSize: 18 }} /> Agents
+                    </ToggleButton>
+                    <ToggleButton value="collections" sx={{ px: 2, minWidth: 140, textTransform: 'none' }}>
+                        <ChatIcon sx={{ mr: 0.75, fontSize: 18 }} /> Collections
+                    </ToggleButton>
+                </ToggleButtonGroup>
             </Box>
 
             {isLoading ? (
@@ -113,12 +133,8 @@ export default function Page() {
                 <Box
                     sx={{
                         display: 'grid',
-                        gridTemplateColumns: {
-                            xs: 'repeat(1, 1fr)',
-                            sm: 'repeat(2, 1fr)',
-                            md: 'repeat(3, 1fr)',
-                        },
-                        gap: 3,
+                        gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))',
+                        gap: 2,
                     }}
                 >
                     {collections.map((collection) => (
@@ -129,12 +145,12 @@ export default function Page() {
                                 <CardContent
                                         className="card-content"
                                         sx={{
-                                            p: 3,
-                                            textAlign: 'center',
+                                        p: 2.5,
+                                        textAlign: 'left',
                                             flexGrow: 1,
                                             display: 'flex',
                                             flexDirection: 'column',
-                                            alignItems: 'center',
+                                        alignItems: 'flex-start',
                                         }}
                                     >
                                         <IconContainer>
@@ -147,14 +163,14 @@ export default function Page() {
                                             gutterBottom
                                             sx={{
                                                 fontWeight: 600,
-                                                textAlign: 'center',
+                                                textAlign: 'left',
                                                 wordBreak: 'break-word',
                                             }}
                                         >
                                             {collection.name}
                                         </Typography>
 
-                                        <Stack direction="row" spacing={1} sx={{ mt: 2 }}>
+                                         <Stack direction="row" spacing={1} sx={{ mt: 'auto', pt: 2 }}>
                                             <Chip
                                                 label="Active"
                                                 size="small"
@@ -168,6 +184,7 @@ export default function Page() {
                     ))}
                 </Box>
             )}
-        </Container>
+            </Container>
+        </>
     );
 }
