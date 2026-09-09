@@ -41,6 +41,13 @@ This section might supplement the Changelog file from the repository and only hi
 | [science and tech news agent](/examples/agents/science_tech_news_agent/) | A no-code agent specialized in science and technology news, with access to a news collection and search tools. |
 | [tool timeout configuration agent](/examples/agents/timeout_agent/) | A code agent template that configures tool and query timeout values through environment variables. |
 
+#### Catalog MCP Servers
+
+| Example | Description |
+| ------ | ------ |
+| [openapi mcp server](/examples/catalog_mcp_servers/openapi_mcp_server/) | RAM's built-in OpenAPI MCP Server catalog template, which auto-generates MCP tools from an OpenAPI spec with no custom code or container. Includes an [F1 Connect API](/examples/catalog_mcp_servers/openapi_mcp_server/f1_connect_mcp_server/) example. |
+| [remote mcp server](/examples/catalog_mcp_servers/remote_mcp_server/) | RAM's built-in Remote MCP Server catalog template, which connects directly to an externally hosted MCP server over HTTP. Includes an [Exa web search](/examples/catalog_mcp_servers/remote_mcp_server/exa_web_search_mcp_server/) example. |
+
 #### Code MCP Servers
 
 | Example | Description |
