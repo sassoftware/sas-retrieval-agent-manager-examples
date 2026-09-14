@@ -4,11 +4,10 @@ This folder contains examples of Catalog MCP server templates for SAS Retrieval 
 
 A Catalog MCP server is a built-in RAM template type that you select directly from a catalog of prebuilt connector types (for example, "OpenAPI MCP Server"), rather than a custom code or container-based server. RAM handles hosting and tool generation for you.
 
-## Creating a New Catalog MCP Server
+## Catalog Server Types
 
-1. In RAM, navigate to **MCP Tools** in the left-hand sidebar.
-2. In the top-right corner, click **New**.
-3. Select the catalog template type you want (for example, **OpenAPI MCP Server**).
-4. Click **Select Template**.
-5. Fill in the required fields for that template type (for example, an API base URL and OpenAPI spec URL).
-6. Save to create the MCP tool.
+RAM's catalog includes the following built-in connector types:
+
+- **DB Connector** — Connects directly to a database and automatically generates MCP tools for querying it.
+- **Remote MCP Server** — Connects to an existing, externally hosted MCP server over Streamable HTTP or Server-sent events. 
+- **OpenAPI MCP Server** — Connects to an existing REST API and automatically generates MCP tools from its OpenAPI/Swagger specification. 
