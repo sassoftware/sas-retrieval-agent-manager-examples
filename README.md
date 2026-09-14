@@ -36,6 +36,7 @@ This section might supplement the Changelog file from the repository and only hi
 | [financial agent](/examples/agents/financial_agent/) | An agent that combines structured financial data queries with unstructured document search to generate client-specific daily market updates. |
 | [health news agent](/examples/agents/health_news_agent/) | A no-code agent specialized in health and medical news, with access to a news collection and search tools. |
 | [image render agent](/examples/agents/image_render_agent/) | An agent that demonstrates how to render tool-generated images in the RAM chat using base64-encoded image output. |
+| [mcp tool agent](/examples/agents/mcp_tool_agent/) | A code agent template that discovers and directly invokes MCP tools by name from user prompts, bypassing LLM-driven tool selection. |
 | [multiple llms agent](/examples/agents/multiple_llms_agent/) | An agent that routes prompts between low- and high-reasoning LLM aliases to show dynamic multi-model selection in a single agent template. |
 | [news information finder](/examples/agents/news_information_finder/) | A general-purpose news search agent with access to all news collections and web search tools. |
 | [science and tech news agent](/examples/agents/science_tech_news_agent/) | A no-code agent specialized in science and technology news, with access to a news collection and search tools. |
