@@ -5,8 +5,6 @@ from pathlib import Path
 import requests
 
 GRAPH_URL = "https://graph.microsoft.com/v1.0"
-SITE_ID = "your_sharepoint_site_id"
-
 
 # Obtains a Microsoft Graph access token using application credentials.
 def get_access_token() -> str:
@@ -99,12 +97,16 @@ def download_documents(
 
 # Downloads the site's documents and saves each file to the RAM source.
 def exec(client: SourceClient):
+    site_id = os.environ.get("SITE_ID", "").strip()
+    if not site_id:
+        raise RuntimeError("SITE_ID environment variable is required")
+
     token = get_access_token()
 
-    site = graph_get(f"/sites/{SITE_ID}", token)
+    site = graph_get(f"/sites/{site_id}", token)
     print(f"Site: {site.get('webUrl')}")
 
-    drive = graph_get(f"/sites/{SITE_ID}/drive", token)
+    drive = graph_get(f"/sites/{site_id}/drive", token)
     destination = Path("/tmp/sharepoint-documents")
     destination.mkdir(parents=True, exist_ok=True)
 

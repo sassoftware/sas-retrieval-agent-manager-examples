@@ -1,6 +1,6 @@
 # SharePoint Documents Custom Source
 
-This folder contains a custom source template that downloads files from a SharePoint site's default document library through Microsoft Graph and saves them for ingestion by SAS Retrieval Agent Manager (RAM). The target SharePoint site is configured with the `SITE_ID` constant in `run.py`.
+This folder contains a custom source template that downloads files from a SharePoint site's default document library through Microsoft Graph and saves them for ingestion by SAS Retrieval Agent Manager (RAM). The target SharePoint site is configured with the `SITE_ID` environment variable.
 
 ## How It Works
 
@@ -15,7 +15,7 @@ When the source runs, it:
 
 These are the required dependencies for the SharePoint custom source:
 
-- **SharePoint site:** Set `SITE_ID` in `run.py` to the Microsoft Graph site ID for the site whose default document library should be ingested.
+- **SharePoint site:** Configure `SITE_ID` with the Microsoft Graph site ID for the site whose default document library should be ingested.
 - **Environment variables:** Configure `TENANT_ID`, `CLIENT_ID`, and `CLIENT_SECRET` for a Microsoft Entra application registration.
 - **Microsoft Graph permissions:** Grant the application permission to read the target site. When using the `Sites.Selected` application permission, an administrator must also grant the application `read` access to that specific SharePoint site and provide tenant-wide admin consent.
 - **Network access:** Allow outbound HTTPS access to `login.microsoftonline.com`, `graph.microsoft.com`, and `*.sharepoint.com`. Graph document downloads can redirect to temporary SharePoint URLs.
