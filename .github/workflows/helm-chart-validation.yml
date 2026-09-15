@@ -1,0 +1,51 @@
+name: Validate model-serving chart
+
+on:
+  pull_request:
+    paths:
+      - "helm-charts/model-serving/**"
+      - ".github/workflows/helm-chart-validation.yml"
+      - ".github/workflows/helm-chart-publish.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  CHART_PATH: helm-charts/model-serving
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: azure/setup-helm@v4
+        with:
+          version: v3.19.0
+
+      - name: Build locked dependencies
+        run: helm dependency build "$CHART_PATH"
+
+      - name: Verify dependency lock
+        run: git diff --exit-code -- "$CHART_PATH/Chart.lock"
+
+      - name: Lint chart
+        run: helm lint "$CHART_PATH" --strict
+
+      - name: Install helm-unittest
+        run: helm plugin install https://github.com/helm-unittest/helm-unittest.git --version 1.0.3
+
+      - name: Run unit tests
+        run: helm unittest "$CHART_PATH"
+
+      - name: Rebuild dependencies for packaging
+        run: helm dependency build "$CHART_PATH"
+
+      - name: Render supported namespaces
+        run: |
+          helm template model-serving "$CHART_PATH" --namespace kserve >/tmp/model-serving.yaml
+          grep -q "name: kserve-openvino" /tmp/model-serving.yaml
+          grep -q "name: kserve-vllm-cpu" /tmp/model-serving.yaml
+
+      - name: Package chart
+        run: helm package "$CHART_PATH" --destination /tmp

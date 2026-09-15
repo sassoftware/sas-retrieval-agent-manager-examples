@@ -1,0 +1,136 @@
+:root {
+  --sas-blue: #0066cc;
+  --sas-blue-dark: #003c71;
+  --sas-blue-deep: #002f5f;
+  --sas-link: #005eb8;
+  --sas-border: #d5dce5;
+  --sas-surface: #f5f7fa;
+  --sas-text: #252a30;
+  --sas-nav-link: #dbe3ec;
+}
+
+body {
+  color: var(--sas-text);
+  font-family: "Segoe UI", "Helvetica Neue", sans-serif;
+  line-height: 1.6;
+}
+
+.side-bar,
+.site-nav,
+.site-nav .nav-list {
+  background: var(--sas-blue-deep);
+  border-right: 0;
+}
+
+.site-header {
+  background: var(--sas-blue-deep);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+  min-height: 5rem;
+}
+
+.site-title,
+.site-title:visited {
+  color: #ffffff;
+  font-size: 1rem;
+  font-weight: 700;
+  line-height: 1.25;
+  padding: 1rem;
+}
+
+.site-nav .nav-list .nav-list-item .nav-list-link,
+.site-nav .nav-list .nav-list-item > .nav-list .nav-list-item .nav-list-link {
+  color: var(--sas-nav-link);
+  font-size: 0.9rem;
+  line-height: 1.35;
+  padding: 0.55rem 1rem;
+}
+
+.site-nav .nav-list .nav-list-item .nav-list-link:hover,
+.site-nav .nav-list .nav-list-item .nav-list-link.active,
+.site-nav .nav-list .nav-list-item > .nav-list .nav-list-item .nav-list-link:hover,
+.site-nav .nav-list .nav-list-item > .nav-list .nav-list-item .nav-list-link.active {
+  background-image: none;
+  background-color: rgba(255, 255, 255, 0.16);
+  color: #ffffff;
+}
+
+.site-nav .nav-list .nav-list-item .nav-list-expander {
+  color: var(--sas-nav-link);
+}
+
+.main-content-wrap {
+  max-width: 72rem;
+}
+
+.main-content h1,
+.main-content h2,
+.main-content h3,
+.main-content h4 {
+  color: var(--sas-blue-dark);
+  font-weight: 650;
+  letter-spacing: 0;
+}
+
+.main-content h1,
+.main-content h2 {
+  border-bottom: 1px solid var(--sas-border);
+  padding-bottom: 0.5rem;
+}
+
+.main-content a {
+  color: var(--sas-link);
+  text-decoration-thickness: 1px;
+  text-underline-offset: 0.16em;
+}
+
+.main-content blockquote {
+  background: #eef7fc;
+  border-left: 4px solid #39b7e6;
+  color: var(--sas-text);
+  margin-left: 0;
+  padding: 0.9rem 1.1rem;
+}
+
+.main-content table {
+  border: 1px solid var(--sas-border);
+}
+
+.main-content thead th {
+  background-color: var(--sas-blue-dark);
+  color: #ffffff;
+}
+
+.main-content th,
+.main-content td {
+  border-color: var(--sas-border);
+}
+
+.main-content tbody tr:nth-child(even) td {
+  background-color: var(--sas-surface);
+}
+
+.site-disclaimer {
+  border-top: 1px solid rgba(255, 255, 255, 0.25);
+  color: var(--sas-nav-link);
+  font-size: 0.75rem;
+  margin: 1rem;
+  padding-top: 1rem;
+}
+
+.site-disclaimer p {
+  margin: 0.4rem 0;
+}
+
+.site-disclaimer a {
+  color: #ffffff;
+}
+
+@media (max-width: 50rem) {
+  .site-header {
+    min-height: 3.75rem;
+  }
+
+  .site-disclaimer {
+    display: none;
+  }
+}
