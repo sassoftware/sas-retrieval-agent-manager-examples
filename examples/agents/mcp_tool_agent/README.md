@@ -25,16 +25,21 @@ prompting.
 
 No collections are required for this example.
 
-### Environment Variables (required)
+### Environment Variables (optional)
 
-None. The tool server ID is derived automatically from the tool name you provide, using
-`ram_client.get_langchain_tools()`.
+- `TOOL_TIMEOUT`: The timeout, in seconds, passed to `invoke_tool` (defaults to `30.0`).
+
+Set this on the Experiment's Environment Variables page, not on the Code Template — the Code Template
+only holds `run.py`, while environment variable values are configured per Experiment. Republishing the
+template does not set or carry over this value.
+
+No other environment variables are required. The tool server ID is derived automatically from the tool
+name you provide, using `ram_client.get_langchain_tools()`.
 
 ## Agent-specific Configuration
 
-Edit [run.py](run.py) to set:
-
-- `TOOL_TIMEOUT`: The timeout, in seconds, passed to `invoke_tool` (defaults to `30.0`).
+No code changes are required; set the `TOOL_TIMEOUT` environment variable on the Experiment (not the
+Code Template) to override the default.
 
 ## Runtime Behavior
 

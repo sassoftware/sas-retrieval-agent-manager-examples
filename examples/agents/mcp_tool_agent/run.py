@@ -1,9 +1,10 @@
 import json
+import os
 from typing import Any, Dict
 
 from sasram.agent import Client
 
-TOOL_TIMEOUT = 30.0
+TOOL_TIMEOUT = float(os.getenv("TOOL_TIMEOUT", "30.0"))
 
 HELP_TEXT = (
     "Which tool would you like to call? Reply with the tool name followed by any "
@@ -15,6 +16,7 @@ HELP_TEXT = (
 
 
 def exec(text: str, ram_client: Client) -> str:
+
     # Tools registered for this agent carry the tool_server_id needed for invoke_tool
     tools = ram_client.get_langchain_tools()
     tool_names = ", ".join(sorted(t.name for t in tools))
