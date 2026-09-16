@@ -69,6 +69,51 @@ modelDefaults:
   env: []
 models: []
 
+  # ── Gemma 3 4B ─────────────────────────────────────────────────────────────
+  # - name: ovms-gemma-3-4b-it-fp16-ov
+  #   storageUri: hf://OpenVINO/gemma-3-4b-it-fp16-ov
+  #   args:
+  #     - --task=text_generation
+  #     - --target_device=CPU
+  #     - --log_level=DEBUG
+
+  # - name: vllm-gemma-3-4b-it
+  #   runtime: vllm-cpu
+  #   storageUri: hf://google/gemma-3-4b-it
+  #   args:
+  #     - --served-model-name
+  #     - gemma-3-4b-it
+
+  # ── Gemma 4 E4B ────────────────────────────────────────────────────────────
+  # - name: ovms-gemma-4-e4b-it-fp16-ov
+  #   storageUri: hf://OpenVINO/gemma-4-E4B-it-fp16-ov
+  #   args:
+  #     - --task=text_generation
+  #     - --target_device=CPU
+  #     - --log_level=DEBUG
+
+  # - name: vllm-gemma-4-e4b-it
+  #   runtime: vllm-cpu
+  #   storageUri: hf://google/gemma-4-E4B-it
+  #   args:
+  #     - --served-model-name
+  #     - gemma-4-E4B-it
+
+  # ── Gemma 4 E2B ────────────────────────────────────────────────────────────
+  # - name: ovms-gemma-4-e2b-it-fp16-ov
+  #   storageUri: hf://OpenVINO/gemma-4-E2B-it-fp16-ov
+  #   args:
+  #     - --task=text_generation
+  #     - --target_device=CPU
+  #     - --log_level=DEBUG
+
+  # - name: vllm-gemma-4-e2b-it
+  #   runtime: vllm-cpu
+  #   storageUri: hf://google/gemma-4-E2B-it
+  #   args:
+  #     - --served-model-name
+  #     - gemma-4-E2B-it
+
 llmDefaults:
   replicas: 1
   image: vllm/vllm-openai:latest
