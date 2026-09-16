@@ -47,6 +47,8 @@ actually persisted:
 
 - `#shownotes`: Return the raw notes currently stored in the `AgentStore`.
 - `#clearnotes`: Clear the stored notes.
+- `#compactnotes`: Condense the stored notes if they've grown too large, keeping the key
+  facts, preferences, and decisions but trimming everything else.
 
 Matching ignores case, spaces, and a leading `#`, so `show notes`, `ShowNotes`, and `#shownotes`
 all work the same way.

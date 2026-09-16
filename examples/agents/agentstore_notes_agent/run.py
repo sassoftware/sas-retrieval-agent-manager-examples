@@ -3,6 +3,7 @@ from sasram.agent import Client
 
 SHOW_NOTES_CMD = "shownotes"
 CLEAR_NOTES_CMD = "clearnotes"
+COMPACT_NOTES_CMD = "compactnotes"
 
 NOTES_KEY = "notes"
 
@@ -22,6 +23,17 @@ Latest agent response:
 {answer}
 
 Updated notes:"""
+
+NOTES_COMPACT_PROMPT = """You are maintaining a running set of notes about a conversation.
+The notes below have grown too large. Rewrite them to be as compact as possible while keeping
+every fact, preference, and decision that still matters. Prefer a short bulleted list. Drop
+duplicates and anything no longer relevant. Only return the condensed notes, with no extra
+commentary.
+
+Existing notes:
+{notes}
+
+Condensed notes:"""
 
 
 def _get_notes(ram_client: Client) -> str:
@@ -44,6 +56,16 @@ async def _update_notes(ram_client: Client, notes: str, question: str, answer: s
     await ram_client._patch_plugin_metadata()
 
 
+async def _compact_notes(ram_client: Client, notes: str) -> str:
+    prompt = NOTES_COMPACT_PROMPT.format(notes=notes)
+    response = ram_client.post_query(prompt, direct_llm_query=True)
+
+    condensed = response.response.answer
+    ram_client.store.set(NOTES_KEY, condensed)
+    await ram_client._patch_plugin_metadata()
+    return condensed
+
+
 async def exec(text: str, ram_client: Client) -> str:
     # Debug commands read/write the store directly, bypassing the LLM, so you can verify
     # what is actually persisted -- including across brand-new conversations/sessions.
@@ -54,6 +76,11 @@ async def exec(text: str, ram_client: Client) -> str:
         ram_client.store.set(NOTES_KEY, "")
         await ram_client._patch_plugin_metadata()
         return "Notes cleared."
+    if cmd == COMPACT_NOTES_CMD:
+        notes = _get_notes(ram_client)
+        if not notes:
+            return "(no notes stored yet)"
+        return await _compact_notes(ram_client, notes)
 
     # Fetch any notes saved from earlier turns before running the query.
     notes = _get_notes(ram_client)
