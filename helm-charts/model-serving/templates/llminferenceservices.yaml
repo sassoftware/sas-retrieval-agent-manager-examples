@@ -1,0 +1,79 @@
+{{- range .Values.llmInferenceServices }}
+{{- $defaults := $.Values.llmDefaults }}
+{{- $image := .image | default $defaults.image }}
+{{- $args := .args | default $defaults.args }}
+{{- $resources := .resources | default $defaults.resources }}
+{{- $inject := true }}
+{{- if hasKey . "injectHfToken" }}{{- $inject = .injectHfToken }}{{- end }}
+---
+apiVersion: serving.kserve.io/v1alpha1
+kind: LLMInferenceService
+metadata:
+  name: {{ .name }}
+  namespace: {{ .namespace | default $.Values.namespace }}
+  labels:
+    {{- include "model-serving.labels" $ | nindent 4 }}
+spec:
+  model:
+    {{- toYaml .model | nindent 4 }}
+  {{- if not .scaling }}
+  replicas: {{ .replicas | default $defaults.replicas }}
+  {{- end }}
+  {{- with .parallelism }}
+  parallelism:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  template:
+    containers:
+      - name: main
+        image: {{ $image }}
+        {{- with $args }}
+        args:
+          {{- toYaml . | nindent 10 }}
+        {{- end }}
+        {{- if and $inject $.Values.hfSecret.enabled }}
+        env:
+          - name: HF_TOKEN
+            valueFrom:
+              secretKeyRef:
+                name: {{ $.Values.hfSecret.name }}
+                key: HF_TOKEN
+        {{- end }}
+        resources:
+          {{- toYaml $resources | nindent 10 }}
+  {{- if hasKey . "worker" }}
+  {{- $worker := .worker | default dict }}
+  worker:
+    containers:
+      - name: main
+        image: {{ $worker.image | default $image }}
+        {{- with ($worker.args | default $args) }}
+        args:
+          {{- toYaml . | nindent 10 }}
+        {{- end }}
+        {{- if and $inject $.Values.hfSecret.enabled }}
+        env:
+          - name: HF_TOKEN
+            valueFrom:
+              secretKeyRef:
+                name: {{ $.Values.hfSecret.name }}
+                key: HF_TOKEN
+        {{- end }}
+        resources:
+          {{- toYaml ($worker.resources | default $resources) | nindent 10 }}
+  {{- end }}
+  {{- with .prefill }}
+  prefill:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  router:
+    {{- toYaml (.router | default $defaults.router) | nindent 4 }}
+  {{- with .scaling }}
+  scaling:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  {{- with .baseRefs }}
+  baseRefs:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+{{- end }}

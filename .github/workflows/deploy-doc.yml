@@ -1,41 +1,95 @@
-name: Deploy Doc Website to GitHub Pages
+name: Publish documentation
 
 on:
+  pull_request:
+    paths:
+      - "**/*.md"
+      - "**/*.markdown"
+      - "LICENSE"
+      - "ContributorAgreement.txt"
+      - "Gemfile"
+      - "Gemfile.lock"
+      - "_config.yml"
+      - "_includes/**"
+      - "_plugins/**"
+      - "assets/**"
+      - ".github/workflows/deploy-doc.yml"
   push:
     branches:
       - main
+    paths:
+      - "**/*.md"
+      - "**/*.markdown"
+      - "LICENSE"
+      - "ContributorAgreement.txt"
+      - "Gemfile"
+      - "Gemfile.lock"
+      - "_config.yml"
+      - "_includes/**"
+      - "_plugins/**"
+      - "assets/**"
+      - ".github/workflows/deploy-doc.yml"
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  group: pages
+  cancel-in-progress: false
 
 permissions:
-  contents: write
-
-defaults:
-  run:
-    shell: bash
-    working-directory: ./website
+  contents: read
 
 jobs:
-  deploy:
+  validate:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
-      - uses: actions/setup-node@v6
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Ruby
+        uses: ruby/setup-ruby@v1
         with:
-          cache: "npm"
-          cache-dependency-path: website/package-lock.json
-      - run: npm ci
+          ruby-version: "3.3"
+          bundler-cache: true
 
-      - name: Build website
-        run: npm run build
+      - name: Build site
+        run: bundle exec jekyll build
 
-      # Popular action to deploy to GitHub Pages:
-      # Docs: https://github.com/peaceiris/actions-gh-pages#%EF%B8%8F-docusaurus
+  build:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: validate
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Ruby
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: "3.3"
+          bundler-cache: true
+
+      - name: Configure GitHub Pages
+        id: pages
+        uses: actions/configure-pages@v6
+
+      - name: Build site for GitHub Pages
+        run: bundle exec jekyll build --baseurl "${{ steps.pages.outputs.base_path }}"
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v4
+        with:
+          path: _site
+
+  deploy:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
       - name: Deploy to GitHub Pages
-        uses: peaceiris/actions-gh-pages@v4
-        with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          # Build output to publish to the `gh-pages` branch:
-          publish_dir: ./website/build
+        id: deployment
+        uses: actions/deploy-pages@v5

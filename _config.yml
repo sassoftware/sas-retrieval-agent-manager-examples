@@ -1,0 +1,60 @@
+title: SAS Retrieval Agent Manager Examples
+description: Open source examples for SAS Retrieval Agent Manager.
+url: "https://sassoftware.github.io"
+baseurl: "/sas-retrieval-agent-manager-examples"
+theme: just-the-docs
+destination: _site
+
+sass:
+  silence_deprecations:
+    - import
+    - global-builtin
+    - color-functions
+
+exclude:
+  - _site/
+  - .jekyll-cache/
+  - .jekyll-metadata
+  - .sass-cache/
+  - vendor/
+  - "**/node_modules/"
+  - "**/charts/"
+
+plugins:
+  - jekyll-relative-links
+
+relative_links:
+  enabled: true
+  collections: true
+
+callouts:
+  note:
+    title: Note
+    color: blue
+  tip:
+    title: Tip
+    color: green
+  important:
+    title: Important
+    color: purple
+  warning:
+    title: Warning
+    color: yellow
+  caution:
+    title: Caution
+    color: red
+
+defaults:
+  - scope:
+      path: ""
+    values:
+      layout: default
+
+aux_links:
+  "View on GitHub": "https://github.com/sassoftware/sas-retrieval-agent-manager-examples"
+
+back_to_top: true
+back_to_top_text: Back to top
+footer_content: >-
+  Open source under the Apache License 2.0. Provided AS IS, without warranties,
+  responsibility, or support from SAS except where applicable law requires otherwise.

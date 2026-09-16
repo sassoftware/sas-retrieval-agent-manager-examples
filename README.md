@@ -4,6 +4,9 @@
 
 This repository contains code examples for using the APIs provided by SAS Retrieval Agent Manager (RAM).
 
+> [!IMPORTANT]
+> This repository is an open source project under the [Apache License 2.0](LICENSE). The software and documentation are provided on an **AS IS** basis, without warranties or conditions. SAS does not accept responsibility for use of this repository and does not provide support except where applicable law requires otherwise. See [SUPPORT.md](SUPPORT.md) for the support policy.
+
 <!--
 ### What's New
 If applicable to your project, list new features you want users to be aware of.
@@ -37,6 +40,7 @@ This section might supplement the Changelog file from the repository and only hi
 | [financial agent](/examples/agents/financial_agent/) | An agent that combines structured financial data queries with unstructured document search to generate client-specific daily market updates. |
 | [health news agent](/examples/agents/health_news_agent/) | A no-code agent specialized in health and medical news, with access to a news collection and search tools. |
 | [image render agent](/examples/agents/image_render_agent/) | An agent that demonstrates how to render tool-generated images in the RAM chat using base64-encoded image output. |
+| [mcp tool agent](/examples/agents/mcp_tool_agent/) | A code agent template that discovers and directly invokes MCP tools by name from user prompts, bypassing LLM-driven tool selection. |
 | [multiple llms agent](/examples/agents/multiple_llms_agent/) | An agent that routes prompts between low- and high-reasoning LLM aliases to show dynamic multi-model selection in a single agent template. |
 | [news information finder](/examples/agents/news_information_finder/) | A general-purpose news search agent with access to all news collections and web search tools. |
 | [science and tech news agent](/examples/agents/science_tech_news_agent/) | A no-code agent specialized in science and technology news, with access to a news collection and search tools. |
@@ -74,6 +78,12 @@ This section might supplement the Changelog file from the repository and only hi
 | [news source](/examples/custom_sources/news_source/) | A parameterized news source that fetches from NYT, Reddit, and Yahoo Finance for a configurable news domain. |
 | [NYT front page source](/examples/custom_sources/nyt_front_page_source/) | A custom soure example that fetches the daily headlines from all 26 NYT Top Stories sections. |
 
+### Helm Charts
+
+| Chart | Description |
+| ------ | ----------- |
+| [model serving](/helm-charts/model-serving/) | Installs KServe from locked upstream Helm dependencies and supports values-driven InferenceService and LLMInferenceService deployments. |
+
 ## Contributing
 
 Maintainers are accepting patches and contributions to this project.
@@ -81,7 +91,7 @@ Please read [CONTRIBUTING.md](CONTRIBUTING.md) for details about submitting cont
 
 ## License
 
-This project is licensed under the [Apache 2.0 License](LICENSE).
+Except for the the contents of the `/assets/images/` folder, this project is licensed under the [Apache 2.0 License](LICENSE). Elements in the `/assets/images/` folder are owned by SAS and are not released under an open source license. SAS and all other SAS Institute Inc. product or service names are registered trademarks or trademarks of SAS Institute Inc. in the USA and other countries. ® indicates USA registration.
 
 ## Additional Resources
 

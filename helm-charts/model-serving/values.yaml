@@ -1,0 +1,177 @@
+# yaml-language-server: $schema=values.schema.json
+
+nameOverride: ""
+fullnameOverride: ""
+
+components:
+  kserveCrd:
+    enabled: true
+  llmisvcCrd:
+    enabled: true
+  localModelCrd:
+    enabled: true
+  kserve:
+    enabled: true
+  llmisvc:
+    enabled: true
+  localModel:
+    enabled: true
+  runtimeConfigs:
+    enabled: true
+
+commonLabels: {}
+commonAnnotations: {}
+namespace: models
+
+hfSecret:
+  enabled: false
+  managed: true
+  name: hf-secret
+  token: ""
+
+serviceAccount:
+  enabled: true
+  name: hf-sa
+
+clusterServingRuntimes:
+  openVINO:
+    enabled: true
+    name: kserve-openvino
+    image: openvino/model_server:2026.3
+    imagePullPolicy: IfNotPresent
+    resources:
+      requests:
+        cpu: "1"
+        memory: 2Gi
+      limits:
+        cpu: "1"
+        memory: 2Gi
+  vllmCPU:
+    enabled: true
+    name: kserve-vllm-cpu
+    image: public.ecr.aws/q9t5s3a7/vllm-cpu-release-repo:v0.26.0
+    imagePullPolicy: IfNotPresent
+    maxModelLen: 4096
+    gpuMemoryUtilization: "0.7"
+    shmSize: 1Gi
+
+modelDefaults:
+  runtime: kserve-openvino
+  modelFormat: huggingface
+  args: []
+  resources:
+    requests:
+      cpu: "8"
+      memory: 32Gi
+    limits:
+      cpu: "8"
+      memory: 48Gi
+  env: []
+models: []
+
+  # ── Gemma 3 4B ─────────────────────────────────────────────────────────────
+  # - name: ovms-gemma-3-4b-it-fp16-ov
+  #   storageUri: hf://OpenVINO/gemma-3-4b-it-fp16-ov
+  #   args:
+  #     - --task=text_generation
+  #     - --target_device=CPU
+  #     - --log_level=DEBUG
+
+  # - name: vllm-gemma-3-4b-it
+  #   runtime: vllm-cpu
+  #   storageUri: hf://google/gemma-3-4b-it
+  #   args:
+  #     - --served-model-name
+  #     - gemma-3-4b-it
+
+  # ── Gemma 4 E4B ────────────────────────────────────────────────────────────
+  # - name: ovms-gemma-4-e4b-it-fp16-ov
+  #   storageUri: hf://OpenVINO/gemma-4-E4B-it-fp16-ov
+  #   args:
+  #     - --task=text_generation
+  #     - --target_device=CPU
+  #     - --log_level=DEBUG
+
+  # - name: vllm-gemma-4-e4b-it
+  #   runtime: vllm-cpu
+  #   storageUri: hf://google/gemma-4-E4B-it
+  #   args:
+  #     - --served-model-name
+  #     - gemma-4-E4B-it
+
+  # ── Gemma 4 E2B ────────────────────────────────────────────────────────────
+  # - name: ovms-gemma-4-e2b-it-fp16-ov
+  #   storageUri: hf://OpenVINO/gemma-4-E2B-it-fp16-ov
+  #   args:
+  #     - --task=text_generation
+  #     - --target_device=CPU
+  #     - --log_level=DEBUG
+
+  # - name: vllm-gemma-4-e2b-it
+  #   runtime: vllm-cpu
+  #   storageUri: hf://google/gemma-4-E2B-it
+  #   args:
+  #     - --served-model-name
+  #     - gemma-4-E2B-it
+
+llmDefaults:
+  replicas: 1
+  image: vllm/vllm-openai:latest
+  args: [--model, /mnt/models]
+  resources:
+    limits:
+      cpu: "16"
+      memory: 64Gi
+  router:
+    gateway: {}
+    route: {}
+    scheduler: {}
+llmInferenceServices: []
+
+# Native KServe chart values. Customize each dependency under its chart name.
+kserve-resources:
+  kserve:
+    createSharedResources: true
+
+kserve-llmisvc-resources:
+  kserve:
+    createSharedResources: false
+
+kserve-localmodel-resources:
+  kserve:
+    localmodel:
+      enabled: false
+
+kserve-runtime-configs:
+  kserve:
+    servingruntime:
+      enabled: true
+      tensorflow:
+        disabled: false
+      mlserver:
+        disabled: false
+      sklearnserver:
+        disabled: false
+      xgbserver:
+        disabled: false
+      huggingfaceserver:
+        disabled: false
+        enabled: true
+      huggingfaceserver_multinode:
+        disabled: false
+      tritonserver:
+        disabled: false
+      pmmlserver:
+        disabled: false
+      predictiveserver:
+        disabled: false
+      paddleserver:
+        disabled: false
+      lgbserver:
+        disabled: false
+      torchserve:
+        disabled: false
+      autogluonserver:
+        disabled: false
+      vllmserver:
+        disabled: false
