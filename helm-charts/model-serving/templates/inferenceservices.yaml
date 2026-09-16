@@ -1,0 +1,41 @@
+{{- range .Values.models }}
+{{- $defaults := $.Values.modelDefaults }}
+{{- $inject := true }}
+{{- if hasKey . "injectHfToken" }}{{- $inject = .injectHfToken }}{{- end }}
+{{- $env := .env | default $defaults.env }}
+---
+apiVersion: serving.kserve.io/v1beta1
+kind: InferenceService
+metadata:
+  name: {{ .name }}
+  namespace: {{ .namespace | default $.Values.namespace }}
+  labels:
+    {{- include "model-serving.labels" $ | nindent 4 }}
+spec:
+  predictor:
+    serviceAccountName: {{ .serviceAccountName | default $.Values.serviceAccount.name }}
+    model:
+      runtime: {{ .runtime | default $defaults.runtime }}
+      modelFormat:
+        name: {{ .modelFormat | default $defaults.modelFormat }}
+      storageUri: {{ .storageUri }}
+      {{- with (.args | default $defaults.args) }}
+      args:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- if or (and $inject $.Values.hfSecret.enabled) $env }}
+      env:
+        {{- if and $inject $.Values.hfSecret.enabled }}
+        - name: HF_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: {{ $.Values.hfSecret.name }}
+              key: HF_TOKEN
+        {{- end }}
+        {{- with $env }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      {{- end }}
+      resources:
+        {{- toYaml (.resources | default $defaults.resources) | nindent 8 }}
+{{- end }}

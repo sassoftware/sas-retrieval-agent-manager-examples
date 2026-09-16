@@ -4,6 +4,9 @@
 
 This repository contains code examples for using the APIs provided by SAS Retrieval Agent Manager (RAM).
 
+> [!IMPORTANT]
+> This repository is an open source project under the [Apache License 2.0](LICENSE). The software and documentation are provided on an **AS IS** basis, without warranties or conditions. SAS does not accept responsibility for use of this repository and does not provide support except where applicable law requires otherwise. See [SUPPORT.md](SUPPORT.md) for the support policy.
+
 <!--
 ### What's New
 If applicable to your project, list new features you want users to be aware of.
@@ -72,6 +75,12 @@ This section might supplement the Changelog file from the repository and only hi
 | [financial news fetcher](/examples/custom_sources/financial_news_fetcher/) | A custom source example that fetches technology-sector financial news, generates a PDF digest, and saves the PDF into a RAM source for downstream collection ingestion. |
 | [news source](/examples/custom_sources/news_source/) | A parameterized news source that fetches from NYT, Reddit, and Yahoo Finance for a configurable news domain. |
 | [NYT front page source](/examples/custom_sources/nyt_front_page_source/) | A custom soure example that fetches the daily headlines from all 26 NYT Top Stories sections. |
+
+### Helm Charts
+
+| Chart | Description |
+| ------ | ----------- |
+| [model serving](/helm-charts/model-serving/) | Installs KServe from locked upstream Helm dependencies and supports values-driven InferenceService and LLMInferenceService deployments. |
 
 ## Contributing
 
