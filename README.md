@@ -29,6 +29,7 @@ This section might supplement the Changelog file from the repository and only hi
 
 | Example | Description |
 | ------ | ------ |
+| [agentstore notes agent](/examples/agents/agentstore_notes_agent/) | An agent that demonstrates using the `AgentStore` to summarize and persist conversation notes across turns. |
 | [banking agent](/examples/agents/banking_agent/) | A banking climate-risk analysis agent that queries bank report collections, supports templated questions, compares bank groups, and can generate chart output. |
 | [business news agent](/examples/agents/business_news_agent/) | A no-code agent specialized in business and financial news, with access to a news collection and search tools. |
 | [default tool calling agent](/examples/agents/default_tool_calling_agent/) | A default RAM code agent template that uses experiment-configured tools, collections, and retrieval settings. |
