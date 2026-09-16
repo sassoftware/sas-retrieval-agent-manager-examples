@@ -66,23 +66,6 @@ What `AgentStore` actually adds is memory that survives **outside** the current 
 - It's available to scheduled automation (the `init` hook) with no live chat involved.
 - It stays a small, bounded summary instead of growing with every turn of raw transcript.
 
-## Example Prompts
-
-To prove the difference, the test has to break the conversation, not just continue it:
-
-1. In a conversation with this agent, send: `My favorite F1 driver is Lando Norris.`
-2. Send `#shownotes` and confirm the stored notes mention Lando Norris.
-3. Start a **brand-new conversation/session** with the same agent (not a follow-up message --
-   a fresh chat thread).
-4. In that new session, send `#shownotes` first -- the notes should still be there even though
-   this session has no prior history.
-5. Then ask: `What's my favorite driver's next race?` and confirm the agent still knows without
-   you repeating who it is.
-
-As a control, repeat the same steps against a plain `default_tool_calling_agent` experiment: in
-a new session it will have no memory of your favorite driver at all, since it only relies on
-session history.
-
 ## Automation Hook (Optional)
 
 There are no automations for this agent.
