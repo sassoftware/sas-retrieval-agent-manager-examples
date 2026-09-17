@@ -1,0 +1,677 @@
+
+
+<!DOCTYPE html>
+
+<html lang="en-US">
+<head>
+  <meta charset="UTF-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=Edge">
+
+  <link rel="stylesheet" href="/sas-retrieval-agent-manager-examples/assets/css/just-the-docs-default.css">
+
+  <link rel="stylesheet" href="/sas-retrieval-agent-manager-examples/assets/css/just-the-docs-head-nav.css" id="jtd-head-nav-stylesheet">
+
+  <style id="jtd-nav-activation">
+  
+    .site-nav ul li a {
+      background-image: none;
+    }
+
+  </style>
+
+  
+
+  
+    <script src="/sas-retrieval-agent-manager-examples/assets/js/vendor/lunr.min.js"></script>
+  
+
+  <script src="/sas-retrieval-agent-manager-examples/assets/js/just-the-docs.js"></script>
+
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+
+  
+
+
+
+  <!-- Begin Jekyll SEO tag v2.9.0 -->
+<title>S3 and air-gapped | SAS Retrieval Agent Manager Examples</title>
+<meta name="generator" content="Jekyll v4.4.1" />
+<meta property="og:title" content="S3 and air-gapped" />
+<meta property="og:locale" content="en_US" />
+<meta name="description" content="Open source examples for SAS Retrieval Agent Manager." />
+<meta name="twitter:description" property="og:description" content="Open source examples for SAS Retrieval Agent Manager." />
+<link rel="canonical" href="https://sassoftware.github.io/sas-retrieval-agent-manager-examples/helm-charts/model-serving/docs/examples/air-gapped-and-s3/" />
+<meta property="og:url" content="https://sassoftware.github.io/sas-retrieval-agent-manager-examples/helm-charts/model-serving/docs/examples/air-gapped-and-s3/" />
+<meta property="og:site_name" content="SAS Retrieval Agent Manager Examples" />
+<meta property="og:type" content="website" />
+<meta name="twitter:card" content="summary" />
+<meta name="twitter:title" content="S3 and air-gapped" />
+<script type="application/ld+json">
+{"@context":"https://schema.org","@type":"WebPage","description":"Open source examples for SAS Retrieval Agent Manager.","headline":"S3 and air-gapped","url":"https://sassoftware.github.io/sas-retrieval-agent-manager-examples/helm-charts/model-serving/docs/examples/air-gapped-and-s3/"}</script>
+<!-- End Jekyll SEO tag -->
+
+
+  <link rel="icon" href="/sas-retrieval-agent-manager-examples/assets/images/sas-favicon.ico" sizes="any"><link rel="stylesheet" href="/sas-retrieval-agent-manager-examples/assets/css/sas-documentation.css?v=1789471826">
+
+
+</head>
+
+<body>
+  <a class="skip-to-main" href="#main-content">Skip to main content</a>
+  <svg xmlns="http://www.w3.org/2000/svg" class="d-none">
+  <symbol id="svg-link" viewBox="0 0 24 24">
+  <title>Link</title>
+  <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-link">
+    <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path>
+  </svg>
+</symbol>
+
+  <symbol id="svg-menu" viewBox="0 0 24 24">
+  <title>Menu</title>
+  <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-menu">
+    <line x1="3" y1="12" x2="21" y2="12"></line><line x1="3" y1="6" x2="21" y2="6"></line><line x1="3" y1="18" x2="21" y2="18"></line>
+  </svg>
+</symbol>
+
+  <symbol id="svg-arrow-right" viewBox="0 0 24 24">
+  <title>Expand</title>
+  <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-chevron-right">
+    <polyline points="9 18 15 12 9 6"></polyline>
+  </svg>
+</symbol>
+
+  <!-- Feather. MIT License: https://github.com/feathericons/feather/blob/master/LICENSE -->
+<symbol id="svg-external-link" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-external-link">
+  <title id="svg-external-link-title">(external link)</title>
+  <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line>
+</symbol>
+
+  
+    <symbol id="svg-doc" viewBox="0 0 24 24">
+  <title>Document</title>
+  <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-file">
+    <path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"></path><polyline points="13 2 13 9 20 9"></polyline>
+  </svg>
+</symbol>
+
+    <symbol id="svg-search" viewBox="0 0 24 24">
+  <title>Search</title>
+  <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-search">
+    <circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+  </svg>
+</symbol>
+
+  
+  
+    <!-- Bootstrap Icons. MIT License: https://github.com/twbs/icons/blob/main/LICENSE.md -->
+<symbol id="svg-copy" viewBox="0 0 16 16">
+  <title>Copy</title>
+  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-clipboard" viewBox="0 0 16 16">
+    <path d="M4 1.5H3a2 2 0 0 0-2 2V14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V3.5a2 2 0 0 0-2-2h-1v1h1a1 1 0 0 1 1 1V14a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V3.5a1 1 0 0 1 1-1h1v-1z"/>
+    <path d="M9.5 1a.5.5 0 0 1 .5.5v1a.5.5 0 0 1-.5.5h-3a.5.5 0 0 1-.5-.5v-1a.5.5 0 0 1 .5-.5h3zm-3-1A1.5 1.5 0 0 0 5 1.5v1A1.5 1.5 0 0 0 6.5 4h3A1.5 1.5 0 0 0 11 2.5v-1A1.5 1.5 0 0 0 9.5 0h-3z"/>
+  </svg>
+</symbol>
+<symbol id="svg-copied" viewBox="0 0 16 16">
+  <title>Copied</title>
+  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-clipboard-check-fill" viewBox="0 0 16 16">
+    <path d="M6.5 0A1.5 1.5 0 0 0 5 1.5v1A1.5 1.5 0 0 0 6.5 4h3A1.5 1.5 0 0 0 11 2.5v-1A1.5 1.5 0 0 0 9.5 0h-3Zm3 1a.5.5 0 0 1 .5.5v1a.5.5 0 0 1-.5.5h-3a.5.5 0 0 1-.5-.5v-1a.5.5 0 0 1 .5-.5h3Z"/>
+    <path d="M4 1.5H3a2 2 0 0 0-2 2V14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V3.5a2 2 0 0 0-2-2h-1v1A2.5 2.5 0 0 1 9.5 5h-3A2.5 2.5 0 0 1 4 2.5v-1Zm6.854 7.354-3 3a.5.5 0 0 1-.708 0l-1.5-1.5a.5.5 0 0 1 .708-.708L7.5 10.793l2.646-2.647a.5.5 0 0 1 .708.708Z"/>
+  </svg>
+</symbol>
+
+  
+</svg>
+
+  
+    <div class="side-bar">
+  <div class="site-header" role="banner">
+    <a href="/sas-retrieval-agent-manager-examples/" class="site-title lh-tight">
+  SAS Retrieval Agent Manager Examples
+
+</a>
+    <button id="menu-button" class="site-button btn-reset" aria-label="Menu" aria-expanded="false">
+      <svg viewBox="0 0 24 24" class="icon" aria-hidden="true"><use xlink:href="#svg-menu"></use></svg>
+    </button>
+  </div>
+
+  <nav aria-label="Main" id="site-nav" class="site-nav">
+  
+  
+    <ul class="nav-list"><li class="nav-list-item"><a href="/sas-retrieval-agent-manager-examples/chat-webapp/" class="nav-list-link">Chat web app</a></li><li class="nav-list-item"><button class="nav-list-expander btn-reset" aria-label="Agent orchestrators submenu" aria-expanded="false">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><use xlink:href="#svg-arrow-right"></use></svg>
+      </button><a href="/sas-retrieval-agent-manager-examples/examples/agent_orchestrators/" class="nav-list-link">Agent orchestrators</a><ul class="nav-list"><li class="nav-list-item"><a href="/sas-retrieval-agent-manager-examples/examples/agent_orchestrators/news_orchestrator/" class="nav-list-link">News Orchestrator</a></li><li class="nav-list-item"><a href="/sas-retrieval-agent-manager-examples/examples/agent_orchestrators/simple_orchestrator/" class="nav-list-link">Simple Orchestrator</a></li></ul></li><li class="nav-list-item"><button class="nav-list-expander btn-reset" aria-label="Agents submenu" aria-expanded="false">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><use xlink:href="#svg-arrow-right"></use></svg>
+      </button><a href="/sas-retrieval-agent-manager-examples/examples/agents/" class="nav-list-link">Agents</a><ul class="nav-list"><li class="nav-list-item"><a href="/sas-retrieval-agent-manager-examples/examples/agents/banking_agent/" class="nav-list-link">Banking Agent (ESG Analysis)</a></li><li class="nav-list-item"><a href="/sas-retrieval-agent-manager-examples/examples/agents/business_news_agent/" class="nav-list-link">Business News Agent</a></li><li class="nav-list-item"><a href="/sas-retrieval-agent-manager-examples/examples/agents/default_tool_calling_agent/" class="nav-list-link">Default Tool Calling Agent</a></li><li class="nav-list-item"><a href="/sas-retrieval-agent-manager-examples/examples/agents/doc_metadata_augmentation_agent/" class="nav-list-link">Document Metadata Augmentation Agent</a></li><li class="nav-list-item"><a href="/sas-retrieval-agent-manager-examples/examples/agents/financial_agent/" class="nav-list-link">Financial Agent (MCP + RAM)</a></li><li class="nav-list-item"><a href="/sas-retrieval-agent-manager-examples/examples/agents/health_news_agent/" class="nav-list-link">Health News Agent</a></li><li class="nav-list-item"><a href="/sas-retrieval-agent-manager-examples/examples/agents/image_render_agent/" class="nav-list-link">Image Render Agent</a></li><li class="nav-list-item"><a href="/sas-retrieval-agent-manager-examples/examples/agents/multiple_llms_agent/" class="nav-list-link">Multiple LLMs Agent</a></li><li class="nav-list-item"><a href="/sas-retrieval-agent-manager-examples/examples/agents/news_information_finder/" class="nav-list-link">News Information Finder</a></li><li class="nav-list-item"><a href="/sas-retrieval-agent-manager-examples/examples/agents/science_tech_news_agent/" class="nav-list-link">Science and Technology News Agent</a></li><li class="nav-list-item"><a href="/sas-retrieval-agent-manager-examples/examples/agents/timeout_agent/" class="nav-list-link">Tool Timeout Configuration Agent</a></li></ul></li><li class="nav-list-item"><button class="nav-list-expander btn-reset" aria-label="Catalog MCP servers submenu" aria-expanded="false">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><use xlink:href="#svg-arrow-right"></use></svg>
+      </button><a href="/sas-retrieval-agent-manager-examples/examples/catalog_mcp_servers/" class="nav-list-link">Catalog MCP servers</a><ul class="nav-list"><li class="nav-list-item"><a href="/sas-retrieval-agent-manager-examples/examples/catalog_mcp_servers/openapi_mcp_server/" class="nav-list-link">OpenAPI MCP Server</a></li><li class="nav-list-item"><a href="/sas-retrieval-agent-manager-examples/examples/catalog_mcp_servers/remote_mcp_server/" class="nav-list-link">Remote MCP Server</a></li></ul></li><li class="nav-list-item"><button class="nav-list-expander btn-reset" aria-label="Code MCP servers submenu" aria-expanded="false">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><use xlink:href="#svg-arrow-right"></use></svg>
+      </button><a href="/sas-retrieval-agent-manager-examples/examples/code_mcp_servers/" class="nav-list-link">Code MCP servers</a><ul class="nav-list"><li class="nav-list-item"><a href="/sas-retrieval-agent-manager-examples/examples/code_mcp_servers/finance_tools/" class="nav-list-link">Finance Tools Code MCP Server</a></li><li class="nav-list-item"><a href="/sas-retrieval-agent-manager-examples/examples/code_mcp_servers/news_search_tools/" class="nav-list-link">News Search Tools Code MCP Server</a></li><li class="nav-list-item"><a href="/sas-retrieval-agent-manager-examples/examples/code_mcp_servers/simple_calculator/" class="nav-list-link">Simple Calculator Code MCP Server</a></li><li class="nav-list-item"><a href="/sas-retrieval-agent-manager-examples/examples/code_mcp_servers/web_search/" class="nav-list-link">Web Search Code MCP Server</a></li></ul></li><li class="nav-list-item"><button class="nav-list-expander btn-reset" aria-label="Container MCP servers submenu" aria-expanded="false">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><use xlink:href="#svg-arrow-right"></use></svg>
+      </button><a href="/sas-retrieval-agent-manager-examples/examples/container_mcp_servers/" class="nav-list-link">Container MCP servers</a><ul class="nav-list"><li class="nav-list-item"><a href="/sas-retrieval-agent-manager-examples/examples/container_mcp_servers/chart_generator/" class="nav-list-link">README</a></li><li class="nav-list-item"><a href="/sas-retrieval-agent-manager-examples/examples/container_mcp_servers/postgres_db_connection_template/" class="nav-list-link">README</a></li><li class="nav-list-item"><a href="/sas-retrieval-agent-manager-examples/examples/container_mcp_servers/sas_mcp_server/" class="nav-list-link">README</a></li><li class="nav-list-item"><a href="/sas-retrieval-agent-manager-examples/examples/container_mcp_servers/wikipedia/" class="nav-list-link">README</a></li></ul></li><li class="nav-list-item"><button class="nav-list-expander btn-reset" aria-label="Custom sources submenu" aria-expanded="false">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><use xlink:href="#svg-arrow-right"></use></svg>
+      </button><a href="/sas-retrieval-agent-manager-examples/examples/custom_sources/" class="nav-list-link">Custom sources</a><ul class="nav-list"><li class="nav-list-item"><a href="/sas-retrieval-agent-manager-examples/examples/custom_sources/financial_news_fetcher/" class="nav-list-link">Financial News Fetcher Custom Source</a></li><li class="nav-list-item"><a href="/sas-retrieval-agent-manager-examples/examples/custom_sources/news_source/" class="nav-list-link">News Custom Source</a></li><li class="nav-list-item"><a href="/sas-retrieval-agent-manager-examples/examples/custom_sources/nyt_front_page_source/" class="nav-list-link">NYT Front Page Custom Source</a></li><li class="nav-list-item"><a href="/sas-retrieval-agent-manager-examples/examples/custom_sources/structured_output/" class="nav-list-link">Structured Output Custom Source</a></li></ul></li><li class="nav-list-item"><button class="nav-list-expander btn-reset" aria-label="Helm charts submenu" aria-expanded="false">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><use xlink:href="#svg-arrow-right"></use></svg>
+      </button><a href="/sas-retrieval-agent-manager-examples/helm-charts/" class="nav-list-link">Helm charts</a><ul class="nav-list"><li class="nav-list-item"><a href="/sas-retrieval-agent-manager-examples/helm-charts/model-serving/" class="nav-list-link">Model Serving Helm Chart</a></li></ul></li><li class="nav-list-item"><button class="nav-list-expander btn-reset" aria-label="Reference submenu" aria-expanded="false">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><use xlink:href="#svg-arrow-right"></use></svg>
+      </button><a href="/sas-retrieval-agent-manager-examples/reference/" class="nav-list-link">Reference</a><ul class="nav-list"><li class="nav-list-item"><a href="/sas-retrieval-agent-manager-examples/chat-webapp/THIRDPARTY/" class="nav-list-link">THIRDPARTY</a></li></ul></li><li class="nav-list-item"><a href="/sas-retrieval-agent-manager-examples/CONTRIBUTING/" class="nav-list-link">Contributing</a></li><li class="nav-list-item"><a href="/sas-retrieval-agent-manager-examples/SUPPORT/" class="nav-list-link">SUPPORT</a></li><li class="nav-list-item"><a href="/sas-retrieval-agent-manager-examples/INSTRUCTIONS/" class="nav-list-link">Using the SAS Open Source Project Starter Kit</a></li><li class="nav-list-item"><a href="/sas-retrieval-agent-manager-examples/" class="nav-list-link">sas-retrieval-agent-manager-examples</a></li><li class="nav-list-item"><a href="/sas-retrieval-agent-manager-examples/SECURITY/" class="nav-list-link">sas-retrieval-agent-manager-examples Security Policy</a></li></ul>
+  
+</nav>
+
+
+
+
+  
+  
+    <div class="site-disclaimer">
+  <strong>Open source project</strong>
+  <p>Provided under Apache 2.0 on an <em>AS IS</em> basis. SAS provides no warranty, responsibility, or support except where applicable law requires otherwise.</p>
+  <p><a href="/sas-retrieval-agent-manager-examples/LICENSE">License</a> · <a href="/sas-retrieval-agent-manager-examples/SUPPORT/">Support policy</a></p>
+</div>
+
+  
+</div>
+
+  
+  <div class="main" id="top">
+    <div id="main-header" class="main-header">
+  
+    
+
+<div class="search" role="search">
+  <div class="search-input-wrap">
+    <input type="text" id="search-input" class="search-input" tabindex="0" placeholder="Search SAS Retrieval Agent Manager Examples" autocomplete="off">
+    <label for="search-input" class="search-label">
+      <span class="sr-only">Search SAS Retrieval Agent Manager Examples</span>
+      <svg viewBox="0 0 24 24" class="search-icon" aria-hidden="true"><use xlink:href="#svg-search"></use></svg>
+    </label>
+  </div>
+  <div id="search-results" class="search-results"></div>
+</div>
+
+  
+  
+  
+    <nav aria-label="Auxiliary" class="aux-nav">
+  <ul class="aux-nav-list">
+    
+      <li class="aux-nav-list-item">
+        <a href="https://github.com/sassoftware/sas-retrieval-agent-manager-examples" class="site-button"
+          
+        >
+          View on GitHub
+        </a>
+      </li>
+    
+  </ul>
+</nav>
+
+  
+</div>
+
+    <div class="main-content-wrap">
+      <nav aria-label="Breadcrumb" class="breadcrumb-nav">
+  <ol class="breadcrumb-nav-list">
+    <li class="breadcrumb-nav-list-item"><span>S3 and air-gapped</span></li>
+  </ol>
+</nav>
+
+
+      <div id="main-content" class="main-content">
+        <main>
+          
+            <h1 id="s3-and-air-gapped">
+  
+  
+    <a href="#s3-and-air-gapped" class="anchor-heading" aria-labelledby="s3-and-air-gapped"><svg viewBox="0 0 16 16" aria-hidden="true"><use xlink:href="#svg-link"></use></svg></a> S3 and air-gapped
+  
+  
+</h1>
+    
+
+<p>Serving models from object storage, and running in clusters without internet access.</p>
+<h2 id="s3-credentials">
+  
+  
+    <a href="#s3-credentials" class="anchor-heading" aria-labelledby="s3-credentials"><svg viewBox="0 0 16 16" aria-hidden="true"><use xlink:href="#svg-link"></use></svg></a> S3 credentials
+  
+  
+</h2>
+    
+
+<div class="language-yaml highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="na">apiVersion</span><span class="pi">:</span> <span class="s">v1</span>
+<span class="na">kind</span><span class="pi">:</span> <span class="s">Secret</span>
+<span class="na">metadata</span><span class="pi">:</span>
+  <span class="na">name</span><span class="pi">:</span> <span class="s">s3-credentials</span>
+  <span class="na">namespace</span><span class="pi">:</span> <span class="s">models</span>
+  <span class="na">annotations</span><span class="pi">:</span>
+    <span class="na">serving.kserve.io/s3-endpoint</span><span class="pi">:</span> <span class="s">s3.amazonaws.com</span>
+    <span class="na">serving.kserve.io/s3-usehttps</span><span class="pi">:</span> <span class="s2">"</span><span class="s">1"</span>
+    <span class="na">serving.kserve.io/s3-region</span><span class="pi">:</span> <span class="s">eu-west-1</span>
+<span class="na">type</span><span class="pi">:</span> <span class="s">Opaque</span>
+<span class="na">stringData</span><span class="pi">:</span>
+  <span class="na">AWS_ACCESS_KEY_ID</span><span class="pi">:</span> <span class="s2">"</span><span class="s">replace-me"</span>
+  <span class="na">AWS_SECRET_ACCESS_KEY</span><span class="pi">:</span> <span class="s2">"</span><span class="s">replace-me"</span>
+<span class="nn">---</span>
+<span class="na">apiVersion</span><span class="pi">:</span> <span class="s">v1</span>
+<span class="na">kind</span><span class="pi">:</span> <span class="s">ServiceAccount</span>
+<span class="na">metadata</span><span class="pi">:</span>
+  <span class="na">name</span><span class="pi">:</span> <span class="s">s3-sa</span>
+  <span class="na">namespace</span><span class="pi">:</span> <span class="s">models</span>
+<span class="na">secrets</span><span class="pi">:</span>
+  <span class="pi">-</span> <span class="na">name</span><span class="pi">:</span> <span class="s">s3-credentials</span>
+</code></pre></div></div>
+
+<div class="language-yaml highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="na">namespace</span><span class="pi">:</span> <span class="s">models</span>
+
+<span class="na">hfSecret</span><span class="pi">:</span>
+  <span class="na">enabled</span><span class="pi">:</span> <span class="kc">false</span>
+
+<span class="na">serviceAccount</span><span class="pi">:</span>
+  <span class="na">enabled</span><span class="pi">:</span> <span class="kc">false</span>
+
+<span class="na">modelDefaults</span><span class="pi">:</span>
+  <span class="na">runtime</span><span class="pi">:</span> <span class="s">kserve-sklearnserver</span>
+  <span class="na">modelFormat</span><span class="pi">:</span> <span class="s">sklearn</span>
+  <span class="na">resources</span><span class="pi">:</span>
+    <span class="na">requests</span><span class="pi">:</span>
+      <span class="na">cpu</span><span class="pi">:</span> <span class="s2">"</span><span class="s">1"</span>
+      <span class="na">memory</span><span class="pi">:</span> <span class="s">2Gi</span>
+    <span class="na">limits</span><span class="pi">:</span>
+      <span class="na">cpu</span><span class="pi">:</span> <span class="s2">"</span><span class="s">2"</span>
+      <span class="na">memory</span><span class="pi">:</span> <span class="s">4Gi</span>
+
+<span class="na">models</span><span class="pi">:</span>
+  <span class="pi">-</span> <span class="na">name</span><span class="pi">:</span> <span class="s">fraud-detector</span>
+    <span class="na">storageUri</span><span class="pi">:</span> <span class="s">s3://models/fraud/v3</span>
+    <span class="na">serviceAccountName</span><span class="pi">:</span> <span class="s">s3-sa</span>
+
+  <span class="pi">-</span> <span class="na">name</span><span class="pi">:</span> <span class="s">demand-forecast</span>
+    <span class="na">runtime</span><span class="pi">:</span> <span class="s">kserve-xgbserver</span>
+    <span class="na">modelFormat</span><span class="pi">:</span> <span class="s">xgboost</span>
+    <span class="na">storageUri</span><span class="pi">:</span> <span class="s">s3://models/demand/v7</span>
+    <span class="na">serviceAccountName</span><span class="pi">:</span> <span class="s">s3-sa</span>
+</code></pre></div></div>
+<h2 id="minio-and-s3-compatible-storage">
+  
+  
+    <a href="#minio-and-s3-compatible-storage" class="anchor-heading" aria-labelledby="minio-and-s3-compatible-storage"><svg viewBox="0 0 16 16" aria-hidden="true"><use xlink:href="#svg-link"></use></svg></a> MinIO and S3-compatible storage
+  
+  
+</h2>
+    
+
+<div class="language-yaml highlighter-rouge"><div class="highlight"><pre class="highlight"><code>  <span class="na">annotations</span><span class="pi">:</span>
+    <span class="na">serving.kserve.io/s3-endpoint</span><span class="pi">:</span> <span class="s">minio.storage.svc.cluster.local:9000</span>
+    <span class="na">serving.kserve.io/s3-usehttps</span><span class="pi">:</span> <span class="s2">"</span><span class="s">0"</span>
+    <span class="na">serving.kserve.io/s3-region</span><span class="pi">:</span> <span class="s">us-east-1</span>
+</code></pre></div></div>
+
+<p>Cluster-wide defaults:</p>
+
+<div class="language-yaml highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="na">kserve-resources</span><span class="pi">:</span>
+  <span class="na">kserve</span><span class="pi">:</span>
+    <span class="na">storage</span><span class="pi">:</span>
+      <span class="na">s3</span><span class="pi">:</span>
+        <span class="na">endpoint</span><span class="pi">:</span> <span class="s">minio.storage.svc.cluster.local:9000</span>
+        <span class="na">useHttps</span><span class="pi">:</span> <span class="s2">"</span><span class="s">0"</span>
+        <span class="na">region</span><span class="pi">:</span> <span class="s">us-east-1</span>
+</code></pre></div></div>
+<h2 id="cloud-identity-instead-of-keys">
+  
+  
+    <a href="#cloud-identity-instead-of-keys" class="anchor-heading" aria-labelledby="cloud-identity-instead-of-keys"><svg viewBox="0 0 16 16" aria-hidden="true"><use xlink:href="#svg-link"></use></svg></a> Cloud identity instead of keys
+  
+  
+</h2>
+    
+
+<p>Avoid static credentials where possible:</p>
+
+<div class="language-yaml highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="na">apiVersion</span><span class="pi">:</span> <span class="s">v1</span>
+<span class="na">kind</span><span class="pi">:</span> <span class="s">ServiceAccount</span>
+<span class="na">metadata</span><span class="pi">:</span>
+  <span class="na">name</span><span class="pi">:</span> <span class="s">s3-sa</span>
+  <span class="na">namespace</span><span class="pi">:</span> <span class="s">models</span>
+  <span class="na">annotations</span><span class="pi">:</span>
+    <span class="na">eks.amazonaws.com/role-arn</span><span class="pi">:</span> <span class="s">arn:aws:iam::123456789012:role/model-reader</span>
+</code></pre></div></div>
+
+<p>No Secret is needed; the pod assumes the role.</p>
+<h2 id="mirroring-a-hugging-face-model-to-s3">
+  
+  
+    <a href="#mirroring-a-hugging-face-model-to-s3" class="anchor-heading" aria-labelledby="mirroring-a-hugging-face-model-to-s3"><svg viewBox="0 0 16 16" aria-hidden="true"><use xlink:href="#svg-link"></use></svg></a> Mirroring a Hugging Face model to S3
+  
+  
+</h2>
+    
+
+<p>Run once from a machine with internet access:</p>
+
+<div class="language-sh highlighter-rouge"><div class="highlight"><pre class="highlight"><code>pip <span class="nb">install </span>huggingface_hub
+<span class="nb">export </span><span class="nv">HF_TOKEN</span><span class="o">=</span><span class="s2">"hf_replace_me"</span>
+
+python - <span class="o">&lt;&lt;</span><span class="sh">'</span><span class="no">PY</span><span class="sh">'
+from huggingface_hub import snapshot_download
+snapshot_download(
+    "meta-llama/Llama-3.1-8B-Instruct",
+    local_dir="./llama-3.1-8b",
+    local_dir_use_symlinks=False,
+)
+</span><span class="no">PY
+
+</span>aws s3 <span class="nb">sync</span> ./llama-3.1-8b s3://models/llm/llama-3.1-8b
+</code></pre></div></div>
+
+<p>Then serve it without any Hugging Face access:</p>
+
+<div class="language-yaml highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="na">llmInferenceServices</span><span class="pi">:</span>
+  <span class="pi">-</span> <span class="na">name</span><span class="pi">:</span> <span class="s">llama-8b</span>
+    <span class="na">model</span><span class="pi">:</span>
+      <span class="na">uri</span><span class="pi">:</span> <span class="s">s3://models/llm/llama-3.1-8b</span>
+    <span class="na">resources</span><span class="pi">:</span>
+      <span class="na">limits</span><span class="pi">:</span>
+        <span class="na">cpu</span><span class="pi">:</span> <span class="s2">"</span><span class="s">8"</span>
+        <span class="na">memory</span><span class="pi">:</span> <span class="s">32Gi</span>
+        <span class="na">nvidia.com/gpu</span><span class="pi">:</span> <span class="s2">"</span><span class="s">1"</span>
+</code></pre></div></div>
+
+<p>Check the model license before copying weights into internal storage.</p>
+<h2 id="fully-air-gapped-clusters">
+  
+  
+    <a href="#fully-air-gapped-clusters" class="anchor-heading" aria-labelledby="fully-air-gapped-clusters"><svg viewBox="0 0 16 16" aria-hidden="true"><use xlink:href="#svg-link"></use></svg></a> Fully air-gapped clusters
+  
+  
+</h2>
+    
+
+<p>Four things must come from inside the network:</p>
+
+<div class="table-wrapper"><table>
+  <thead>
+    <tr>
+      <th>Item</th>
+      <th>Approach</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>Chart</td>
+      <td>Push to an internal OCI registry</td>
+    </tr>
+    <tr>
+      <td>Dependencies</td>
+      <td>Mirror the seven KServe charts</td>
+    </tr>
+    <tr>
+      <td>Container images</td>
+      <td>Mirror controller and runtime images</td>
+    </tr>
+    <tr>
+      <td>Model weights</td>
+      <td>Copy into S3 or a PVC</td>
+    </tr>
+  </tbody>
+</table></div>
+<h3 id="mirror-the-chart-and-dependencies">
+  
+  
+    <a href="#mirror-the-chart-and-dependencies" class="anchor-heading" aria-labelledby="mirror-the-chart-and-dependencies"><svg viewBox="0 0 16 16" aria-hidden="true"><use xlink:href="#svg-link"></use></svg></a> Mirror the chart and dependencies
+  
+  
+</h3>
+    
+
+<div class="language-sh highlighter-rouge"><div class="highlight"><pre class="highlight"><code>helm dependency build helm-charts/model-serving
+helm package helm-charts/model-serving
+
+helm registry login registry.internal.example.com
+helm push model-serving-0.1.0.tgz oci://registry.internal.example.com/charts
+</code></pre></div></div>
+
+<p>The packaged archive embeds the dependency charts, so the internal cluster needs no access to <code class="language-plaintext highlighter-rouge">ghcr.io</code>.</p>
+<h3 id="mirror-the-images">
+  
+  
+    <a href="#mirror-the-images" class="anchor-heading" aria-labelledby="mirror-the-images"><svg viewBox="0 0 16 16" aria-hidden="true"><use xlink:href="#svg-link"></use></svg></a> Mirror the images
+  
+  
+</h3>
+    
+
+<div class="language-sh highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="k">for </span>image <span class="k">in</span> <span class="se">\</span>
+  kserve/kserve-controller:v0.20.0 <span class="se">\</span>
+  kserve/storage-initializer:v0.20.0 <span class="se">\</span>
+  kserve/llmisvc-controller:v0.20.0 <span class="se">\</span>
+  kserve/sklearnserver:v0.20.0 <span class="se">\</span>
+  kserve/huggingfaceserver:v0.20.0 <span class="se">\</span>
+  vllm/vllm-openai:v0.11.0 <span class="se">\</span>
+  openvino/model_server:2026.3
+<span class="k">do
+  </span>skopeo copy <span class="s2">"docker://docker.io/</span><span class="nv">$image</span><span class="s2">"</span> <span class="se">\</span>
+    <span class="s2">"docker://registry.internal.example.com/mirror/</span><span class="nv">$image</span><span class="s2">"</span>
+<span class="k">done</span>
+</code></pre></div></div>
+
+<p>List exactly which images your configuration needs:</p>
+
+<div class="language-sh highlighter-rouge"><div class="highlight"><pre class="highlight"><code>helm template model-serving helm-charts/model-serving <span class="nt">-f</span> values.yaml <span class="se">\</span>
+  | <span class="nb">grep</span> <span class="nt">-oE</span> <span class="s1">'image: .*'</span> | <span class="nb">sort</span> <span class="nt">-u</span>
+</code></pre></div></div>
+<h3 id="point-the-chart-at-the-mirror">
+  
+  
+    <a href="#point-the-chart-at-the-mirror" class="anchor-heading" aria-labelledby="point-the-chart-at-the-mirror"><svg viewBox="0 0 16 16" aria-hidden="true"><use xlink:href="#svg-link"></use></svg></a> Point the chart at the mirror
+  
+  
+</h3>
+    
+
+<div class="language-yaml highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="na">namespace</span><span class="pi">:</span> <span class="s">models</span>
+
+<span class="na">hfSecret</span><span class="pi">:</span>
+  <span class="na">enabled</span><span class="pi">:</span> <span class="kc">false</span>
+
+<span class="na">kserve-resources</span><span class="pi">:</span>
+  <span class="na">kserve</span><span class="pi">:</span>
+    <span class="na">controller</span><span class="pi">:</span>
+      <span class="na">image</span><span class="pi">:</span> <span class="s">registry.internal.example.com/mirror/kserve/kserve-controller</span>
+      <span class="na">tag</span><span class="pi">:</span> <span class="s">v0.20.0</span>
+      <span class="na">imagePullSecrets</span><span class="pi">:</span>
+        <span class="pi">-</span> <span class="na">name</span><span class="pi">:</span> <span class="s">registry-credentials</span>
+    <span class="na">storage</span><span class="pi">:</span>
+      <span class="na">image</span><span class="pi">:</span> <span class="s">registry.internal.example.com/mirror/kserve/storage-initializer</span>
+      <span class="na">tag</span><span class="pi">:</span> <span class="s">v0.20.0</span>
+
+<span class="na">kserve-llmisvc-resources</span><span class="pi">:</span>
+  <span class="na">kserve</span><span class="pi">:</span>
+    <span class="na">createSharedResources</span><span class="pi">:</span> <span class="kc">false</span>
+    <span class="na">llmisvc</span><span class="pi">:</span>
+      <span class="na">controller</span><span class="pi">:</span>
+        <span class="na">image</span><span class="pi">:</span> <span class="s">registry.internal.example.com/mirror/kserve/llmisvc-controller</span>
+        <span class="na">tag</span><span class="pi">:</span> <span class="s">v0.20.0</span>
+
+<span class="na">kserve-runtime-configs</span><span class="pi">:</span>
+  <span class="na">kserve</span><span class="pi">:</span>
+    <span class="na">servingruntime</span><span class="pi">:</span>
+      <span class="na">enabled</span><span class="pi">:</span> <span class="kc">true</span>
+      <span class="na">sklearnserver</span><span class="pi">:</span>
+        <span class="na">image</span><span class="pi">:</span> <span class="s">registry.internal.example.com/mirror/kserve/sklearnserver</span>
+        <span class="na">tag</span><span class="pi">:</span> <span class="s">v0.20.0</span>
+      <span class="na">huggingfaceserver</span><span class="pi">:</span>
+        <span class="na">image</span><span class="pi">:</span> <span class="s">registry.internal.example.com/mirror/kserve/huggingfaceserver</span>
+        <span class="na">tag</span><span class="pi">:</span> <span class="s">v0.20.0</span>
+      <span class="na">vllmserver</span><span class="pi">:</span>
+        <span class="na">image</span><span class="pi">:</span> <span class="s">registry.internal.example.com/mirror/vllm/vllm-openai</span>
+        <span class="na">tag</span><span class="pi">:</span> <span class="s">v0.11.0</span>
+
+<span class="na">clusterServingRuntimes</span><span class="pi">:</span>
+  <span class="na">openVINO</span><span class="pi">:</span>
+    <span class="na">image</span><span class="pi">:</span> <span class="s">registry.internal.example.com/mirror/openvino/model_server:2026.3</span>
+  <span class="na">vllmCPU</span><span class="pi">:</span>
+    <span class="na">enabled</span><span class="pi">:</span> <span class="kc">false</span>
+
+<span class="na">llmDefaults</span><span class="pi">:</span>
+  <span class="na">image</span><span class="pi">:</span> <span class="s">registry.internal.example.com/mirror/vllm/vllm-openai:v0.11.0</span>
+
+<span class="na">models</span><span class="pi">:</span>
+  <span class="pi">-</span> <span class="na">name</span><span class="pi">:</span> <span class="s">fraud-detector</span>
+    <span class="na">runtime</span><span class="pi">:</span> <span class="s">kserve-sklearnserver</span>
+    <span class="na">modelFormat</span><span class="pi">:</span> <span class="s">sklearn</span>
+    <span class="na">storageUri</span><span class="pi">:</span> <span class="s">s3://models/fraud/v3</span>
+    <span class="na">serviceAccountName</span><span class="pi">:</span> <span class="s">s3-sa</span>
+</code></pre></div></div>
+
+<p>Install from the internal registry:</p>
+
+<div class="language-sh highlighter-rouge"><div class="highlight"><pre class="highlight"><code>helm upgrade <span class="nt">--install</span> model-serving <span class="se">\</span>
+  oci://registry.internal.example.com/charts/model-serving <span class="se">\</span>
+  <span class="nt">--version</span> 0.1.0 <span class="se">\</span>
+  <span class="nt">--namespace</span> kserve <span class="nt">--create-namespace</span> <span class="se">\</span>
+  <span class="nt">-f</span> airgap-values.yaml
+</code></pre></div></div>
+<h3 id="block-accidental-egress">
+  
+  
+    <a href="#block-accidental-egress" class="anchor-heading" aria-labelledby="block-accidental-egress"><svg viewBox="0 0 16 16" aria-hidden="true"><use xlink:href="#svg-link"></use></svg></a> Block accidental egress
+  
+  
+</h3>
+    
+
+<div class="language-yaml highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="na">models</span><span class="pi">:</span>
+  <span class="pi">-</span> <span class="na">name</span><span class="pi">:</span> <span class="s">offline-model</span>
+    <span class="na">runtime</span><span class="pi">:</span> <span class="s">kserve-huggingfaceserver</span>
+    <span class="na">modelFormat</span><span class="pi">:</span> <span class="s">huggingface</span>
+    <span class="na">storageUri</span><span class="pi">:</span> <span class="s">s3://models/transformers/classifier</span>
+    <span class="na">serviceAccountName</span><span class="pi">:</span> <span class="s">s3-sa</span>
+    <span class="na">env</span><span class="pi">:</span>
+      <span class="pi">-</span> <span class="na">name</span><span class="pi">:</span> <span class="s">TRANSFORMERS_OFFLINE</span>
+        <span class="na">value</span><span class="pi">:</span> <span class="s2">"</span><span class="s">1"</span>
+      <span class="pi">-</span> <span class="na">name</span><span class="pi">:</span> <span class="s">HF_HUB_OFFLINE</span>
+        <span class="na">value</span><span class="pi">:</span> <span class="s2">"</span><span class="s">1"</span>
+</code></pre></div></div>
+<h2 id="pvc-instead-of-object-storage">
+  
+  
+    <a href="#pvc-instead-of-object-storage" class="anchor-heading" aria-labelledby="pvc-instead-of-object-storage"><svg viewBox="0 0 16 16" aria-hidden="true"><use xlink:href="#svg-link"></use></svg></a> PVC instead of object storage
+  
+  
+</h2>
+    
+
+<p>See <a href="/sas-retrieval-agent-manager-examples/helm-charts/model-serving/docs/storage-uris/">Storage URIs</a> for populating a shared volume.</p>
+
+<div class="language-yaml highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="na">models</span><span class="pi">:</span>
+  <span class="pi">-</span> <span class="na">name</span><span class="pi">:</span> <span class="s">cached-llm</span>
+    <span class="na">runtime</span><span class="pi">:</span> <span class="s">kserve-vllmserver</span>
+    <span class="na">modelFormat</span><span class="pi">:</span> <span class="s">huggingface</span>
+    <span class="na">storageUri</span><span class="pi">:</span> <span class="s">pvc://model-store/llama-3.1-8b</span>
+</code></pre></div></div>
+<h2 id="verify">
+  
+  
+    <a href="#verify" class="anchor-heading" aria-labelledby="verify"><svg viewBox="0 0 16 16" aria-hidden="true"><use xlink:href="#svg-link"></use></svg></a> Verify
+  
+  
+</h2>
+    
+
+<div class="language-sh highlighter-rouge"><div class="highlight"><pre class="highlight"><code>kubectl logs <span class="nt">-n</span> models &lt;pod&gt; <span class="nt">-c</span> storage-initializer <span class="nt">--tail</span><span class="o">=</span>50
+kubectl get inferenceservice <span class="nt">-n</span> models
+</code></pre></div></div>
+
+<div class="table-wrapper"><table>
+  <thead>
+    <tr>
+      <th>Message</th>
+      <th>Cause</th>
+      <th>Fix</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><code class="language-plaintext highlighter-rouge">AccessDenied</code></td>
+      <td>Wrong credentials or policy</td>
+      <td>Check the Secret and bucket policy</td>
+    </tr>
+    <tr>
+      <td><code class="language-plaintext highlighter-rouge">NoSuchBucket</code></td>
+      <td>Wrong bucket or region</td>
+      <td>Verify the URI and region annotation</td>
+    </tr>
+    <tr>
+      <td><code class="language-plaintext highlighter-rouge">connection refused</code></td>
+      <td>Endpoint unreachable</td>
+      <td>Check the endpoint annotation and network policy</td>
+    </tr>
+    <tr>
+      <td><code class="language-plaintext highlighter-rouge">ImagePullBackOff</code></td>
+      <td>Image not mirrored</td>
+      <td>Mirror it and add the pull secret</td>
+    </tr>
+    <tr>
+      <td><code class="language-plaintext highlighter-rouge">x509: certificate signed by unknown authority</code></td>
+      <td>Internal CA not trusted</td>
+      <td>Set <code class="language-plaintext highlighter-rouge">caBundleConfigMapName</code></td>
+    </tr>
+  </tbody>
+</table></div>
+
+          
+
+          
+            
+          
+        </main>
+        
+
+  <hr>
+  <footer>
+    
+      <p><a href="#top" id="back-to-top">Back to top</a></p>
+    
+
+    <p class="text-small text-grey-dk-100 mb-0">Open source under the Apache License 2.0. Provided AS IS, without warranties, responsibility, or support from SAS except where applicable law requires otherwise.</p>
+
+    
+  </footer>
+
+
+      </div>
+    </div>
+    
+      
+
+<div class="search-overlay"></div>
+
+    
+  </div>
+
+  
+    
+
+
+
+
+
+<script type="module">
+  
+  import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@10.9.0/dist/mermaid.esm.min.mjs';
+  
+
+  var config = {}
+;
+  mermaid.initialize(config);
+  mermaid.run({
+    querySelector: '.language-mermaid',
+  });
+</script>
+
+
+
+  
+</body>
+</html>
+

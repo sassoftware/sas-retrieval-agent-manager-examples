@@ -1,0 +1,54 @@
+hfSecret:
+  enabled: true
+  managed: false
+
+kserve:
+  controller:
+    gateway:
+      ingressGateway:
+        className: contour
+
+clusterServingRuntimes:
+  vllmCPU:
+    image: public.ecr.aws/q9t5s3a7/vllm-cpu-release-repo:v0.26.0
+
+models:
+  - name: ovms-gemma-3-4b-it-fp16-ov
+    storageUri: hf://OpenVINO/gemma-3-4b-it-fp16-ov
+    args:
+      - --task=text_generation
+      - --target_device=CPU
+      - --log_level=DEBUG
+      - --cache_size=2
+  - name: vllm-gemma-3-4b-it
+    runtime: kserve-vllm-cpu
+    storageUri: hf://google/gemma-3-4b-it
+    args:
+      - --served-model-name
+      - gemma-3-4b-it
+  - name: ovms-gemma-4-e4b-it-fp16-ov
+    storageUri: hf://OpenVINO/gemma-4-E4B-it-fp16-ov
+    args:
+      - --task=text_generation
+      - --target_device=CPU
+      - --log_level=DEBUG
+      - --cache_size=2
+  - name: vllm-gemma-4-e4b-it
+    runtime: kserve-vllm-cpu
+    storageUri: hf://google/gemma-4-E4B-it
+    args:
+      - --served-model-name
+      - gemma-4-E4B-it
+  - name: ovms-gemma-4-e2b-it-fp16-ov
+    storageUri: hf://OpenVINO/gemma-4-E2B-it-fp16-ov
+    args:
+      - --task=text_generation
+      - --target_device=CPU
+      - --log_level=DEBUG
+      - --cache_size=2
+  - name: vllm-gemma-4-e2b-it
+    runtime: kserve-vllm-cpu
+    storageUri: hf://google/gemma-4-E2B-it
+    args:
+      - --served-model-name
+      - gemma-4-E2B-it

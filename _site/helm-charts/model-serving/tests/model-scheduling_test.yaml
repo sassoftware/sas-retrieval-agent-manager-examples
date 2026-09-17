@@ -1,0 +1,185 @@
+suite: model scheduling and scaling
+templates:
+  - templates/inferenceservices.yaml
+tests:
+  - it: omits scheduling and scaling when nothing is configured
+    set:
+      namespace: fixture-models
+      models:
+        - name: plain-model
+          storageUri: hf://org/model
+    asserts:
+      - hasDocuments:
+          count: 1
+      - notExists:
+          path: spec.predictor.nodeSelector
+      - notExists:
+          path: spec.predictor.tolerations
+      - notExists:
+          path: spec.predictor.minReplicas
+      - notExists:
+          path: spec.predictor.maxReplicas
+      - notExists:
+          path: spec.predictor.affinity
+
+  - it: renders per-model scheduling fields
+    set:
+      namespace: fixture-models
+      models:
+        - name: gpu-model
+          storageUri: hf://org/model
+          nodeSelector:
+            accelerator: nvidia-a100
+          tolerations:
+            - key: nvidia.com/gpu
+              operator: Exists
+              effect: NoSchedule
+          topologySpreadConstraints:
+            - maxSkew: 1
+              topologyKey: kubernetes.io/hostname
+              whenUnsatisfiable: ScheduleAnyway
+          priorityClassName: high-priority
+    asserts:
+      - equal:
+          path: spec.predictor.nodeSelector.accelerator
+          value: nvidia-a100
+      - equal:
+          path: spec.predictor.tolerations[0].key
+          value: nvidia.com/gpu
+      - equal:
+          path: spec.predictor.topologySpreadConstraints[0].topologyKey
+          value: kubernetes.io/hostname
+      - equal:
+          path: spec.predictor.priorityClassName
+          value: high-priority
+
+  - it: renders per-model scaling fields
+    set:
+      namespace: fixture-models
+      models:
+        - name: scaled-model
+          storageUri: hf://org/model
+          minReplicas: 2
+          maxReplicas: 6
+          scaleTarget: 80
+          scaleMetric: concurrency
+          containerConcurrency: 4
+          timeout: 300
+    asserts:
+      - equal:
+          path: spec.predictor.minReplicas
+          value: 2
+      - equal:
+          path: spec.predictor.maxReplicas
+          value: 6
+      - equal:
+          path: spec.predictor.scaleTarget
+          value: 80
+      - equal:
+          path: spec.predictor.scaleMetric
+          value: concurrency
+      - equal:
+          path: spec.predictor.containerConcurrency
+          value: 4
+      - equal:
+          path: spec.predictor.timeout
+          value: 300
+
+  - it: applies modelDefaults to every entry
+    set:
+      namespace: fixture-models
+      modelDefaults:
+        runtime: kserve-openvino
+        modelFormat: huggingface
+        nodeSelector:
+          pool: inference
+        minReplicas: 3
+      models:
+        - name: first
+          storageUri: hf://org/first
+        - name: second
+          storageUri: hf://org/second
+    asserts:
+      - hasDocuments:
+          count: 2
+      - equal:
+          path: spec.predictor.nodeSelector.pool
+          value: inference
+        documentIndex: 0
+      - equal:
+          path: spec.predictor.minReplicas
+          value: 3
+        documentIndex: 1
+
+  - it: lets a model override modelDefaults
+    set:
+      namespace: fixture-models
+      modelDefaults:
+        runtime: kserve-openvino
+        modelFormat: huggingface
+        nodeSelector:
+          pool: inference
+        minReplicas: 3
+      models:
+        - name: override
+          storageUri: hf://org/model
+          nodeSelector:
+            pool: gpu
+          minReplicas: 1
+    asserts:
+      - equal:
+          path: spec.predictor.nodeSelector.pool
+          value: gpu
+      - equal:
+          path: spec.predictor.minReplicas
+          value: 1
+
+  - it: honours zero minReplicas instead of falling back to the default
+    set:
+      namespace: fixture-models
+      modelDefaults:
+        runtime: kserve-openvino
+        modelFormat: huggingface
+        minReplicas: 3
+      models:
+        - name: scale-to-zero
+          storageUri: hf://org/model
+          minReplicas: 0
+    asserts:
+      - equal:
+          path: spec.predictor.minReplicas
+          value: 0
+
+  - it: renders volumes with matching mounts
+    set:
+      namespace: fixture-models
+      models:
+        - name: cache-model
+          storageUri: hf://org/model
+          volumes:
+            - name: cache
+              emptyDir:
+                sizeLimit: 8Gi
+          volumeMounts:
+            - name: cache
+              mountPath: /cache
+    asserts:
+      - equal:
+          path: spec.predictor.volumes[0].name
+          value: cache
+      - equal:
+          path: spec.predictor.model.volumeMounts[0].mountPath
+          value: /cache
+
+  - it: adds common annotations to generated models
+    set:
+      namespace: fixture-models
+      commonAnnotations:
+        owner: platform-team
+      models:
+        - name: annotated
+          storageUri: hf://org/model
+    asserts:
+      - equal:
+          path: metadata.annotations.owner
+          value: platform-team

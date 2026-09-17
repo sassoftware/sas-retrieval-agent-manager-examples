@@ -1,0 +1,73 @@
+{{- /*
+Predictor fields forwarded to the InferenceService. A per-model value overrides
+modelDefaults, and a key set in neither place is omitted so KServe keeps its own
+default. hasKey is used rather than `default` so that false and 0 are honoured
+instead of falling through to the default value.
+*/ -}}
+{{- $scalarKeys := list "minReplicas" "maxReplicas" "scaleTarget" "scaleMetric" "scaleMetricType" "containerConcurrency" "timeout" "canaryTrafficPercent" "priorityClassName" "schedulerName" "nodeName" -}}
+{{- $blockKeys := list "labels" "annotations" "nodeSelector" "tolerations" "affinity" "topologySpreadConstraints" "imagePullSecrets" "deploymentStrategy" "volumes" -}}
+{{- range $model := .Values.models }}
+{{- $defaults := $.Values.modelDefaults | default dict }}
+{{- $inject := true }}
+{{- if hasKey $model "injectHfToken" }}{{- $inject = $model.injectHfToken }}{{- end }}
+{{- $env := $model.env | default $defaults.env }}
+{{- $volumeMounts := $model.volumeMounts | default $defaults.volumeMounts }}
+---
+apiVersion: serving.kserve.io/v1beta1
+kind: InferenceService
+metadata:
+  name: {{ $model.name }}
+  namespace: {{ $model.namespace | default $.Values.namespace }}
+  labels:
+    {{- include "model-serving.labels" $ | nindent 4 }}
+  {{- with $.Values.commonAnnotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  predictor:
+    serviceAccountName: {{ $model.serviceAccountName | default $.Values.serviceAccount.name }}
+    {{- range $key := $scalarKeys }}
+    {{- if hasKey $model $key }}
+    {{ $key }}: {{ index $model $key }}
+    {{- else if hasKey $defaults $key }}
+    {{ $key }}: {{ index $defaults $key }}
+    {{- end }}
+    {{- end }}
+    {{- range $key := $blockKeys }}
+    {{- $value := "" }}
+    {{- if hasKey $model $key }}{{- $value = index $model $key }}{{- else if hasKey $defaults $key }}{{- $value = index $defaults $key }}{{- end }}
+    {{- with $value }}
+    {{ $key }}:
+      {{- toYaml . | nindent 6 }}
+    {{- end }}
+    {{- end }}
+    model:
+      runtime: {{ $model.runtime | default $defaults.runtime }}
+      modelFormat:
+        name: {{ $model.modelFormat | default $defaults.modelFormat }}
+      storageUri: {{ $model.storageUri }}
+      {{- with ($model.args | default $defaults.args) }}
+      args:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- if or (and $inject $.Values.hfSecret.enabled) $env }}
+      env:
+        {{- if and $inject $.Values.hfSecret.enabled }}
+        - name: HF_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: {{ $.Values.hfSecret.name }}
+              key: HF_TOKEN
+        {{- end }}
+        {{- with $env }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      {{- end }}
+      {{- with $volumeMounts }}
+      volumeMounts:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      resources:
+        {{- toYaml ($model.resources | default $defaults.resources) | nindent 8 }}
+{{- end }}

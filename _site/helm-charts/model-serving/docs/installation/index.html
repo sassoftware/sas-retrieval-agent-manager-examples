@@ -1,0 +1,503 @@
+
+
+<!DOCTYPE html>
+
+<html lang="en-US">
+<head>
+  <meta charset="UTF-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=Edge">
+
+  <link rel="stylesheet" href="/sas-retrieval-agent-manager-examples/assets/css/just-the-docs-default.css">
+
+  <link rel="stylesheet" href="/sas-retrieval-agent-manager-examples/assets/css/just-the-docs-head-nav.css" id="jtd-head-nav-stylesheet">
+
+  <style id="jtd-nav-activation">
+  
+    .site-nav ul li a {
+      background-image: none;
+    }
+
+  </style>
+
+  
+
+  
+    <script src="/sas-retrieval-agent-manager-examples/assets/js/vendor/lunr.min.js"></script>
+  
+
+  <script src="/sas-retrieval-agent-manager-examples/assets/js/just-the-docs.js"></script>
+
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+
+  
+
+
+
+  <!-- Begin Jekyll SEO tag v2.9.0 -->
+<title>Installation | SAS Retrieval Agent Manager Examples</title>
+<meta name="generator" content="Jekyll v4.4.1" />
+<meta property="og:title" content="Installation" />
+<meta property="og:locale" content="en_US" />
+<meta name="description" content="Open source examples for SAS Retrieval Agent Manager." />
+<meta name="twitter:description" property="og:description" content="Open source examples for SAS Retrieval Agent Manager." />
+<link rel="canonical" href="https://sassoftware.github.io/sas-retrieval-agent-manager-examples/helm-charts/model-serving/docs/installation/" />
+<meta property="og:url" content="https://sassoftware.github.io/sas-retrieval-agent-manager-examples/helm-charts/model-serving/docs/installation/" />
+<meta property="og:site_name" content="SAS Retrieval Agent Manager Examples" />
+<meta property="og:type" content="website" />
+<meta name="twitter:card" content="summary" />
+<meta name="twitter:title" content="Installation" />
+<script type="application/ld+json">
+{"@context":"https://schema.org","@type":"WebPage","description":"Open source examples for SAS Retrieval Agent Manager.","headline":"Installation","url":"https://sassoftware.github.io/sas-retrieval-agent-manager-examples/helm-charts/model-serving/docs/installation/"}</script>
+<!-- End Jekyll SEO tag -->
+
+
+  <link rel="icon" href="/sas-retrieval-agent-manager-examples/assets/images/sas-favicon.ico" sizes="any"><link rel="stylesheet" href="/sas-retrieval-agent-manager-examples/assets/css/sas-documentation.css?v=1789471826">
+
+
+</head>
+
+<body>
+  <a class="skip-to-main" href="#main-content">Skip to main content</a>
+  <svg xmlns="http://www.w3.org/2000/svg" class="d-none">
+  <symbol id="svg-link" viewBox="0 0 24 24">
+  <title>Link</title>
+  <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-link">
+    <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path>
+  </svg>
+</symbol>
+
+  <symbol id="svg-menu" viewBox="0 0 24 24">
+  <title>Menu</title>
+  <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-menu">
+    <line x1="3" y1="12" x2="21" y2="12"></line><line x1="3" y1="6" x2="21" y2="6"></line><line x1="3" y1="18" x2="21" y2="18"></line>
+  </svg>
+</symbol>
+
+  <symbol id="svg-arrow-right" viewBox="0 0 24 24">
+  <title>Expand</title>
+  <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-chevron-right">
+    <polyline points="9 18 15 12 9 6"></polyline>
+  </svg>
+</symbol>
+
+  <!-- Feather. MIT License: https://github.com/feathericons/feather/blob/master/LICENSE -->
+<symbol id="svg-external-link" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-external-link">
+  <title id="svg-external-link-title">(external link)</title>
+  <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line>
+</symbol>
+
+  
+    <symbol id="svg-doc" viewBox="0 0 24 24">
+  <title>Document</title>
+  <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-file">
+    <path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"></path><polyline points="13 2 13 9 20 9"></polyline>
+  </svg>
+</symbol>
+
+    <symbol id="svg-search" viewBox="0 0 24 24">
+  <title>Search</title>
+  <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-search">
+    <circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+  </svg>
+</symbol>
+
+  
+  
+    <!-- Bootstrap Icons. MIT License: https://github.com/twbs/icons/blob/main/LICENSE.md -->
+<symbol id="svg-copy" viewBox="0 0 16 16">
+  <title>Copy</title>
+  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-clipboard" viewBox="0 0 16 16">
+    <path d="M4 1.5H3a2 2 0 0 0-2 2V14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V3.5a2 2 0 0 0-2-2h-1v1h1a1 1 0 0 1 1 1V14a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V3.5a1 1 0 0 1 1-1h1v-1z"/>
+    <path d="M9.5 1a.5.5 0 0 1 .5.5v1a.5.5 0 0 1-.5.5h-3a.5.5 0 0 1-.5-.5v-1a.5.5 0 0 1 .5-.5h3zm-3-1A1.5 1.5 0 0 0 5 1.5v1A1.5 1.5 0 0 0 6.5 4h3A1.5 1.5 0 0 0 11 2.5v-1A1.5 1.5 0 0 0 9.5 0h-3z"/>
+  </svg>
+</symbol>
+<symbol id="svg-copied" viewBox="0 0 16 16">
+  <title>Copied</title>
+  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-clipboard-check-fill" viewBox="0 0 16 16">
+    <path d="M6.5 0A1.5 1.5 0 0 0 5 1.5v1A1.5 1.5 0 0 0 6.5 4h3A1.5 1.5 0 0 0 11 2.5v-1A1.5 1.5 0 0 0 9.5 0h-3Zm3 1a.5.5 0 0 1 .5.5v1a.5.5 0 0 1-.5.5h-3a.5.5 0 0 1-.5-.5v-1a.5.5 0 0 1 .5-.5h3Z"/>
+    <path d="M4 1.5H3a2 2 0 0 0-2 2V14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V3.5a2 2 0 0 0-2-2h-1v1A2.5 2.5 0 0 1 9.5 5h-3A2.5 2.5 0 0 1 4 2.5v-1Zm6.854 7.354-3 3a.5.5 0 0 1-.708 0l-1.5-1.5a.5.5 0 0 1 .708-.708L7.5 10.793l2.646-2.647a.5.5 0 0 1 .708.708Z"/>
+  </svg>
+</symbol>
+
+  
+</svg>
+
+  
+    <div class="side-bar">
+  <div class="site-header" role="banner">
+    <a href="/sas-retrieval-agent-manager-examples/" class="site-title lh-tight">
+  SAS Retrieval Agent Manager Examples
+
+</a>
+    <button id="menu-button" class="site-button btn-reset" aria-label="Menu" aria-expanded="false">
+      <svg viewBox="0 0 24 24" class="icon" aria-hidden="true"><use xlink:href="#svg-menu"></use></svg>
+    </button>
+  </div>
+
+  <nav aria-label="Main" id="site-nav" class="site-nav">
+  
+  
+    <ul class="nav-list"><li class="nav-list-item"><a href="/sas-retrieval-agent-manager-examples/chat-webapp/" class="nav-list-link">Chat web app</a></li><li class="nav-list-item"><button class="nav-list-expander btn-reset" aria-label="Agent orchestrators submenu" aria-expanded="false">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><use xlink:href="#svg-arrow-right"></use></svg>
+      </button><a href="/sas-retrieval-agent-manager-examples/examples/agent_orchestrators/" class="nav-list-link">Agent orchestrators</a><ul class="nav-list"><li class="nav-list-item"><a href="/sas-retrieval-agent-manager-examples/examples/agent_orchestrators/news_orchestrator/" class="nav-list-link">News Orchestrator</a></li><li class="nav-list-item"><a href="/sas-retrieval-agent-manager-examples/examples/agent_orchestrators/simple_orchestrator/" class="nav-list-link">Simple Orchestrator</a></li></ul></li><li class="nav-list-item"><button class="nav-list-expander btn-reset" aria-label="Agents submenu" aria-expanded="false">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><use xlink:href="#svg-arrow-right"></use></svg>
+      </button><a href="/sas-retrieval-agent-manager-examples/examples/agents/" class="nav-list-link">Agents</a><ul class="nav-list"><li class="nav-list-item"><a href="/sas-retrieval-agent-manager-examples/examples/agents/banking_agent/" class="nav-list-link">Banking Agent (ESG Analysis)</a></li><li class="nav-list-item"><a href="/sas-retrieval-agent-manager-examples/examples/agents/business_news_agent/" class="nav-list-link">Business News Agent</a></li><li class="nav-list-item"><a href="/sas-retrieval-agent-manager-examples/examples/agents/default_tool_calling_agent/" class="nav-list-link">Default Tool Calling Agent</a></li><li class="nav-list-item"><a href="/sas-retrieval-agent-manager-examples/examples/agents/doc_metadata_augmentation_agent/" class="nav-list-link">Document Metadata Augmentation Agent</a></li><li class="nav-list-item"><a href="/sas-retrieval-agent-manager-examples/examples/agents/financial_agent/" class="nav-list-link">Financial Agent (MCP + RAM)</a></li><li class="nav-list-item"><a href="/sas-retrieval-agent-manager-examples/examples/agents/health_news_agent/" class="nav-list-link">Health News Agent</a></li><li class="nav-list-item"><a href="/sas-retrieval-agent-manager-examples/examples/agents/image_render_agent/" class="nav-list-link">Image Render Agent</a></li><li class="nav-list-item"><a href="/sas-retrieval-agent-manager-examples/examples/agents/multiple_llms_agent/" class="nav-list-link">Multiple LLMs Agent</a></li><li class="nav-list-item"><a href="/sas-retrieval-agent-manager-examples/examples/agents/news_information_finder/" class="nav-list-link">News Information Finder</a></li><li class="nav-list-item"><a href="/sas-retrieval-agent-manager-examples/examples/agents/science_tech_news_agent/" class="nav-list-link">Science and Technology News Agent</a></li><li class="nav-list-item"><a href="/sas-retrieval-agent-manager-examples/examples/agents/timeout_agent/" class="nav-list-link">Tool Timeout Configuration Agent</a></li></ul></li><li class="nav-list-item"><button class="nav-list-expander btn-reset" aria-label="Catalog MCP servers submenu" aria-expanded="false">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><use xlink:href="#svg-arrow-right"></use></svg>
+      </button><a href="/sas-retrieval-agent-manager-examples/examples/catalog_mcp_servers/" class="nav-list-link">Catalog MCP servers</a><ul class="nav-list"><li class="nav-list-item"><a href="/sas-retrieval-agent-manager-examples/examples/catalog_mcp_servers/openapi_mcp_server/" class="nav-list-link">OpenAPI MCP Server</a></li><li class="nav-list-item"><a href="/sas-retrieval-agent-manager-examples/examples/catalog_mcp_servers/remote_mcp_server/" class="nav-list-link">Remote MCP Server</a></li></ul></li><li class="nav-list-item"><button class="nav-list-expander btn-reset" aria-label="Code MCP servers submenu" aria-expanded="false">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><use xlink:href="#svg-arrow-right"></use></svg>
+      </button><a href="/sas-retrieval-agent-manager-examples/examples/code_mcp_servers/" class="nav-list-link">Code MCP servers</a><ul class="nav-list"><li class="nav-list-item"><a href="/sas-retrieval-agent-manager-examples/examples/code_mcp_servers/finance_tools/" class="nav-list-link">Finance Tools Code MCP Server</a></li><li class="nav-list-item"><a href="/sas-retrieval-agent-manager-examples/examples/code_mcp_servers/news_search_tools/" class="nav-list-link">News Search Tools Code MCP Server</a></li><li class="nav-list-item"><a href="/sas-retrieval-agent-manager-examples/examples/code_mcp_servers/simple_calculator/" class="nav-list-link">Simple Calculator Code MCP Server</a></li><li class="nav-list-item"><a href="/sas-retrieval-agent-manager-examples/examples/code_mcp_servers/web_search/" class="nav-list-link">Web Search Code MCP Server</a></li></ul></li><li class="nav-list-item"><button class="nav-list-expander btn-reset" aria-label="Container MCP servers submenu" aria-expanded="false">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><use xlink:href="#svg-arrow-right"></use></svg>
+      </button><a href="/sas-retrieval-agent-manager-examples/examples/container_mcp_servers/" class="nav-list-link">Container MCP servers</a><ul class="nav-list"><li class="nav-list-item"><a href="/sas-retrieval-agent-manager-examples/examples/container_mcp_servers/chart_generator/" class="nav-list-link">README</a></li><li class="nav-list-item"><a href="/sas-retrieval-agent-manager-examples/examples/container_mcp_servers/postgres_db_connection_template/" class="nav-list-link">README</a></li><li class="nav-list-item"><a href="/sas-retrieval-agent-manager-examples/examples/container_mcp_servers/sas_mcp_server/" class="nav-list-link">README</a></li><li class="nav-list-item"><a href="/sas-retrieval-agent-manager-examples/examples/container_mcp_servers/wikipedia/" class="nav-list-link">README</a></li></ul></li><li class="nav-list-item"><button class="nav-list-expander btn-reset" aria-label="Custom sources submenu" aria-expanded="false">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><use xlink:href="#svg-arrow-right"></use></svg>
+      </button><a href="/sas-retrieval-agent-manager-examples/examples/custom_sources/" class="nav-list-link">Custom sources</a><ul class="nav-list"><li class="nav-list-item"><a href="/sas-retrieval-agent-manager-examples/examples/custom_sources/financial_news_fetcher/" class="nav-list-link">Financial News Fetcher Custom Source</a></li><li class="nav-list-item"><a href="/sas-retrieval-agent-manager-examples/examples/custom_sources/news_source/" class="nav-list-link">News Custom Source</a></li><li class="nav-list-item"><a href="/sas-retrieval-agent-manager-examples/examples/custom_sources/nyt_front_page_source/" class="nav-list-link">NYT Front Page Custom Source</a></li><li class="nav-list-item"><a href="/sas-retrieval-agent-manager-examples/examples/custom_sources/structured_output/" class="nav-list-link">Structured Output Custom Source</a></li></ul></li><li class="nav-list-item"><button class="nav-list-expander btn-reset" aria-label="Helm charts submenu" aria-expanded="false">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><use xlink:href="#svg-arrow-right"></use></svg>
+      </button><a href="/sas-retrieval-agent-manager-examples/helm-charts/" class="nav-list-link">Helm charts</a><ul class="nav-list"><li class="nav-list-item"><a href="/sas-retrieval-agent-manager-examples/helm-charts/model-serving/" class="nav-list-link">Model Serving Helm Chart</a></li></ul></li><li class="nav-list-item"><button class="nav-list-expander btn-reset" aria-label="Reference submenu" aria-expanded="false">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><use xlink:href="#svg-arrow-right"></use></svg>
+      </button><a href="/sas-retrieval-agent-manager-examples/reference/" class="nav-list-link">Reference</a><ul class="nav-list"><li class="nav-list-item"><a href="/sas-retrieval-agent-manager-examples/chat-webapp/THIRDPARTY/" class="nav-list-link">THIRDPARTY</a></li></ul></li><li class="nav-list-item"><a href="/sas-retrieval-agent-manager-examples/CONTRIBUTING/" class="nav-list-link">Contributing</a></li><li class="nav-list-item"><a href="/sas-retrieval-agent-manager-examples/SUPPORT/" class="nav-list-link">SUPPORT</a></li><li class="nav-list-item"><a href="/sas-retrieval-agent-manager-examples/INSTRUCTIONS/" class="nav-list-link">Using the SAS Open Source Project Starter Kit</a></li><li class="nav-list-item"><a href="/sas-retrieval-agent-manager-examples/" class="nav-list-link">sas-retrieval-agent-manager-examples</a></li><li class="nav-list-item"><a href="/sas-retrieval-agent-manager-examples/SECURITY/" class="nav-list-link">sas-retrieval-agent-manager-examples Security Policy</a></li></ul>
+  
+</nav>
+
+
+
+
+  
+  
+    <div class="site-disclaimer">
+  <strong>Open source project</strong>
+  <p>Provided under Apache 2.0 on an <em>AS IS</em> basis. SAS provides no warranty, responsibility, or support except where applicable law requires otherwise.</p>
+  <p><a href="/sas-retrieval-agent-manager-examples/LICENSE">License</a> · <a href="/sas-retrieval-agent-manager-examples/SUPPORT/">Support policy</a></p>
+</div>
+
+  
+</div>
+
+  
+  <div class="main" id="top">
+    <div id="main-header" class="main-header">
+  
+    
+
+<div class="search" role="search">
+  <div class="search-input-wrap">
+    <input type="text" id="search-input" class="search-input" tabindex="0" placeholder="Search SAS Retrieval Agent Manager Examples" autocomplete="off">
+    <label for="search-input" class="search-label">
+      <span class="sr-only">Search SAS Retrieval Agent Manager Examples</span>
+      <svg viewBox="0 0 24 24" class="search-icon" aria-hidden="true"><use xlink:href="#svg-search"></use></svg>
+    </label>
+  </div>
+  <div id="search-results" class="search-results"></div>
+</div>
+
+  
+  
+  
+    <nav aria-label="Auxiliary" class="aux-nav">
+  <ul class="aux-nav-list">
+    
+      <li class="aux-nav-list-item">
+        <a href="https://github.com/sassoftware/sas-retrieval-agent-manager-examples" class="site-button"
+          
+        >
+          View on GitHub
+        </a>
+      </li>
+    
+  </ul>
+</nav>
+
+  
+</div>
+
+    <div class="main-content-wrap">
+      <nav aria-label="Breadcrumb" class="breadcrumb-nav">
+  <ol class="breadcrumb-nav-list">
+    <li class="breadcrumb-nav-list-item"><span>Installation</span></li>
+  </ol>
+</nav>
+
+
+      <div id="main-content" class="main-content">
+        <main>
+          
+            <h1 id="installation">
+  
+  
+    <a href="#installation" class="anchor-heading" aria-labelledby="installation"><svg viewBox="0 0 16 16" aria-hidden="true"><use xlink:href="#svg-link"></use></svg></a> Installation
+  
+  
+</h1>
+    
+<h2 id="prerequisites">
+  
+  
+    <a href="#prerequisites" class="anchor-heading" aria-labelledby="prerequisites"><svg viewBox="0 0 16 16" aria-hidden="true"><use xlink:href="#svg-link"></use></svg></a> Prerequisites
+  
+  
+</h2>
+    
+
+<div class="table-wrapper"><table>
+  <thead>
+    <tr>
+      <th>Requirement</th>
+      <th>Detail</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>Kubernetes</td>
+      <td>1.30 or later</td>
+    </tr>
+    <tr>
+      <td>Helm</td>
+      <td>3.19 or later</td>
+    </tr>
+    <tr>
+      <td>cert-manager</td>
+      <td>Required by the KServe controller webhooks</td>
+    </tr>
+    <tr>
+      <td>Gateway API CRDs</td>
+      <td>Required when you use Gateway-based routing or <code class="language-plaintext highlighter-rouge">LLMInferenceService</code> routers</td>
+    </tr>
+    <tr>
+      <td>GPU device plugin</td>
+      <td>Required for any GPU workload, for example the NVIDIA device plugin</td>
+    </tr>
+    <tr>
+      <td>LeaderWorkerSet</td>
+      <td>Required only for multi-node <code class="language-plaintext highlighter-rouge">LLMInferenceService</code> workloads</td>
+    </tr>
+  </tbody>
+</table></div>
+
+<p>Check cert-manager before installing:</p>
+
+<div class="language-sh highlighter-rouge"><div class="highlight"><pre class="highlight"><code>kubectl get pods <span class="nt">-n</span> cert-manager
+kubectl get crd certificates.cert-manager.io
+</code></pre></div></div>
+<h2 id="namespaces">
+  
+  
+    <a href="#namespaces" class="anchor-heading" aria-labelledby="namespaces"><svg viewBox="0 0 16 16" aria-hidden="true"><use xlink:href="#svg-link"></use></svg></a> Namespaces
+  
+  
+</h2>
+    
+
+<p>This chart uses two distinct namespaces.</p>
+
+<div class="table-wrapper"><table>
+  <thead>
+    <tr>
+      <th>Namespace</th>
+      <th>Purpose</th>
+      <th>Controlled by</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>Release namespace</td>
+      <td>KServe controllers, webhooks, and shared configuration</td>
+      <td><code class="language-plaintext highlighter-rouge">helm --namespace</code></td>
+    </tr>
+    <tr>
+      <td>Workload namespace</td>
+      <td>Your <code class="language-plaintext highlighter-rouge">InferenceService</code> and <code class="language-plaintext highlighter-rouge">LLMInferenceService</code> objects</td>
+      <td><code class="language-plaintext highlighter-rouge">namespace</code> value</td>
+    </tr>
+  </tbody>
+</table></div>
+
+<p>Install the controllers into <code class="language-plaintext highlighter-rouge">kserve</code>. KServe <code class="language-plaintext highlighter-rouge">v0.20.0</code> contains namespace-sensitive webhook and cert-manager references, so a different release namespace is not supported.</p>
+
+<div class="language-yaml highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c1"># values.yaml</span>
+<span class="na">namespace</span><span class="pi">:</span> <span class="s">models</span>
+</code></pre></div></div>
+
+<div class="language-sh highlighter-rouge"><div class="highlight"><pre class="highlight"><code>helm upgrade <span class="nt">--install</span> model-serving helm-charts/model-serving <span class="se">\</span>
+  <span class="nt">--namespace</span> kserve <span class="nt">--create-namespace</span> <span class="se">\</span>
+  <span class="nt">-f</span> values.yaml
+</code></pre></div></div>
+
+<p>Create the workload namespace yourself; the chart does not create it:</p>
+
+<div class="language-sh highlighter-rouge"><div class="highlight"><pre class="highlight"><code>kubectl create namespace models
+</code></pre></div></div>
+<h2 id="install-from-source">
+  
+  
+    <a href="#install-from-source" class="anchor-heading" aria-labelledby="install-from-source"><svg viewBox="0 0 16 16" aria-hidden="true"><use xlink:href="#svg-link"></use></svg></a> Install from source
+  
+  
+</h2>
+    
+
+<div class="language-sh highlighter-rouge"><div class="highlight"><pre class="highlight"><code>helm dependency build helm-charts/model-serving
+helm upgrade <span class="nt">--install</span> model-serving helm-charts/model-serving <span class="se">\</span>
+  <span class="nt">--namespace</span> kserve <span class="nt">--create-namespace</span> <span class="se">\</span>
+  <span class="nt">-f</span> my-values.yaml
+</code></pre></div></div>
+
+<p><code class="language-plaintext highlighter-rouge">helm dependency build</code> downloads the seven pinned KServe charts listed in <code class="language-plaintext highlighter-rouge">Chart.lock</code>. Run it after every clone and after any dependency change.</p>
+<h2 id="install-from-the-registry">
+  
+  
+    <a href="#install-from-the-registry" class="anchor-heading" aria-labelledby="install-from-the-registry"><svg viewBox="0 0 16 16" aria-hidden="true"><use xlink:href="#svg-link"></use></svg></a> Install from the registry
+  
+  
+</h2>
+    
+
+<div class="language-sh highlighter-rouge"><div class="highlight"><pre class="highlight"><code>helm upgrade <span class="nt">--install</span> model-serving <span class="se">\</span>
+  oci://ghcr.io/sassoftware/sas-retrieval-agent-manager-examples/model-serving <span class="se">\</span>
+  <span class="nt">--version</span> 0.1.0 <span class="se">\</span>
+  <span class="nt">--namespace</span> kserve <span class="nt">--create-namespace</span> <span class="se">\</span>
+  <span class="nt">-f</span> my-values.yaml
+</code></pre></div></div>
+
+<p>Published chart versions are immutable. Pin <code class="language-plaintext highlighter-rouge">--version</code> in every environment.</p>
+<h2 id="verify-the-installation">
+  
+  
+    <a href="#verify-the-installation" class="anchor-heading" aria-labelledby="verify-the-installation"><svg viewBox="0 0 16 16" aria-hidden="true"><use xlink:href="#svg-link"></use></svg></a> Verify the installation
+  
+  
+</h2>
+    
+
+<div class="language-sh highlighter-rouge"><div class="highlight"><pre class="highlight"><code>helm status model-serving <span class="nt">-n</span> kserve
+kubectl get pods <span class="nt">-n</span> kserve
+kubectl get clusterservingruntime
+kubectl get inferenceservice <span class="nt">-n</span> models
+kubectl get llminferenceservice <span class="nt">-n</span> models
+</code></pre></div></div>
+
+<p>A healthy controller namespace shows running <code class="language-plaintext highlighter-rouge">kserve-controller-manager</code> and, when enabled, <code class="language-plaintext highlighter-rouge">llmisvc-controller-manager</code> pods.</p>
+<h2 id="preview-the-rendered-manifests">
+  
+  
+    <a href="#preview-the-rendered-manifests" class="anchor-heading" aria-labelledby="preview-the-rendered-manifests"><svg viewBox="0 0 16 16" aria-hidden="true"><use xlink:href="#svg-link"></use></svg></a> Preview the rendered manifests
+  
+  
+</h2>
+    
+
+<p>Always review before applying to a shared cluster:</p>
+
+<div class="language-sh highlighter-rouge"><div class="highlight"><pre class="highlight"><code>helm template model-serving helm-charts/model-serving <span class="se">\</span>
+  <span class="nt">--namespace</span> kserve <span class="nt">--include-crds</span> <span class="nt">-f</span> my-values.yaml <span class="o">&gt;</span> rendered.yaml
+</code></pre></div></div>
+<h2 id="upgrade">
+  
+  
+    <a href="#upgrade" class="anchor-heading" aria-labelledby="upgrade"><svg viewBox="0 0 16 16" aria-hidden="true"><use xlink:href="#svg-link"></use></svg></a> Upgrade
+  
+  
+</h2>
+    
+
+<div class="language-sh highlighter-rouge"><div class="highlight"><pre class="highlight"><code>helm dependency build helm-charts/model-serving
+helm upgrade model-serving helm-charts/model-serving <span class="se">\</span>
+  <span class="nt">--namespace</span> kserve <span class="nt">-f</span> my-values.yaml
+</code></pre></div></div>
+
+<p>Adding or removing entries in <code class="language-plaintext highlighter-rouge">models</code> and <code class="language-plaintext highlighter-rouge">llmInferenceServices</code> is a normal upgrade. Removing an entry deletes the corresponding workload.</p>
+<h2 id="uninstall">
+  
+  
+    <a href="#uninstall" class="anchor-heading" aria-labelledby="uninstall"><svg viewBox="0 0 16 16" aria-hidden="true"><use xlink:href="#svg-link"></use></svg></a> Uninstall
+  
+  
+</h2>
+    
+
+<div class="language-sh highlighter-rouge"><div class="highlight"><pre class="highlight"><code>helm uninstall model-serving <span class="nt">-n</span> kserve
+</code></pre></div></div>
+
+<blockquote class="caution">
+<p>Helm does not delete CRDs on uninstall. Custom resources such as <code class="language-plaintext highlighter-rouge">InferenceService</code> remain registered cluster-wide. Deleting the CRDs deletes every model object in every namespace.</p>
+</blockquote>
+
+<p>To remove the CRDs deliberately:</p>
+
+<div class="language-sh highlighter-rouge"><div class="highlight"><pre class="highlight"><code>kubectl get crd | <span class="nb">grep </span>kserve.io
+kubectl delete crd inferenceservices.serving.kserve.io
+</code></pre></div></div>
+<h2 id="crd-lifecycle-and-existing-kserve-installations">
+  
+  
+    <a href="#crd-lifecycle-and-existing-kserve-installations" class="anchor-heading" aria-labelledby="crd-lifecycle-and-existing-kserve-installations"><svg viewBox="0 0 16 16" aria-hidden="true"><use xlink:href="#svg-link"></use></svg></a> CRD lifecycle and existing KServe installations
+  
+  
+</h2>
+    
+
+<p>Helm applies subchart CRDs before templates. If KServe is already installed by another release or by <code class="language-plaintext highlighter-rouge">kubectl apply</code>, the cluster-scoped CRDs, webhooks, and cluster roles already have an owner and this install will conflict.</p>
+
+<p>Before installing into such a cluster:</p>
+
+<ol>
+  <li>List existing owners: <code class="language-plaintext highlighter-rouge">helm list -A | grep -i kserve</code>.</li>
+  <li>Remove the previous installation, or disable the overlapping components with <code class="language-plaintext highlighter-rouge">components.*.enabled: false</code>.</li>
+  <li>Confirm no leftover webhooks remain: <code class="language-plaintext highlighter-rouge">kubectl get validatingwebhookconfiguration | grep kserve</code>.</li>
+</ol>
+
+<p>See <a href="/sas-retrieval-agent-manager-examples/helm-charts/model-serving/docs/components/">Components</a> for selectively disabling parts of KServe.</p>
+
+          
+
+          
+            
+          
+        </main>
+        
+
+  <hr>
+  <footer>
+    
+      <p><a href="#top" id="back-to-top">Back to top</a></p>
+    
+
+    <p class="text-small text-grey-dk-100 mb-0">Open source under the Apache License 2.0. Provided AS IS, without warranties, responsibility, or support from SAS except where applicable law requires otherwise.</p>
+
+    
+  </footer>
+
+
+      </div>
+    </div>
+    
+      
+
+<div class="search-overlay"></div>
+
+    
+  </div>
+
+  
+    
+
+
+
+
+
+<script type="module">
+  
+  import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@10.9.0/dist/mermaid.esm.min.mjs';
+  
+
+  var config = {}
+;
+  mermaid.initialize(config);
+  mermaid.run({
+    querySelector: '.language-mermaid',
+  });
+</script>
+
+
+
+  
+</body>
+</html>
+
