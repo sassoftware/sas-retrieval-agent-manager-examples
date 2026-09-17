@@ -1,0 +1,96 @@
+suite: value validation
+release:
+  name: rel
+  namespace: litellm
+templates:
+  - templates/deployment.yaml
+# modelManagement.mode and database.auth.mode are enums in values.schema.json,
+# so a bad value is rejected before any template renders. The matching `fail`
+# guards in _helpers.tpl stay as a backstop for callers that render with
+# --skip-schema-validation.
+tests:
+  - it: rejects a config flow with no models
+    set:
+      models: []
+    asserts:
+      - failedTemplate:
+          errorMessage: 'modelManagement.mode is "config" but no models are defined. Add entries to `models`, or switch to modelManagement.mode: database to manage models at runtime.'
+
+  - it: accepts a config flow that mounts an existing ConfigMap with no models
+    set:
+      models: []
+      config.existingConfigMap.name: my-litellm-config
+    asserts:
+      - isKind:
+          of: Deployment
+
+  - it: requires a Secret for database credentials
+    set:
+      modelManagement.mode: database
+      database.host: pg.example.com
+    asserts:
+      - failedTemplate:
+          errorMessage: "database.existingSecret.name is required when the database flow is enabled. This chart reads database credentials from a Secret only and accepts no inline password."
+
+  - it: rejects a metrics port that collides with the proxy port
+    set:
+      metricsServer.enabled: true
+      metricsServer.port: 4000
+    asserts:
+      - failedTemplate:
+          errorMessage: "metricsServer.port must differ from service.port"
+
+  - it: rejects an HTTPRoute with no parent Gateway
+    set:
+      routing.httpRoute.enabled: true
+    asserts:
+      - failedTemplate:
+          errorMessage: "routing.httpRoute.parentRefs is required when routing.httpRoute.enabled is true. An HTTPRoute with no parent attaches to no Gateway and publishes nothing."
+
+  - it: rejects an Ingress with no host
+    set:
+      routing.ingress.enabled: true
+    asserts:
+      - failedTemplate:
+          errorMessage: "routing.hosts is required when routing.ingress.enabled is true"
+
+  - it: rejects TLS with no certificate Secret
+    set:
+      routing.hosts: [litellm.example.com]
+      routing.ingress.enabled: true
+      routing.tls.enabled: true
+    asserts:
+      - failedTemplate:
+          errorMessage: "routing.tls.secretName is required when routing.tls.enabled is true and an Ingress is rendered"
+
+  - it: rejects an HTTPProxy with more than one host
+    set:
+      routing.hosts: [a.example.com, b.example.com]
+      routing.httpProxy.enabled: true
+    asserts:
+      - failedTemplate:
+          errorMessage: "routing.httpProxy supports one virtual host. Set a single entry in routing.hosts, or render one release per host."
+
+  - it: rejects a PodDisruptionBudget with neither bound set
+    set:
+      pdb.enabled: true
+    asserts:
+      - failedTemplate:
+          errorMessage: "pdb.enabled requires exactly one of pdb.minAvailable or pdb.maxUnavailable"
+
+  - it: rejects a pod label that collides with the immutable selector
+    set:
+      podLabels:
+        app.kubernetes.io/component: gateway
+    asserts:
+      - failedTemplate:
+          errorMessage: "podLabels cannot set app.kubernetes.io/component: it is part of the Deployment's immutable selector"
+
+  - it: rejects an autoscaling range that cannot be satisfied
+    set:
+      autoscaling.enabled: true
+      autoscaling.minReplicas: 10
+      autoscaling.maxReplicas: 2
+    asserts:
+      - failedTemplate:
+          errorMessage: "autoscaling.minReplicas must not exceed autoscaling.maxReplicas"

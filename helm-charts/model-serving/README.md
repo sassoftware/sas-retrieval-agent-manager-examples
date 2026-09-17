@@ -71,9 +71,14 @@ helm dependency update helm-charts/model-serving
 helm dependency build helm-charts/model-serving
 helm lint helm-charts/model-serving --strict
 helm unittest helm-charts/model-serving
+bash helm-charts/model-serving/ci/validate.sh
 ```
 
 Commit `Chart.lock`, but do not commit generated archives under `charts/`.
+
+`tests/` holds per-template assertions; `ci/validate.sh` holds whole-release
+render checks. `.github/workflows/helm-charts.yml` runs both for every chart
+under `helm-charts/`, discovering them by listing the directory.
 
 ## Values migration
 

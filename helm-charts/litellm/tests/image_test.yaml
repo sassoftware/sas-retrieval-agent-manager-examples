@@ -1,0 +1,47 @@
+suite: image tag resolution
+release:
+  name: rel
+  namespace: litellm
+# Declared at suite level: helm-unittest resolves `failedTemplate` only against
+# templates listed here, and reports a misleading "No failed document" when the
+# template is named per test instead.
+templates:
+  - templates/deployment.yaml
+chart:
+  appVersion: v9.9.9
+tests:
+  - it: defaults the proxy tag to the chart appVersion
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].image
+          value: ghcr.io/berriai/litellm:v9.9.9
+
+  - it: lets an explicit tag override the appVersion
+    set:
+      image.tag: v1.100.0
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].image
+          value: ghcr.io/berriai/litellm:v1.100.0
+
+  - it: rejects a tag that moves under the migration Job
+    set:
+      image.tag: latest
+    asserts:
+      - failedTemplate:
+          errorPattern: image\.tag must not be
+
+  - it: rejects the bleeding-edge floating tag
+    set:
+      image.tag: main-latest
+    asserts:
+      - failedTemplate:
+          errorPattern: image\.tag must not be
+
+  - it: allows the documented stable floating tag
+    set:
+      image.tag: main-stable
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].image
+          value: ghcr.io/berriai/litellm:main-stable
