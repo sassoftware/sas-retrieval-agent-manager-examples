@@ -2,7 +2,11 @@ name: Publish model-serving chart
 
 on:
   push:
-    branches: [main]
+    # Every branch runs the checks. Only main publishes to the registry.
+    paths:
+      - "helm-charts/model-serving/**"
+      - ".github/workflows/helm-chart-publish.yml"
+  pull_request:
     paths:
       - "helm-charts/model-serving/**"
       - ".github/workflows/helm-chart-publish.yml"
@@ -13,21 +17,156 @@ permissions:
   packages: write
 
 concurrency:
-  group: publish-model-serving
+  # One group for each branch. Two runs cannot claim the same patch number.
+  group: publish-model-serving-${{ github.ref }}
   cancel-in-progress: false
 
 env:
   CHART_PATH: helm-charts/model-serving
 
 jobs:
+  detect:
+    name: Detect chart changes
+    runs-on: ubuntu-latest
+    outputs:
+      chart_changed: ${{ steps.detect.outputs.chart_changed }}
+      reason: ${{ steps.detect.outputs.reason }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          # fetch-depth: 0 fetches the complete history of every branch and tag.
+          # Without it the runner makes a shallow clone of one commit, and no
+          # comparison against an earlier commit is possible.
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Compare the chart against the previous state
+        id: detect
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+
+          chart_changed=true
+          reason="A manual run always checks the chart."
+
+          case "${{ github.event_name }}" in
+            pull_request)
+              base="${{ github.event.pull_request.base.sha }}"
+              head="${{ github.event.pull_request.head.sha }}"
+              ;;
+            push)
+              base="${{ github.event.before }}"
+              head="${{ github.sha }}"
+              ;;
+            *)
+              base=""
+              head=""
+              ;;
+          esac
+
+          # Report what the local clone holds. This makes a wrong result easy to read.
+          echo "Local commits: $(git rev-list --count HEAD)"
+          echo "Shallow clone: $(git rev-parse --is-shallow-repository)"
+          echo "Base commit: ${base:-none}"
+          echo "Head commit: ${head:-none}"
+
+          have_commit() {
+            [[ -n "$1" && ! "$1" =~ ^0+$ ]] && git cat-file -e "${1}^{commit}" 2>/dev/null
+          }
+
+          changed_files=""
+          compared=false
+
+          if [[ "$base" =~ ^0+$ ]]; then
+            # The first push of a branch has no previous commit on that branch.
+            # Compare against the default branch instead, so a new branch that does
+            # not touch the chart is correctly reported as unchanged.
+            default_branch="origin/${{ github.event.repository.default_branch }}"
+            if git rev-parse --verify --quiet "$default_branch^{commit}" >/dev/null; then
+              base="$(git rev-parse "$default_branch")"
+              echo "This is the first push of the branch. The base is $default_branch ($base)."
+            else
+              base=""
+              reason="The default branch is not available, so the chart is treated as changed."
+            fi
+          fi
+
+          if [[ -n "$base" && -n "$head" ]]; then
+            if have_commit "$base" && have_commit "$head"; then
+              # Three dots compare against the merge base, so a change made only on
+              # the base branch does not count as a change of this branch.
+              changed_files="$(git diff --name-only "$base...$head" -- "$CHART_PATH")"
+              compared=true
+              echo "The local clone held both commits."
+            else
+              # A force push can remove the base commit from the branch history, but
+              # the GitHub compare API still knows it. This keeps the result correct
+              # instead of building the chart every time.
+              echo "A commit is missing from the local clone. The compare API is used."
+              if changed_files="$(gh api "repos/${{ github.repository }}/compare/${base}...${head}" \
+                    --jq '.files[].filename' 2>/dev/null)"; then
+                changed_files="$(printf '%s\n' "$changed_files" | grep -E "^${CHART_PATH}/" || true)"
+                compared=true
+              else
+                reason="Neither the local clone nor the compare API resolved ${base}...${head}. The chart is treated as changed."
+              fi
+            fi
+          fi
+
+          if [[ "$compared" == true ]]; then
+            if [[ -z "$changed_files" ]]; then
+              chart_changed=false
+              reason="No file under $CHART_PATH changed."
+            else
+              reason="These files changed:"$'\n'"$changed_files"
+            fi
+          fi
+
+          echo "chart_changed=$chart_changed" >>"$GITHUB_OUTPUT"
+          {
+            echo "reason<<EOF"
+            echo "$reason"
+            echo "EOF"
+          } >>"$GITHUB_OUTPUT"
+
+          {
+            echo "### Chart change detection"
+            echo ""
+            echo "Chart changed: \`$chart_changed\`"
+            echo ""
+            echo '```'
+            echo "$reason"
+            echo '```'
+          } >>"$GITHUB_STEP_SUMMARY"
+
   publish:
+    name: Validate and publish
+    needs: detect
+    if: needs.detect.outputs.chart_changed == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
         with:
+          fetch-depth: 0
           # The default GITHUB_TOKEN is kept so the commit-back step can push.
           # A push made with GITHUB_TOKEN never starts another workflow run.
           persist-credentials: true
+
+      - name: Decide whether this run publishes
+        id: mode
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ "${{ github.ref }}" == "refs/heads/main" && "${{ github.event_name }}" != "pull_request" ]]; then
+            echo "publish=true" >>"$GITHUB_OUTPUT"
+            echo "This run validates the chart and publishes it."
+          else
+            echo "publish=false" >>"$GITHUB_OUTPUT"
+            echo "This run validates and packages the chart only. Nothing is pushed to the registry."
+          fi
+
       - uses: azure/setup-helm@v4
         with:
           version: v3.19.0
@@ -64,6 +203,9 @@ jobs:
         run: helm dependency build "$CHART_PATH"
 
       - name: Log in to GHCR
+        # A pull request from a fork gets a read-only token. A failed login must not
+        # stop a validation run, because that run never pushes to the registry.
+        continue-on-error: ${{ steps.mode.outputs.publish != 'true' }}
         shell: bash
         run: |
           echo "${{ secrets.GITHUB_TOKEN }}" | helm registry login ghcr.io --username "${{ github.actor }}" --password-stdin
@@ -118,11 +260,19 @@ jobs:
       - name: Package chart
         run: helm package "$CHART_PATH" --destination /tmp
 
+      - name: Keep the packaged chart as an artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: model-serving-${{ steps.chart.outputs.version }}
+          path: /tmp/model-serving-${{ steps.chart.outputs.version }}.tgz
+          if-no-files-found: error
+
       - name: Publish chart
+        if: steps.mode.outputs.publish == 'true'
         run: helm push "/tmp/model-serving-${{ steps.chart.outputs.version }}.tgz" "$OCI_REPOSITORY"
 
       - name: Commit the resolved version back to main
-        if: github.ref == 'refs/heads/main'
+        if: steps.mode.outputs.publish == 'true'
         shell: bash
         run: |
           set -euo pipefail
@@ -141,15 +291,22 @@ jobs:
           git pull --rebase origin main
           git push origin HEAD:main
 
-      - name: Report the published version
+      - name: Report the result
+        if: always()
         shell: bash
         run: |
+          if [[ "${{ steps.mode.outputs.publish }}" == "true" ]]; then
+            mode="Published to the registry"
+          else
+            mode="Validation only. Nothing was pushed to the registry."
+          fi
           {
             echo "### model-serving"
             echo ""
             echo "| Item | Value |"
             echo "| --- | --- |"
+            echo "| Mode | $mode |"
             echo "| Version in Chart.yaml before the run | ${{ steps.chart.outputs.chart_version }} |"
-            echo "| Published version | ${{ steps.chart.outputs.version }} |"
+            echo "| Resolved version | ${{ steps.chart.outputs.version }} |"
             echo "| Registry | $OCI_REPOSITORY |"
           } >>"$GITHUB_STEP_SUMMARY"
