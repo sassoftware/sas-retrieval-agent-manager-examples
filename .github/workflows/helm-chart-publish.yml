@@ -9,21 +9,41 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
   packages: write
+
+concurrency:
+  group: publish-model-serving
+  cancel-in-progress: false
 
 env:
   CHART_PATH: helm-charts/model-serving
-  OCI_REPOSITORY: oci://ghcr.io/sassoftware/sas-retrieval-agent-manager-examples
 
 jobs:
   publish:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
+        with:
+          # The default GITHUB_TOKEN is kept so the commit-back step can push.
+          # A push made with GITHUB_TOKEN never starts another workflow run.
+          persist-credentials: true
       - uses: azure/setup-helm@v4
         with:
           version: v3.19.0
+      - uses: oras-project/setup-oras@v1
+        with:
+          version: 1.2.3
+
+      - name: Resolve the target registry
+        shell: bash
+        run: |
+          set -euo pipefail
+          # GHCR accepts lowercase names only. A fork publishes into its own namespace,
+          # so the workflow can be tested without access to the upstream packages.
+          repository="$(echo "${{ github.repository }}" | tr '[:upper:]' '[:lower:]')"
+          echo "OCI_REPOSITORY=oci://ghcr.io/${repository}" >>"$GITHUB_ENV"
+          echo "Charts are published to oci://ghcr.io/${repository}"
 
       - name: Build locked dependencies
         run: helm dependency build "$CHART_PATH"
@@ -43,27 +63,93 @@ jobs:
       - name: Rebuild dependencies for packaging
         run: helm dependency build "$CHART_PATH"
 
-      - name: Read chart version
+      - name: Log in to GHCR
+        shell: bash
+        run: |
+          echo "${{ secrets.GITHUB_TOKEN }}" | helm registry login ghcr.io --username "${{ github.actor }}" --password-stdin
+          echo "${{ secrets.GITHUB_TOKEN }}" | oras login ghcr.io --username "${{ github.actor }}" --password-stdin
+
+      - name: Resolve the next patch version
         id: chart
         shell: bash
         run: |
-          version="$(helm show chart "$CHART_PATH" | awk '/^version:/ { print $2 }')"
-          test -n "$version"
-          echo "version=$version" >>"$GITHUB_OUTPUT"
+          set -euo pipefail
 
-      - name: Log in to GHCR
-        run: echo "${{ secrets.GITHUB_TOKEN }}" | helm registry login ghcr.io --username "${{ github.actor }}" --password-stdin
-
-      - name: Reject an existing version
-        shell: bash
-        run: |
-          if helm show chart "$OCI_REPOSITORY/model-serving" --version "${{ steps.chart.outputs.version }}" >/dev/null 2>&1; then
-            echo "model-serving ${{ steps.chart.outputs.version }} is already published" >&2
+          chart_version="$(helm show chart "$CHART_PATH" | awk '/^version:/ { print $2 }')"
+          if [[ ! "$chart_version" =~ ^([0-9]+)\.([0-9]+)\.([0-9]+)$ ]]; then
+            echo "Chart.yaml version '$chart_version' is not a MAJOR.MINOR.PATCH version" >&2
             exit 1
           fi
+          major="${BASH_REMATCH[1]}"
+          minor="${BASH_REMATCH[2]}"
+          patch="${BASH_REMATCH[3]}"
+
+          # List the published tags for this chart. A missing repository means nothing is published yet.
+          tags="$(oras repo tags "${OCI_REPOSITORY#oci://}/model-serving" 2>/dev/null || true)"
+
+          highest=""
+          while read -r tag; do
+            [[ "$tag" =~ ^${major}\.${minor}\.([0-9]+)$ ]] || continue
+            candidate="${BASH_REMATCH[1]}"
+            if [[ -z "$highest" || "$candidate" -gt "$highest" ]]; then
+              highest="$candidate"
+            fi
+          done <<<"$tags"
+
+          if [[ -n "$highest" ]]; then
+            patch="$((highest + 1))"
+          fi
+
+          version="${major}.${minor}.${patch}"
+          echo "Chart.yaml version: $chart_version"
+          echo "Highest published patch for ${major}.${minor}: ${highest:-none}"
+          echo "Version to publish: $version"
+          echo "version=$version" >>"$GITHUB_OUTPUT"
+          echo "chart_version=$chart_version" >>"$GITHUB_OUTPUT"
+
+      - name: Write the resolved version into Chart.yaml
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Only the top-level version key is unindented, so dependency versions stay unchanged.
+          sed -i -E "s|^version: .*$|version: ${{ steps.chart.outputs.version }}|" "$CHART_PATH/Chart.yaml"
+          helm show chart "$CHART_PATH" | awk '/^version:/ { print "Packaged version: " $2 }'
 
       - name: Package chart
         run: helm package "$CHART_PATH" --destination /tmp
 
       - name: Publish chart
         run: helm push "/tmp/model-serving-${{ steps.chart.outputs.version }}.tgz" "$OCI_REPOSITORY"
+
+      - name: Commit the resolved version back to main
+        if: github.ref == 'refs/heads/main'
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if git diff --quiet -- "$CHART_PATH/Chart.yaml"; then
+            echo "Chart.yaml already holds ${{ steps.chart.outputs.version }}. No commit is needed."
+            exit 0
+          fi
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -- "$CHART_PATH/Chart.yaml"
+          git commit -m "chore(model-serving): set chart version to ${{ steps.chart.outputs.version }} [skip ci]"
+
+          # Rebase on the newest main so a parallel commit does not reject the push.
+          git pull --rebase origin main
+          git push origin HEAD:main
+
+      - name: Report the published version
+        shell: bash
+        run: |
+          {
+            echo "### model-serving"
+            echo ""
+            echo "| Item | Value |"
+            echo "| --- | --- |"
+            echo "| Version in Chart.yaml before the run | ${{ steps.chart.outputs.chart_version }} |"
+            echo "| Published version | ${{ steps.chart.outputs.version }} |"
+            echo "| Registry | $OCI_REPOSITORY |"
+          } >>"$GITHUB_STEP_SUMMARY"
