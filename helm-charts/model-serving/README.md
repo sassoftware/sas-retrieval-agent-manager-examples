@@ -26,11 +26,13 @@ From GHCR:
 
 ```sh
 helm upgrade --install model-serving \
-  oci://ghcr.io/sassoftware/sas-retrieval-agent-manager-examples/model-serving \
-  --version 0.1.0 \
+  oci://ghcr.io/sassoftware/sas-retrieval-agent-manager-examples/charts/model-serving \
   --namespace kserve \
   --create-namespace
 ```
+
+Omit `--version` to install the newest published chart. Add `--version <x.y.z>` to
+pin an exact version.
 
 ## Model workloads
 
