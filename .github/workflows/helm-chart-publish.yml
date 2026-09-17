@@ -18,7 +18,6 @@ concurrency:
 
 env:
   CHART_PATH: helm-charts/model-serving
-  OCI_REPOSITORY: oci://ghcr.io/sassoftware/sas-retrieval-agent-manager-examples
 
 jobs:
   publish:
@@ -35,6 +34,16 @@ jobs:
       - uses: oras-project/setup-oras@v1
         with:
           version: 1.2.3
+
+      - name: Resolve the target registry
+        shell: bash
+        run: |
+          set -euo pipefail
+          # GHCR accepts lowercase names only. A fork publishes into its own namespace,
+          # so the workflow can be tested without access to the upstream packages.
+          repository="$(echo "${{ github.repository }}" | tr '[:upper:]' '[:lower:]')"
+          echo "OCI_REPOSITORY=oci://ghcr.io/${repository}" >>"$GITHUB_ENV"
+          echo "Charts are published to oci://ghcr.io/${repository}"
 
       - name: Build locked dependencies
         run: helm dependency build "$CHART_PATH"
