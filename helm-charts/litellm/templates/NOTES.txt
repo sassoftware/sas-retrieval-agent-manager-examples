@@ -1,0 +1,59 @@
+LiteLLM {{ .Chart.AppVersion }} — release {{ .Release.Name }} in namespace {{ .Release.Namespace }}.
+
+Model management: {{ .Values.modelManagement.mode }}
+{{- if eq .Values.modelManagement.mode "config" }}
+  {{ len .Values.models }} model(s) come from config.yaml. Add one by editing
+  `models` in your values file and running `helm upgrade`, which rolls the
+  Deployment. Nothing can be changed from the Admin UI in this mode.
+{{- else }}
+  Models are stored in PostgreSQL and managed at runtime. Add one in the Admin
+  UI under "Models", or POST to /model/new. No redeploy is needed.
+  {{- if include "litellm.migrationEnabled" . }}
+  The schema was applied by Job {{ include "litellm.fullname" . }}-migrations.
+  {{- else }}
+  migrationJob.enabled is false: apply the schema yourself before the proxy
+  serves traffic.
+  {{- end }}
+{{- end }}
+
+Reach the proxy:
+{{- if .Values.routing.ingress.enabled }}
+  Ingress:   {{ range .Values.routing.hosts }}http{{ if $.Values.routing.tls.enabled }}s{{ end }}://{{ . }}{{ $.Values.routing.path }} {{ end }}
+{{- end }}
+{{- if .Values.routing.httpRoute.enabled }}
+  HTTPRoute: attached to {{ range .Values.routing.httpRoute.parentRefs }}{{ .name }} {{ end }}
+             Check it was accepted: kubectl -n {{ .Release.Namespace }} get httproute {{ include "litellm.fullname" . }} -o jsonpath='{.status.parents[*].conditions[?(@.type=="Accepted")].status}'
+{{- end }}
+{{- if .Values.routing.httpProxy.enabled }}
+  HTTPProxy: {{ first .Values.routing.hosts }}
+             Check it is valid: kubectl -n {{ .Release.Namespace }} get httpproxy {{ include "litellm.fullname" . }} -o jsonpath='{.status.currentStatus}'
+{{- end }}
+{{- if .Values.routing.route.enabled }}
+  Route:     kubectl -n {{ .Release.Namespace }} get route {{ include "litellm.fullname" . }} -o jsonpath='{.spec.host}'
+{{- end }}
+{{- if not (or .Values.routing.ingress.enabled .Values.routing.httpRoute.enabled .Values.routing.httpProxy.enabled .Values.routing.route.enabled) }}
+  No routing is enabled. Port-forward instead:
+    kubectl -n {{ .Release.Namespace }} port-forward svc/{{ include "litellm.fullname" . }} {{ .Values.service.port }}
+{{- end }}
+
+The Admin UI is served at {{ .Values.routing.path | trimSuffix "/" }}/ui.
+
+{{ if .Values.masterKey.existingSecret.name -}}
+The master key comes from Secret {{ .Values.masterKey.existingSecret.name }}.
+{{- else -}}
+Read the master key:
+  kubectl -n {{ .Release.Namespace }} get secret {{ include "litellm.fullname" . }}-masterkey -o jsonpath='{.data.masterkey}' | base64 -d
+It is generated once, on first install, and reused by every later upgrade.
+{{- end }}
+
+{{- if and (gt (int .Values.replicaCount) 1) (not .Values.redis.host) }}
+
+WARNING: replicaCount is {{ .Values.replicaCount }} but redis.host is unset. Rate limits and spend
+counters are per-pod without a shared coordination store, so tpm/rpm budgets
+are enforced at roughly {{ .Values.replicaCount }}x what you configured.
+{{- end }}
+{{- if and .Values.autoscaling.enabled (not .Values.redis.host) }}
+
+WARNING: autoscaling is on but redis.host is unset. See the note above; the
+error grows with the replica count.
+{{- end }}

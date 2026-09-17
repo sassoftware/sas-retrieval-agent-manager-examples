@@ -1,3 +1,0 @@
-# Add dependencies here
-fpdf2
-yfinance

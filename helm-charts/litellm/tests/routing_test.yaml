@@ -1,0 +1,181 @@
+suite: routing implementations
+release:
+  name: rel
+  namespace: litellm
+tests:
+  - it: renders nothing when no implementation is enabled
+    templates:
+      - templates/routing-ingress.yaml
+      - templates/routing-httproute.yaml
+      - templates/routing-httpproxy.yaml
+      - templates/routing-route.yaml
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: renders an Ingress with a class and TLS
+    templates:
+      - templates/routing-ingress.yaml
+    set:
+      routing.hosts: [litellm.example.com]
+      routing.tls.enabled: true
+      routing.tls.secretName: litellm-tls
+      routing.ingress.enabled: true
+      routing.ingress.className: nginx
+    asserts:
+      - isKind:
+          of: Ingress
+      - equal:
+          path: spec.ingressClassName
+          value: nginx
+      - equal:
+          path: spec.tls[0].secretName
+          value: litellm-tls
+      - equal:
+          path: spec.rules[0].http.paths[0].pathType
+          value: Prefix
+      - equal:
+          path: spec.rules[0].http.paths[0].backend.service.port.number
+          value: 4000
+
+  - it: downgrades a dotted path to ImplementationSpecific on ingress-nginx
+    templates:
+      - templates/routing-ingress.yaml
+    set:
+      routing.hosts: [litellm.example.com]
+      routing.path: /v1.0
+      routing.ingress.enabled: true
+      routing.ingress.className: nginx
+    asserts:
+      - equal:
+          path: spec.rules[0].http.paths[0].pathType
+          value: ImplementationSpecific
+
+  - it: keeps the declared path type on other controllers
+    templates:
+      - templates/routing-ingress.yaml
+    set:
+      routing.hosts: [litellm.example.com]
+      routing.path: /v1.0
+      routing.ingress.enabled: true
+      routing.ingress.className: traefik
+    asserts:
+      - equal:
+          path: spec.rules[0].http.paths[0].pathType
+          value: Prefix
+
+  - it: renders an HTTPRoute attached to a Gateway
+    templates:
+      - templates/routing-httproute.yaml
+    set:
+      routing.hosts: [litellm.example.com]
+      routing.httpRoute.enabled: true
+      routing.httpRoute.parentRefs:
+        - name: eg
+          namespace: envoy-gateway-system
+          sectionName: https
+      routing.httpRoute.timeouts:
+        backendRequest: 0s
+    asserts:
+      - isKind:
+          of: HTTPRoute
+      - notExists:
+          path: metadata.annotations
+      - equal:
+          path: spec.parentRefs[0].name
+          value: eg
+      - equal:
+          path: spec.hostnames[0]
+          value: litellm.example.com
+      - equal:
+          path: spec.rules[0].matches[0].path.type
+          value: PathPrefix
+      - equal:
+          path: spec.rules[0].timeouts.backendRequest
+          value: 0s
+      - equal:
+          path: spec.rules[0].backendRefs[0].port
+          value: 4000
+
+  - it: renders a Contour HTTPProxy with its own timeout policy
+    templates:
+      - templates/routing-httpproxy.yaml
+    set:
+      routing.hosts: [litellm.example.com]
+      routing.tls.enabled: true
+      routing.tls.secretName: litellm-tls
+      routing.httpProxy.enabled: true
+      routing.httpProxy.ingressClassName: contour
+      routing.httpProxy.timeoutPolicy:
+        response: infinity
+    asserts:
+      - isKind:
+          of: HTTPProxy
+      - equal:
+          path: spec.virtualhost.fqdn
+          value: litellm.example.com
+      - equal:
+          path: spec.virtualhost.tls.secretName
+          value: litellm-tls
+      - equal:
+          path: spec.routes[0].conditions[0].prefix
+          value: /
+      - equal:
+          path: spec.routes[0].timeoutPolicy.response
+          value: infinity
+
+  - it: renders an OpenShift Route with edge termination
+    templates:
+      - templates/routing-route.yaml
+    set:
+      routing.hosts: [litellm.example.com]
+      routing.tls.enabled: true
+      routing.route.enabled: true
+    asserts:
+      - isKind:
+          of: Route
+      - equal:
+          path: spec.host
+          value: litellm.example.com
+      - equal:
+          path: spec.path
+          value: /
+      - equal:
+          path: spec.tls.termination
+          value: edge
+      - equal:
+          path: spec.port.targetPort
+          value: http
+
+  - it: omits the path on a passthrough Route
+    templates:
+      - templates/routing-route.yaml
+    set:
+      routing.tls.enabled: true
+      routing.route.enabled: true
+      routing.route.tls.termination: passthrough
+      routing.route.tls.insecureEdgeTerminationPolicy: ""
+    asserts:
+      - notExists:
+          path: spec.path
+      - notExists:
+          path: spec.host
+
+  - it: publishes through two implementations at once during a migration
+    templates:
+      - templates/routing-ingress.yaml
+      - templates/routing-httproute.yaml
+    set:
+      routing.hosts: [litellm.example.com]
+      routing.ingress.enabled: true
+      routing.ingress.className: nginx
+      routing.httpRoute.enabled: true
+      routing.httpRoute.parentRefs:
+        - name: eg
+    asserts:
+      - isKind:
+          of: Ingress
+        template: templates/routing-ingress.yaml
+      - isKind:
+          of: HTTPRoute
+        template: templates/routing-httproute.yaml
