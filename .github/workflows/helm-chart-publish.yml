@@ -1,0 +1,69 @@
+name: Publish model-serving chart
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "helm-charts/model-serving/**"
+      - ".github/workflows/helm-chart-publish.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+env:
+  CHART_PATH: helm-charts/model-serving
+  OCI_REPOSITORY: oci://ghcr.io/sassoftware/sas-retrieval-agent-manager-examples
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: azure/setup-helm@v4
+        with:
+          version: v3.19.0
+
+      - name: Build locked dependencies
+        run: helm dependency build "$CHART_PATH"
+
+      - name: Verify dependency lock
+        run: git diff --exit-code -- "$CHART_PATH/Chart.lock"
+
+      - name: Lint chart
+        run: helm lint "$CHART_PATH" --strict
+
+      - name: Install helm-unittest
+        run: helm plugin install https://github.com/helm-unittest/helm-unittest.git --version 1.0.3
+
+      - name: Run unit tests
+        run: helm unittest "$CHART_PATH"
+
+      - name: Rebuild dependencies for packaging
+        run: helm dependency build "$CHART_PATH"
+
+      - name: Read chart version
+        id: chart
+        shell: bash
+        run: |
+          version="$(helm show chart "$CHART_PATH" | awk '/^version:/ { print $2 }')"
+          test -n "$version"
+          echo "version=$version" >>"$GITHUB_OUTPUT"
+
+      - name: Log in to GHCR
+        run: echo "${{ secrets.GITHUB_TOKEN }}" | helm registry login ghcr.io --username "${{ github.actor }}" --password-stdin
+
+      - name: Reject an existing version
+        shell: bash
+        run: |
+          if helm show chart "$OCI_REPOSITORY/model-serving" --version "${{ steps.chart.outputs.version }}" >/dev/null 2>&1; then
+            echo "model-serving ${{ steps.chart.outputs.version }} is already published" >&2
+            exit 1
+          fi
+
+      - name: Package chart
+        run: helm package "$CHART_PATH" --destination /tmp
+
+      - name: Publish chart
+        run: helm push "/tmp/model-serving-${{ steps.chart.outputs.version }}.tgz" "$OCI_REPOSITORY"
