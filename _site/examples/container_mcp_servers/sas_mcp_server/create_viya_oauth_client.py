@@ -1,0 +1,282 @@
+import os
+import sys
+import warnings
+from urllib.parse import quote
+
+import requests
+import urllib3
+
+warnings.filterwarnings("ignore", category=urllib3.exceptions.InsecureRequestWarning)
+
+VIYA_URL = os.getenv("VIYA_URL", "").rstrip("/")
+if not VIYA_URL:
+    print("Error: VIYA_URL environment variable is not set.")
+    sys.exit(1)
+CLIENT_ID = os.getenv("CLIENT_ID", "ram-app")
+CLIENT_SECRET = os.getenv("CLIENT_SECRET", "ram-secret")
+UID = os.getenv("CUID", "2001")
+GID = os.getenv("CGID", "2001")
+CODE = os.getenv("CODE")
+username = os.getenv("VIYA_USERNAME", "sasboot")
+password = os.getenv("VIYA_PASSWORD")
+GROUP_USERS = [u.strip() for u in os.getenv("GROUP_USERS", "").split(",") if u.strip()]
+ADD_MEMBERS_ONLY = "--add-members-only" in sys.argv
+
+
+def get_token():
+    token = os.getenv("ACCESS_TOKEN")
+    if token:
+        return token
+
+    # Verify the SASLogon endpoint is reachable before attempting authentication
+    token_url = f"{VIYA_URL}/SASLogon/oauth/token"
+    print(f"Checking connectivity to {token_url} ...")
+    try:
+        probe = requests.head(token_url, verify=False, timeout=10)
+        print(f"Endpoint reachable (HTTP {probe.status_code})")
+    except requests.exceptions.ConnectionError as e:
+        print(f"Cannot reach {token_url}: {e}")
+        print(
+            "Check that VIYA_URL is correct and the host is accessible from this machine."
+        )
+        sys.exit(1)
+    except requests.exceptions.Timeout:
+        print(f"Connection to {token_url} timed out after 10 seconds.")
+        print("The host may be unreachable or a firewall is blocking the connection.")
+        sys.exit(1)
+    print()
+
+    if CODE:
+        print("Exchanging authorization code for access token...")
+        try:
+            response = requests.post(
+                f"{VIYA_URL}/SASLogon/oauth/token",
+                headers={"Content-Type": "application/x-www-form-urlencoded"},
+                data={
+                    "grant_type": "authorization_code",
+                    "code": CODE,
+                    "client_id": "sas.cli",
+                },
+                verify=False,
+                timeout=30,
+            )
+        except requests.exceptions.Timeout:
+            print("Request timed out while exchanging authorization code.\n")
+        else:
+            if response.status_code == 200:
+                token = response.json().get("access_token")
+                if token:
+                    print("Successfully obtained access token via authorization code.")
+                    return token
+            error_info = (
+                response.json()
+                if "application/json" in response.headers.get("content-type", "")
+                else response.text
+            )
+            error_msg = (
+                error_info.get(
+                    "error_description", error_info.get("error", "Unknown error")
+                )
+                if isinstance(error_info, dict)
+                else error_info
+            )
+            print("Failed to obtain access token via authorization code.")
+            print(f"Status: {response.status_code} - {error_msg}")
+            print(
+                "Possible causes: code expired (valid ~10 min), already used, or invalid.\n"
+            )
+
+    if username and password:
+        print("Obtaining access token via username/password...")
+        try:
+            response = requests.post(
+                f"{VIYA_URL}/SASLogon/oauth/token",
+                auth=("sas.cli", ""),
+                headers={"Content-Type": "application/x-www-form-urlencoded"},
+                data={
+                    "grant_type": "password",
+                    "username": username,
+                    "password": password,
+                },
+                verify=False,
+                timeout=30,
+            )
+        except requests.exceptions.Timeout:
+            print("Request timed out while authenticating with username/password.\n")
+        else:
+            if response.status_code == 200:
+                token = response.json().get("access_token")
+                if token:
+                    print("Successfully obtained access token via username/password.")
+                    return token
+            error_info = (
+                response.json()
+                if "application/json" in response.headers.get("content-type", "")
+                else response.text
+            )
+            error_msg = (
+                error_info.get(
+                    "error_description", error_info.get("error", "Unknown error")
+                )
+                if isinstance(error_info, dict)
+                else error_info
+            )
+            print("Failed to obtain access token via username/password.")
+            print(f"Status: {response.status_code} - {error_msg}\n")
+
+    CODE_URL = (
+        f"{VIYA_URL}/SASLogon/oauth/authorize?client_id=sas.cli&response_type=code"
+    )
+    TOKEN_URL = (
+        f"{VIYA_URL}/SASLogon/oauth/authorize?client_id=sas.cli&response_type=token"
+    )
+    print(
+        "No valid authentication method succeeded. Please use one of the following options:"
+    )
+    print()
+    print("Option 1 - Access token directly:")
+    print("  export ACCESS_TOKEN=<token>")
+    print(f"  (obtain from: {TOKEN_URL})")
+    print()
+    print("Option 2 - Authorization code:")
+    print("  export CODE=<code>")
+    print(f"  (obtain from: {CODE_URL})")
+    print()
+    print("Option 3 - Username and password:")
+    print("  export VIYA_USERNAME=<username>")
+    print("  export VIYA_PASSWORD=<password>")
+    sys.exit(1)
+
+
+CLIENT_BODY = {
+    "client_id": CLIENT_ID,
+    "client_secret": CLIENT_SECRET,
+    "authorities": [CLIENT_ID],
+    "authorized_grant_types": ["client_credentials"],
+    "uid": UID,
+    "gid": GID,
+}
+
+
+def create_client(token):
+    headers = {"Authorization": f"Bearer {token}"}
+    response = requests.post(
+        f"{VIYA_URL}/SASLogon/oauth/clients",
+        json=CLIENT_BODY,
+        headers=headers,
+        verify=False,
+    )
+    if response.status_code == 409:
+        print(
+            f"Client '{CLIENT_ID}' already exists. See https://developer.sas.com/rest-apis/SASLogon/updateClient to update an existing client."
+        )
+        return
+    if response.status_code != 201:
+        print(f"Failed to create OAuth client '{CLIENT_ID}'.")
+        print(f"Status: {response.status_code}")
+        error_info = (
+            response.json()
+            if response.headers.get("content-type") == "application/json"
+            else response.text
+        )
+        if isinstance(error_info, dict):
+            print(f"Error: {error_info.get('message', error_info)}")
+        else:
+            print(f"Error: {error_info}")
+        sys.exit(1)
+    print(f"Client '{CLIENT_ID}' created successfully.")
+    print(response.json())
+
+
+GROUP_BODY = {
+    "id": CLIENT_ID,
+    "name": f"RAM Application Group ({CLIENT_ID})",
+}
+
+
+def create_group(token):
+    headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
+    response = requests.post(
+        f"{VIYA_URL}/identities/groups",
+        json=GROUP_BODY,
+        headers=headers,
+        verify=False,
+    )
+    if response.status_code == 409:
+        print(f"Group '{CLIENT_ID}' already exists.")
+        return
+    if response.status_code not in (200, 201):
+        print(f"Failed to create group '{CLIENT_ID}'.")
+        print(f"Status: {response.status_code}")
+        error_info = (
+            response.json()
+            if "application/json" in response.headers.get("content-type", "")
+            else response.text
+        )
+        error_msg = (
+            error_info.get("message", error_info)
+            if isinstance(error_info, dict)
+            else error_info
+        )
+        print(f"Error: {error_msg}")
+        return
+    print(f"Group '{CLIENT_ID}' created successfully.")
+
+
+def add_group_members(token, group_id, users):
+    if not users:
+        return
+    headers = {"Authorization": f"Bearer {token}"}
+    failed_users = []
+    for user in users:
+        # Viya user IDs are case-sensitive lowercase; match the SAS Environment
+        # Manager UI, which also percent-encodes the ID (e.g. "@" -> "%40").
+        encoded_user = quote(user.lower(), safe="")
+        response = requests.put(
+            f"{VIYA_URL}/identities/groups/{group_id}/userMembers/{encoded_user}",
+            headers=headers,
+            verify=False,
+        )
+        if response.status_code in (200, 201, 204):
+            print(f"Added user '{user}' to group '{group_id}'.")
+        elif response.status_code == 409:
+            print(f"User '{user}' is already a member of group '{group_id}'.")
+        else:
+            # Ignore per-user errors so one bad user doesn't block the rest
+            print(
+                f"Warning: failed to add user '{user}' to group '{group_id}' "
+                f"(HTTP {response.status_code}). Skipping."
+            )
+            if response.status_code == 404:
+                print(
+                    "  A 404 here usually means Viya's identities service does not "
+                    "know this user yet (it only lists users after their first "
+                    "login/sync) or the ID doesn't match their Viya user ID exactly. "
+                    f"Verify with: GET {VIYA_URL}/identities/users/{encoded_user}"
+                )
+            failed_users.append(user)
+
+    if failed_users:
+        failed_list = ",".join(failed_users)
+        print()
+        print(
+            f"Could not add the following users to group '{group_id}': {failed_list}"
+        )
+        print("To retry adding just these users later, run:")
+        print(
+            f'  CLIENT_ID={group_id} GROUP_USERS="{failed_list}" '
+            f"python {os.path.basename(__file__)} --add-members-only"
+        )
+
+
+if ADD_MEMBERS_ONLY:
+    if not GROUP_USERS:
+        print("Error: --add-members-only requires GROUP_USERS to be set.")
+        sys.exit(1)
+    access_token = get_token()
+    add_group_members(access_token, CLIENT_ID, GROUP_USERS)
+else:
+    access_token = get_token()
+    create_group(access_token)
+    add_group_members(access_token, CLIENT_ID, GROUP_USERS)
+    create_client(access_token)

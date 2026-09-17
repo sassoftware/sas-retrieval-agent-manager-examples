@@ -1,0 +1,5 @@
+feedparser
+beautifulsoup4
+trafilatura
+fpdf2
+yfinance

@@ -1,0 +1,87 @@
+{{- if .Values.clusterServingRuntimes.openVINO.enabled }}
+---
+apiVersion: serving.kserve.io/v1alpha1
+kind: ClusterServingRuntime
+metadata:
+  name: {{ .Values.clusterServingRuntimes.openVINO.name }}
+  labels:
+    {{- include "model-serving.labels" . | nindent 4 }}
+  {{- with .Values.commonAnnotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  annotations:
+    prometheus.kserve.io/path: /metrics
+    prometheus.kserve.io/port: "8080"
+  containers:
+    - name: kserve-container
+      image: {{ .Values.clusterServingRuntimes.openVINO.image }}
+      imagePullPolicy: {{ .Values.clusterServingRuntimes.openVINO.imagePullPolicy }}
+      args:
+        - --model_name={{ "{{" }}.Name{{ "}}" }}
+        - --model_path=/mnt/models
+        - --port=9000
+        - --rest_port=8080
+        - --file_system_poll_wait_seconds=0
+      startupProbe:
+        periodSeconds: 5
+        failureThreshold: 9999
+        httpGet:
+          path: /v2/health/ready
+          port: 8080
+      resources:
+        {{- toYaml .Values.clusterServingRuntimes.openVINO.resources | nindent 8 }}
+      securityContext:
+        allowPrivilegeEscalation: false
+        capabilities:
+          drop: [ALL]
+        privileged: false
+        runAsNonRoot: true
+        runAsUser: 5000
+  protocolVersions: [v1, v2, grpc-v2]
+  supportedModelFormats:
+    - {autoSelect: true, name: openvino, priority: 1, version: "10"}
+    - {autoSelect: true, name: onnx, priority: 2, version: "1"}
+    - {autoSelect: true, name: tensorflow, priority: 3, version: "1"}
+    - {autoSelect: true, name: huggingface}
+{{- end }}
+
+{{- if .Values.clusterServingRuntimes.vllmCPU.enabled }}
+---
+apiVersion: serving.kserve.io/v1alpha1
+kind: ClusterServingRuntime
+metadata:
+  name: {{ .Values.clusterServingRuntimes.vllmCPU.name }}
+  labels:
+    {{- include "model-serving.labels" . | nindent 4 }}
+  {{- with .Values.commonAnnotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  supportedModelFormats:
+    - name: huggingface
+      autoSelect: true
+  containers:
+    - name: kserve-container
+      image: {{ .Values.clusterServingRuntimes.vllmCPU.image }}
+      imagePullPolicy: {{ .Values.clusterServingRuntimes.vllmCPU.imagePullPolicy }}
+      args:
+        - /mnt/models
+        - --host=0.0.0.0
+        - --port=8080
+        - --trust-remote-code
+        - --gpu-memory-utilization
+        - {{ .Values.clusterServingRuntimes.vllmCPU.gpuMemoryUtilization | quote }}
+        - --max-model-len
+        - {{ .Values.clusterServingRuntimes.vllmCPU.maxModelLen | toString | quote }}
+      volumeMounts:
+        - name: shm
+          mountPath: /dev/shm
+  volumes:
+    - name: shm
+      emptyDir:
+        medium: Memory
+        sizeLimit: {{ .Values.clusterServingRuntimes.vllmCPU.shmSize }}
+{{- end }}

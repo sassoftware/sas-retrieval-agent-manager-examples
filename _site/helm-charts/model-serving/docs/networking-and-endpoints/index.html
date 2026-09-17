@@ -1,0 +1,641 @@
+
+
+<!DOCTYPE html>
+
+<html lang="en-US">
+<head>
+  <meta charset="UTF-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=Edge">
+
+  <link rel="stylesheet" href="/sas-retrieval-agent-manager-examples/assets/css/just-the-docs-default.css">
+
+  <link rel="stylesheet" href="/sas-retrieval-agent-manager-examples/assets/css/just-the-docs-head-nav.css" id="jtd-head-nav-stylesheet">
+
+  <style id="jtd-nav-activation">
+  
+    .site-nav ul li a {
+      background-image: none;
+    }
+
+  </style>
+
+  
+
+  
+    <script src="/sas-retrieval-agent-manager-examples/assets/js/vendor/lunr.min.js"></script>
+  
+
+  <script src="/sas-retrieval-agent-manager-examples/assets/js/just-the-docs.js"></script>
+
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+
+  
+
+
+
+  <!-- Begin Jekyll SEO tag v2.9.0 -->
+<title>Networking and endpoints | SAS Retrieval Agent Manager Examples</title>
+<meta name="generator" content="Jekyll v4.4.1" />
+<meta property="og:title" content="Networking and endpoints" />
+<meta property="og:locale" content="en_US" />
+<meta name="description" content="Open source examples for SAS Retrieval Agent Manager." />
+<meta name="twitter:description" property="og:description" content="Open source examples for SAS Retrieval Agent Manager." />
+<link rel="canonical" href="https://sassoftware.github.io/sas-retrieval-agent-manager-examples/helm-charts/model-serving/docs/networking-and-endpoints/" />
+<meta property="og:url" content="https://sassoftware.github.io/sas-retrieval-agent-manager-examples/helm-charts/model-serving/docs/networking-and-endpoints/" />
+<meta property="og:site_name" content="SAS Retrieval Agent Manager Examples" />
+<meta property="og:type" content="website" />
+<meta name="twitter:card" content="summary" />
+<meta name="twitter:title" content="Networking and endpoints" />
+<script type="application/ld+json">
+{"@context":"https://schema.org","@type":"WebPage","description":"Open source examples for SAS Retrieval Agent Manager.","headline":"Networking and endpoints","url":"https://sassoftware.github.io/sas-retrieval-agent-manager-examples/helm-charts/model-serving/docs/networking-and-endpoints/"}</script>
+<!-- End Jekyll SEO tag -->
+
+
+  <link rel="icon" href="/sas-retrieval-agent-manager-examples/assets/images/sas-favicon.ico" sizes="any"><link rel="stylesheet" href="/sas-retrieval-agent-manager-examples/assets/css/sas-documentation.css?v=1789471826">
+
+
+</head>
+
+<body>
+  <a class="skip-to-main" href="#main-content">Skip to main content</a>
+  <svg xmlns="http://www.w3.org/2000/svg" class="d-none">
+  <symbol id="svg-link" viewBox="0 0 24 24">
+  <title>Link</title>
+  <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-link">
+    <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path>
+  </svg>
+</symbol>
+
+  <symbol id="svg-menu" viewBox="0 0 24 24">
+  <title>Menu</title>
+  <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-menu">
+    <line x1="3" y1="12" x2="21" y2="12"></line><line x1="3" y1="6" x2="21" y2="6"></line><line x1="3" y1="18" x2="21" y2="18"></line>
+  </svg>
+</symbol>
+
+  <symbol id="svg-arrow-right" viewBox="0 0 24 24">
+  <title>Expand</title>
+  <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-chevron-right">
+    <polyline points="9 18 15 12 9 6"></polyline>
+  </svg>
+</symbol>
+
+  <!-- Feather. MIT License: https://github.com/feathericons/feather/blob/master/LICENSE -->
+<symbol id="svg-external-link" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-external-link">
+  <title id="svg-external-link-title">(external link)</title>
+  <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line>
+</symbol>
+
+  
+    <symbol id="svg-doc" viewBox="0 0 24 24">
+  <title>Document</title>
+  <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-file">
+    <path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"></path><polyline points="13 2 13 9 20 9"></polyline>
+  </svg>
+</symbol>
+
+    <symbol id="svg-search" viewBox="0 0 24 24">
+  <title>Search</title>
+  <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-search">
+    <circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+  </svg>
+</symbol>
+
+  
+  
+    <!-- Bootstrap Icons. MIT License: https://github.com/twbs/icons/blob/main/LICENSE.md -->
+<symbol id="svg-copy" viewBox="0 0 16 16">
+  <title>Copy</title>
+  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-clipboard" viewBox="0 0 16 16">
+    <path d="M4 1.5H3a2 2 0 0 0-2 2V14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V3.5a2 2 0 0 0-2-2h-1v1h1a1 1 0 0 1 1 1V14a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V3.5a1 1 0 0 1 1-1h1v-1z"/>
+    <path d="M9.5 1a.5.5 0 0 1 .5.5v1a.5.5 0 0 1-.5.5h-3a.5.5 0 0 1-.5-.5v-1a.5.5 0 0 1 .5-.5h3zm-3-1A1.5 1.5 0 0 0 5 1.5v1A1.5 1.5 0 0 0 6.5 4h3A1.5 1.5 0 0 0 11 2.5v-1A1.5 1.5 0 0 0 9.5 0h-3z"/>
+  </svg>
+</symbol>
+<symbol id="svg-copied" viewBox="0 0 16 16">
+  <title>Copied</title>
+  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-clipboard-check-fill" viewBox="0 0 16 16">
+    <path d="M6.5 0A1.5 1.5 0 0 0 5 1.5v1A1.5 1.5 0 0 0 6.5 4h3A1.5 1.5 0 0 0 11 2.5v-1A1.5 1.5 0 0 0 9.5 0h-3Zm3 1a.5.5 0 0 1 .5.5v1a.5.5 0 0 1-.5.5h-3a.5.5 0 0 1-.5-.5v-1a.5.5 0 0 1 .5-.5h3Z"/>
+    <path d="M4 1.5H3a2 2 0 0 0-2 2V14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V3.5a2 2 0 0 0-2-2h-1v1A2.5 2.5 0 0 1 9.5 5h-3A2.5 2.5 0 0 1 4 2.5v-1Zm6.854 7.354-3 3a.5.5 0 0 1-.708 0l-1.5-1.5a.5.5 0 0 1 .708-.708L7.5 10.793l2.646-2.647a.5.5 0 0 1 .708.708Z"/>
+  </svg>
+</symbol>
+
+  
+</svg>
+
+  
+    <div class="side-bar">
+  <div class="site-header" role="banner">
+    <a href="/sas-retrieval-agent-manager-examples/" class="site-title lh-tight">
+  SAS Retrieval Agent Manager Examples
+
+</a>
+    <button id="menu-button" class="site-button btn-reset" aria-label="Menu" aria-expanded="false">
+      <svg viewBox="0 0 24 24" class="icon" aria-hidden="true"><use xlink:href="#svg-menu"></use></svg>
+    </button>
+  </div>
+
+  <nav aria-label="Main" id="site-nav" class="site-nav">
+  
+  
+    <ul class="nav-list"><li class="nav-list-item"><a href="/sas-retrieval-agent-manager-examples/chat-webapp/" class="nav-list-link">Chat web app</a></li><li class="nav-list-item"><button class="nav-list-expander btn-reset" aria-label="Agent orchestrators submenu" aria-expanded="false">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><use xlink:href="#svg-arrow-right"></use></svg>
+      </button><a href="/sas-retrieval-agent-manager-examples/examples/agent_orchestrators/" class="nav-list-link">Agent orchestrators</a><ul class="nav-list"><li class="nav-list-item"><a href="/sas-retrieval-agent-manager-examples/examples/agent_orchestrators/news_orchestrator/" class="nav-list-link">News Orchestrator</a></li><li class="nav-list-item"><a href="/sas-retrieval-agent-manager-examples/examples/agent_orchestrators/simple_orchestrator/" class="nav-list-link">Simple Orchestrator</a></li></ul></li><li class="nav-list-item"><button class="nav-list-expander btn-reset" aria-label="Agents submenu" aria-expanded="false">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><use xlink:href="#svg-arrow-right"></use></svg>
+      </button><a href="/sas-retrieval-agent-manager-examples/examples/agents/" class="nav-list-link">Agents</a><ul class="nav-list"><li class="nav-list-item"><a href="/sas-retrieval-agent-manager-examples/examples/agents/banking_agent/" class="nav-list-link">Banking Agent (ESG Analysis)</a></li><li class="nav-list-item"><a href="/sas-retrieval-agent-manager-examples/examples/agents/business_news_agent/" class="nav-list-link">Business News Agent</a></li><li class="nav-list-item"><a href="/sas-retrieval-agent-manager-examples/examples/agents/default_tool_calling_agent/" class="nav-list-link">Default Tool Calling Agent</a></li><li class="nav-list-item"><a href="/sas-retrieval-agent-manager-examples/examples/agents/doc_metadata_augmentation_agent/" class="nav-list-link">Document Metadata Augmentation Agent</a></li><li class="nav-list-item"><a href="/sas-retrieval-agent-manager-examples/examples/agents/financial_agent/" class="nav-list-link">Financial Agent (MCP + RAM)</a></li><li class="nav-list-item"><a href="/sas-retrieval-agent-manager-examples/examples/agents/health_news_agent/" class="nav-list-link">Health News Agent</a></li><li class="nav-list-item"><a href="/sas-retrieval-agent-manager-examples/examples/agents/image_render_agent/" class="nav-list-link">Image Render Agent</a></li><li class="nav-list-item"><a href="/sas-retrieval-agent-manager-examples/examples/agents/multiple_llms_agent/" class="nav-list-link">Multiple LLMs Agent</a></li><li class="nav-list-item"><a href="/sas-retrieval-agent-manager-examples/examples/agents/news_information_finder/" class="nav-list-link">News Information Finder</a></li><li class="nav-list-item"><a href="/sas-retrieval-agent-manager-examples/examples/agents/science_tech_news_agent/" class="nav-list-link">Science and Technology News Agent</a></li><li class="nav-list-item"><a href="/sas-retrieval-agent-manager-examples/examples/agents/timeout_agent/" class="nav-list-link">Tool Timeout Configuration Agent</a></li></ul></li><li class="nav-list-item"><button class="nav-list-expander btn-reset" aria-label="Catalog MCP servers submenu" aria-expanded="false">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><use xlink:href="#svg-arrow-right"></use></svg>
+      </button><a href="/sas-retrieval-agent-manager-examples/examples/catalog_mcp_servers/" class="nav-list-link">Catalog MCP servers</a><ul class="nav-list"><li class="nav-list-item"><a href="/sas-retrieval-agent-manager-examples/examples/catalog_mcp_servers/openapi_mcp_server/" class="nav-list-link">OpenAPI MCP Server</a></li><li class="nav-list-item"><a href="/sas-retrieval-agent-manager-examples/examples/catalog_mcp_servers/remote_mcp_server/" class="nav-list-link">Remote MCP Server</a></li></ul></li><li class="nav-list-item"><button class="nav-list-expander btn-reset" aria-label="Code MCP servers submenu" aria-expanded="false">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><use xlink:href="#svg-arrow-right"></use></svg>
+      </button><a href="/sas-retrieval-agent-manager-examples/examples/code_mcp_servers/" class="nav-list-link">Code MCP servers</a><ul class="nav-list"><li class="nav-list-item"><a href="/sas-retrieval-agent-manager-examples/examples/code_mcp_servers/finance_tools/" class="nav-list-link">Finance Tools Code MCP Server</a></li><li class="nav-list-item"><a href="/sas-retrieval-agent-manager-examples/examples/code_mcp_servers/news_search_tools/" class="nav-list-link">News Search Tools Code MCP Server</a></li><li class="nav-list-item"><a href="/sas-retrieval-agent-manager-examples/examples/code_mcp_servers/simple_calculator/" class="nav-list-link">Simple Calculator Code MCP Server</a></li><li class="nav-list-item"><a href="/sas-retrieval-agent-manager-examples/examples/code_mcp_servers/web_search/" class="nav-list-link">Web Search Code MCP Server</a></li></ul></li><li class="nav-list-item"><button class="nav-list-expander btn-reset" aria-label="Container MCP servers submenu" aria-expanded="false">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><use xlink:href="#svg-arrow-right"></use></svg>
+      </button><a href="/sas-retrieval-agent-manager-examples/examples/container_mcp_servers/" class="nav-list-link">Container MCP servers</a><ul class="nav-list"><li class="nav-list-item"><a href="/sas-retrieval-agent-manager-examples/examples/container_mcp_servers/chart_generator/" class="nav-list-link">README</a></li><li class="nav-list-item"><a href="/sas-retrieval-agent-manager-examples/examples/container_mcp_servers/postgres_db_connection_template/" class="nav-list-link">README</a></li><li class="nav-list-item"><a href="/sas-retrieval-agent-manager-examples/examples/container_mcp_servers/sas_mcp_server/" class="nav-list-link">README</a></li><li class="nav-list-item"><a href="/sas-retrieval-agent-manager-examples/examples/container_mcp_servers/wikipedia/" class="nav-list-link">README</a></li></ul></li><li class="nav-list-item"><button class="nav-list-expander btn-reset" aria-label="Custom sources submenu" aria-expanded="false">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><use xlink:href="#svg-arrow-right"></use></svg>
+      </button><a href="/sas-retrieval-agent-manager-examples/examples/custom_sources/" class="nav-list-link">Custom sources</a><ul class="nav-list"><li class="nav-list-item"><a href="/sas-retrieval-agent-manager-examples/examples/custom_sources/financial_news_fetcher/" class="nav-list-link">Financial News Fetcher Custom Source</a></li><li class="nav-list-item"><a href="/sas-retrieval-agent-manager-examples/examples/custom_sources/news_source/" class="nav-list-link">News Custom Source</a></li><li class="nav-list-item"><a href="/sas-retrieval-agent-manager-examples/examples/custom_sources/nyt_front_page_source/" class="nav-list-link">NYT Front Page Custom Source</a></li><li class="nav-list-item"><a href="/sas-retrieval-agent-manager-examples/examples/custom_sources/structured_output/" class="nav-list-link">Structured Output Custom Source</a></li></ul></li><li class="nav-list-item"><button class="nav-list-expander btn-reset" aria-label="Helm charts submenu" aria-expanded="false">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><use xlink:href="#svg-arrow-right"></use></svg>
+      </button><a href="/sas-retrieval-agent-manager-examples/helm-charts/" class="nav-list-link">Helm charts</a><ul class="nav-list"><li class="nav-list-item"><a href="/sas-retrieval-agent-manager-examples/helm-charts/model-serving/" class="nav-list-link">Model Serving Helm Chart</a></li></ul></li><li class="nav-list-item"><button class="nav-list-expander btn-reset" aria-label="Reference submenu" aria-expanded="false">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><use xlink:href="#svg-arrow-right"></use></svg>
+      </button><a href="/sas-retrieval-agent-manager-examples/reference/" class="nav-list-link">Reference</a><ul class="nav-list"><li class="nav-list-item"><a href="/sas-retrieval-agent-manager-examples/chat-webapp/THIRDPARTY/" class="nav-list-link">THIRDPARTY</a></li></ul></li><li class="nav-list-item"><a href="/sas-retrieval-agent-manager-examples/CONTRIBUTING/" class="nav-list-link">Contributing</a></li><li class="nav-list-item"><a href="/sas-retrieval-agent-manager-examples/SUPPORT/" class="nav-list-link">SUPPORT</a></li><li class="nav-list-item"><a href="/sas-retrieval-agent-manager-examples/INSTRUCTIONS/" class="nav-list-link">Using the SAS Open Source Project Starter Kit</a></li><li class="nav-list-item"><a href="/sas-retrieval-agent-manager-examples/" class="nav-list-link">sas-retrieval-agent-manager-examples</a></li><li class="nav-list-item"><a href="/sas-retrieval-agent-manager-examples/SECURITY/" class="nav-list-link">sas-retrieval-agent-manager-examples Security Policy</a></li></ul>
+  
+</nav>
+
+
+
+
+  
+  
+    <div class="site-disclaimer">
+  <strong>Open source project</strong>
+  <p>Provided under Apache 2.0 on an <em>AS IS</em> basis. SAS provides no warranty, responsibility, or support except where applicable law requires otherwise.</p>
+  <p><a href="/sas-retrieval-agent-manager-examples/LICENSE">License</a> · <a href="/sas-retrieval-agent-manager-examples/SUPPORT/">Support policy</a></p>
+</div>
+
+  
+</div>
+
+  
+  <div class="main" id="top">
+    <div id="main-header" class="main-header">
+  
+    
+
+<div class="search" role="search">
+  <div class="search-input-wrap">
+    <input type="text" id="search-input" class="search-input" tabindex="0" placeholder="Search SAS Retrieval Agent Manager Examples" autocomplete="off">
+    <label for="search-input" class="search-label">
+      <span class="sr-only">Search SAS Retrieval Agent Manager Examples</span>
+      <svg viewBox="0 0 24 24" class="search-icon" aria-hidden="true"><use xlink:href="#svg-search"></use></svg>
+    </label>
+  </div>
+  <div id="search-results" class="search-results"></div>
+</div>
+
+  
+  
+  
+    <nav aria-label="Auxiliary" class="aux-nav">
+  <ul class="aux-nav-list">
+    
+      <li class="aux-nav-list-item">
+        <a href="https://github.com/sassoftware/sas-retrieval-agent-manager-examples" class="site-button"
+          
+        >
+          View on GitHub
+        </a>
+      </li>
+    
+  </ul>
+</nav>
+
+  
+</div>
+
+    <div class="main-content-wrap">
+      <nav aria-label="Breadcrumb" class="breadcrumb-nav">
+  <ol class="breadcrumb-nav-list">
+    <li class="breadcrumb-nav-list-item"><span>Networking and endpoints</span></li>
+  </ol>
+</nav>
+
+
+      <div id="main-content" class="main-content">
+        <main>
+          
+            <h1 id="networking-and-endpoints">
+  
+  
+    <a href="#networking-and-endpoints" class="anchor-heading" aria-labelledby="networking-and-endpoints"><svg viewBox="0 0 16 16" aria-hidden="true"><use xlink:href="#svg-link"></use></svg></a> Networking and endpoints
+  
+  
+</h1>
+    
+<h2 id="quick-local-access">
+  
+  
+    <a href="#quick-local-access" class="anchor-heading" aria-labelledby="quick-local-access"><svg viewBox="0 0 16 16" aria-hidden="true"><use xlink:href="#svg-link"></use></svg></a> Quick local access
+  
+  
+</h2>
+    
+
+<p>Port-forwarding needs no ingress and is the fastest way to verify a model.</p>
+
+<div class="language-sh highlighter-rouge"><div class="highlight"><pre class="highlight"><code>kubectl get svc <span class="nt">-n</span> models
+
+<span class="c"># Classic InferenceService</span>
+kubectl port-forward <span class="nt">-n</span> models svc/sentiment-predictor 8080:80
+
+<span class="c"># LLMInferenceService</span>
+kubectl port-forward <span class="nt">-n</span> models svc/llama-8b 8080:80
+</code></pre></div></div>
+<h2 id="endpoint-paths">
+  
+  
+    <a href="#endpoint-paths" class="anchor-heading" aria-labelledby="endpoint-paths"><svg viewBox="0 0 16 16" aria-hidden="true"><use xlink:href="#svg-link"></use></svg></a> Endpoint paths
+  
+  
+</h2>
+    
+
+<div class="table-wrapper"><table>
+  <thead>
+    <tr>
+      <th>Workload</th>
+      <th>Path</th>
+      <th>Payload</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>Predictive <code class="language-plaintext highlighter-rouge">InferenceService</code></td>
+      <td><code class="language-plaintext highlighter-rouge">/v1/models/{name}:predict</code></td>
+      <td><code class="language-plaintext highlighter-rouge">{"instances": [...]}</code></td>
+    </tr>
+    <tr>
+      <td>Open Inference Protocol</td>
+      <td><code class="language-plaintext highlighter-rouge">/v2/models/{name}/infer</code></td>
+      <td><code class="language-plaintext highlighter-rouge">{"inputs": [...]}</code></td>
+    </tr>
+    <tr>
+      <td>Generative runtimes</td>
+      <td><code class="language-plaintext highlighter-rouge">/openai/v1/completions</code></td>
+      <td>OpenAI completion request</td>
+    </tr>
+    <tr>
+      <td>Generative runtimes</td>
+      <td><code class="language-plaintext highlighter-rouge">/openai/v1/chat/completions</code></td>
+      <td>OpenAI chat request</td>
+    </tr>
+    <tr>
+      <td><code class="language-plaintext highlighter-rouge">LLMInferenceService</code></td>
+      <td><code class="language-plaintext highlighter-rouge">/v1/chat/completions</code></td>
+      <td>OpenAI chat request</td>
+    </tr>
+  </tbody>
+</table></div>
+
+<p>Predictive example:</p>
+
+<div class="language-sh highlighter-rouge"><div class="highlight"><pre class="highlight"><code>curl <span class="nt">-s</span> http://localhost:8080/v1/models/fraud-detector:predict <span class="se">\</span>
+  <span class="nt">-H</span> <span class="s1">'Content-Type: application/json'</span> <span class="se">\</span>
+  <span class="nt">-d</span> <span class="s1">'{"instances": [[5.1, 3.5, 1.4, 0.2]]}'</span>
+</code></pre></div></div>
+
+<p>Chat example:</p>
+
+<div class="language-sh highlighter-rouge"><div class="highlight"><pre class="highlight"><code>curl <span class="nt">-s</span> http://localhost:8080/v1/chat/completions <span class="se">\</span>
+  <span class="nt">-H</span> <span class="s1">'Content-Type: application/json'</span> <span class="se">\</span>
+  <span class="nt">-d</span> <span class="s1">'{
+    "model": "llama-8b",
+    "messages": [{"role": "user", "content": "Explain vector databases briefly."}],
+    "max_tokens": 200,
+    "temperature": 0.2
+  }'</span>
+</code></pre></div></div>
+
+<p>Streaming:</p>
+
+<div class="language-sh highlighter-rouge"><div class="highlight"><pre class="highlight"><code>curl <span class="nt">-N</span> http://localhost:8080/v1/chat/completions <span class="se">\</span>
+  <span class="nt">-H</span> <span class="s1">'Content-Type: application/json'</span> <span class="se">\</span>
+  <span class="nt">-d</span> <span class="s1">'{"model": "llama-8b", "messages": [{"role": "user", "content": "Count to ten"}], "stream": true}'</span>
+</code></pre></div></div>
+
+<p>List served models:</p>
+
+<div class="language-sh highlighter-rouge"><div class="highlight"><pre class="highlight"><code>curl <span class="nt">-s</span> http://localhost:8080/v1/models
+</code></pre></div></div>
+<h2 id="in-cluster-access">
+  
+  
+    <a href="#in-cluster-access" class="anchor-heading" aria-labelledby="in-cluster-access"><svg viewBox="0 0 16 16" aria-hidden="true"><use xlink:href="#svg-link"></use></svg></a> In-cluster access
+  
+  
+</h2>
+    
+
+<p>Other workloads reach a model through the cluster service name:</p>
+
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>http://sentiment-predictor.models.svc.cluster.local/v1/models/sentiment:predict
+http://llama-8b.models.svc.cluster.local/v1/chat/completions
+</code></pre></div></div>
+
+<p>Configure an OpenAI-compatible client with:</p>
+
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>base_url = http://llama-8b.models.svc.cluster.local/v1
+api_key  = not-needed
+</code></pre></div></div>
+<h2 id="ingress-for-predictive-workloads">
+  
+  
+    <a href="#ingress-for-predictive-workloads" class="anchor-heading" aria-labelledby="ingress-for-predictive-workloads"><svg viewBox="0 0 16 16" aria-hidden="true"><use xlink:href="#svg-link"></use></svg></a> Ingress for predictive workloads
+  
+  
+</h2>
+    
+
+<p>The core controller owns ingress defaults:</p>
+
+<div class="language-yaml highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="na">kserve-resources</span><span class="pi">:</span>
+  <span class="na">kserve</span><span class="pi">:</span>
+    <span class="na">controller</span><span class="pi">:</span>
+      <span class="na">gateway</span><span class="pi">:</span>
+        <span class="na">domain</span><span class="pi">:</span> <span class="s">models.example.com</span>
+        <span class="na">urlScheme</span><span class="pi">:</span> <span class="s">https</span>
+        <span class="na">ingressGateway</span><span class="pi">:</span>
+          <span class="na">enableGatewayApi</span><span class="pi">:</span> <span class="kc">true</span>
+          <span class="na">className</span><span class="pi">:</span> <span class="s">istio</span>
+          <span class="na">kserveGateway</span><span class="pi">:</span> <span class="s">kserve/kserve-ingress-gateway</span>
+          <span class="na">createGateway</span><span class="pi">:</span> <span class="kc">false</span>
+</code></pre></div></div>
+
+<p>With a domain configured, each model receives a hostname derived from the template:</p>
+
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>https://sentiment-models.models.example.com
+</code></pre></div></div>
+
+<p>Adjust the pattern:</p>
+
+<div class="language-yaml highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="na">kserve-resources</span><span class="pi">:</span>
+  <span class="na">kserve</span><span class="pi">:</span>
+    <span class="na">controller</span><span class="pi">:</span>
+      <span class="na">gateway</span><span class="pi">:</span>
+        <span class="na">domainTemplate</span><span class="pi">:</span> <span class="s1">'</span><span class="s">{{</span><span class="nv"> </span><span class="s">.Name</span><span class="nv"> </span><span class="s">}}-{{</span><span class="nv"> </span><span class="s">.Namespace</span><span class="nv"> </span><span class="s">}}.{{</span><span class="nv"> </span><span class="s">.IngressDomain</span><span class="nv"> </span><span class="s">}}'</span>
+        <span class="na">additionalIngressDomains</span><span class="pi">:</span>
+          <span class="pi">-</span> <span class="s">internal.example.com</span>
+</code></pre></div></div>
+
+<p>For a non-Istio controller such as Contour, set the class name:</p>
+
+<div class="language-yaml highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="na">kserve-resources</span><span class="pi">:</span>
+  <span class="na">kserve</span><span class="pi">:</span>
+    <span class="na">controller</span><span class="pi">:</span>
+      <span class="na">gateway</span><span class="pi">:</span>
+        <span class="na">ingressGateway</span><span class="pi">:</span>
+          <span class="na">className</span><span class="pi">:</span> <span class="s">contour</span>
+</code></pre></div></div>
+
+<blockquote class="warning">
+<p>A top-level <code class="language-plaintext highlighter-rouge">kserve:</code> block does not reach the subchart. Ingress settings must be under <code class="language-plaintext highlighter-rouge">kserve-resources</code>.</p>
+</blockquote>
+
+<p>Disable ingress creation entirely for internal-only clusters:</p>
+
+<div class="language-yaml highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="na">kserve-resources</span><span class="pi">:</span>
+  <span class="na">kserve</span><span class="pi">:</span>
+    <span class="na">controller</span><span class="pi">:</span>
+      <span class="na">gateway</span><span class="pi">:</span>
+        <span class="na">disableIngressCreation</span><span class="pi">:</span> <span class="kc">true</span>
+</code></pre></div></div>
+<h2 id="routers-for-llm-workloads">
+  
+  
+    <a href="#routers-for-llm-workloads" class="anchor-heading" aria-labelledby="routers-for-llm-workloads"><svg viewBox="0 0 16 16" aria-hidden="true"><use xlink:href="#svg-link"></use></svg></a> Routers for LLM workloads
+  
+  
+</h2>
+    
+
+<p><code class="language-plaintext highlighter-rouge">LLMInferenceService</code> uses a router with three parts:</p>
+
+<div class="table-wrapper"><table>
+  <thead>
+    <tr>
+      <th>Part</th>
+      <th>Purpose</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><code class="language-plaintext highlighter-rouge">gateway</code></td>
+      <td>Gateway API gateway that accepts traffic</td>
+    </tr>
+    <tr>
+      <td><code class="language-plaintext highlighter-rouge">route</code></td>
+      <td>HTTPRoute binding the gateway to the workload</td>
+    </tr>
+    <tr>
+      <td><code class="language-plaintext highlighter-rouge">scheduler</code></td>
+      <td>LLM-aware endpoint picker for cache- and load-aware routing</td>
+    </tr>
+  </tbody>
+</table></div>
+
+<p>The chart default requests all three as managed:</p>
+
+<div class="language-yaml highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="na">llmDefaults</span><span class="pi">:</span>
+  <span class="na">router</span><span class="pi">:</span>
+    <span class="na">gateway</span><span class="pi">:</span> <span class="pi">{}</span>
+    <span class="na">route</span><span class="pi">:</span> <span class="pi">{}</span>
+    <span class="na">scheduler</span><span class="pi">:</span> <span class="pi">{}</span>
+</code></pre></div></div>
+
+<p>Attach to an existing gateway instead of creating one:</p>
+
+<div class="language-yaml highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="na">llmInferenceServices</span><span class="pi">:</span>
+  <span class="pi">-</span> <span class="na">name</span><span class="pi">:</span> <span class="s">llama-8b</span>
+    <span class="na">model</span><span class="pi">:</span>
+      <span class="na">uri</span><span class="pi">:</span> <span class="s">hf://meta-llama/Llama-3.1-8B-Instruct</span>
+    <span class="na">router</span><span class="pi">:</span>
+      <span class="na">gateway</span><span class="pi">:</span>
+        <span class="na">refs</span><span class="pi">:</span>
+          <span class="pi">-</span> <span class="na">name</span><span class="pi">:</span> <span class="s">shared-gateway</span>
+            <span class="na">namespace</span><span class="pi">:</span> <span class="s">infrastructure</span>
+      <span class="na">route</span><span class="pi">:</span> <span class="pi">{}</span>
+      <span class="na">scheduler</span><span class="pi">:</span> <span class="pi">{}</span>
+</code></pre></div></div>
+
+<p>Service-only exposure, with no gateway or route:</p>
+
+<div class="language-yaml highlighter-rouge"><div class="highlight"><pre class="highlight"><code>    <span class="na">router</span><span class="pi">:</span>
+      <span class="na">scheduler</span><span class="pi">:</span> <span class="pi">{}</span>
+</code></pre></div></div>
+
+<p>Several workloads can share one gateway by pointing at the same reference, which keeps a single external address and TLS certificate.</p>
+<h2 id="gateway-api-prerequisites">
+  
+  
+    <a href="#gateway-api-prerequisites" class="anchor-heading" aria-labelledby="gateway-api-prerequisites"><svg viewBox="0 0 16 16" aria-hidden="true"><use xlink:href="#svg-link"></use></svg></a> Gateway API prerequisites
+  
+  
+</h2>
+    
+
+<div class="language-sh highlighter-rouge"><div class="highlight"><pre class="highlight"><code>kubectl get crd gateways.gateway.networking.k8s.io
+kubectl get gatewayclass
+kubectl get gateway <span class="nt">-A</span>
+kubectl get httproute <span class="nt">-A</span>
+</code></pre></div></div>
+
+<p>Install the Gateway API CRDs and a controller before enabling Gateway-based routing.</p>
+<h2 id="tls">
+  
+  
+    <a href="#tls" class="anchor-heading" aria-labelledby="tls"><svg viewBox="0 0 16 16" aria-hidden="true"><use xlink:href="#svg-link"></use></svg></a> TLS
+  
+  
+</h2>
+    
+
+<p>Terminate TLS at the gateway by referencing a certificate Secret in the gateway definition. cert-manager can issue it:</p>
+
+<div class="language-yaml highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="na">apiVersion</span><span class="pi">:</span> <span class="s">cert-manager.io/v1</span>
+<span class="na">kind</span><span class="pi">:</span> <span class="s">Certificate</span>
+<span class="na">metadata</span><span class="pi">:</span>
+  <span class="na">name</span><span class="pi">:</span> <span class="s">models-tls</span>
+  <span class="na">namespace</span><span class="pi">:</span> <span class="s">infrastructure</span>
+<span class="na">spec</span><span class="pi">:</span>
+  <span class="na">secretName</span><span class="pi">:</span> <span class="s">models-tls</span>
+  <span class="na">dnsNames</span><span class="pi">:</span>
+    <span class="pi">-</span> <span class="s">models.example.com</span>
+  <span class="na">issuerRef</span><span class="pi">:</span>
+    <span class="na">name</span><span class="pi">:</span> <span class="s">letsencrypt</span>
+    <span class="na">kind</span><span class="pi">:</span> <span class="s">ClusterIssuer</span>
+</code></pre></div></div>
+
+<p>The cert-manager instance used by KServe webhooks is separate and is configured under <code class="language-plaintext highlighter-rouge">kserve-resources.kserve.certManager</code>.</p>
+<h2 id="restricting-traffic">
+  
+  
+    <a href="#restricting-traffic" class="anchor-heading" aria-labelledby="restricting-traffic"><svg viewBox="0 0 16 16" aria-hidden="true"><use xlink:href="#svg-link"></use></svg></a> Restricting traffic
+  
+  
+</h2>
+    
+
+<p>Model endpoints have no built-in authentication. Protect them with network policy, a service mesh, or an authenticating gateway.</p>
+
+<div class="language-yaml highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="na">apiVersion</span><span class="pi">:</span> <span class="s">networking.k8s.io/v1</span>
+<span class="na">kind</span><span class="pi">:</span> <span class="s">NetworkPolicy</span>
+<span class="na">metadata</span><span class="pi">:</span>
+  <span class="na">name</span><span class="pi">:</span> <span class="s">models-allow-apps</span>
+  <span class="na">namespace</span><span class="pi">:</span> <span class="s">models</span>
+<span class="na">spec</span><span class="pi">:</span>
+  <span class="na">podSelector</span><span class="pi">:</span> <span class="pi">{}</span>
+  <span class="na">policyTypes</span><span class="pi">:</span>
+    <span class="pi">-</span> <span class="s">Ingress</span>
+  <span class="na">ingress</span><span class="pi">:</span>
+    <span class="pi">-</span> <span class="na">from</span><span class="pi">:</span>
+        <span class="pi">-</span> <span class="na">namespaceSelector</span><span class="pi">:</span>
+            <span class="na">matchLabels</span><span class="pi">:</span>
+              <span class="na">kubernetes.io/metadata.name</span><span class="pi">:</span> <span class="s">applications</span>
+</code></pre></div></div>
+<h2 id="diagnosing-access-problems">
+  
+  
+    <a href="#diagnosing-access-problems" class="anchor-heading" aria-labelledby="diagnosing-access-problems"><svg viewBox="0 0 16 16" aria-hidden="true"><use xlink:href="#svg-link"></use></svg></a> Diagnosing access problems
+  
+  
+</h2>
+    
+
+<div class="table-wrapper"><table>
+  <thead>
+    <tr>
+      <th>Symptom</th>
+      <th>Check</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>Connection refused on port-forward</td>
+      <td><code class="language-plaintext highlighter-rouge">kubectl get pods -n models</code>; the pod may not be ready</td>
+    </tr>
+    <tr>
+      <td><code class="language-plaintext highlighter-rouge">404</code> on a model path</td>
+      <td>Confirm the model name in the URL and in <code class="language-plaintext highlighter-rouge">/v1/models</code></td>
+    </tr>
+    <tr>
+      <td><code class="language-plaintext highlighter-rouge">503</code> from the gateway</td>
+      <td>Workload not ready, or the route points at the wrong service</td>
+    </tr>
+    <tr>
+      <td>DNS name does not resolve</td>
+      <td>Verify the gateway address and external DNS records</td>
+    </tr>
+    <tr>
+      <td>Works in-cluster, not externally</td>
+      <td>Inspect gateway, HTTPRoute, and load balancer state</td>
+    </tr>
+  </tbody>
+</table></div>
+
+<div class="language-sh highlighter-rouge"><div class="highlight"><pre class="highlight"><code>kubectl get inferenceservice <span class="nt">-n</span> models <span class="nt">-o</span> wide
+kubectl get llminferenceservice <span class="nt">-n</span> models <span class="nt">-o</span> wide
+kubectl get httproute <span class="nt">-n</span> models <span class="nt">-o</span> yaml
+kubectl describe gateway <span class="nt">-n</span> infrastructure shared-gateway
+</code></pre></div></div>
+
+          
+
+          
+            
+          
+        </main>
+        
+
+  <hr>
+  <footer>
+    
+      <p><a href="#top" id="back-to-top">Back to top</a></p>
+    
+
+    <p class="text-small text-grey-dk-100 mb-0">Open source under the Apache License 2.0. Provided AS IS, without warranties, responsibility, or support from SAS except where applicable law requires otherwise.</p>
+
+    
+  </footer>
+
+
+      </div>
+    </div>
+    
+      
+
+<div class="search-overlay"></div>
+
+    
+  </div>
+
+  
+    
+
+
+
+
+
+<script type="module">
+  
+  import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@10.9.0/dist/mermaid.esm.min.mjs';
+  
+
+  var config = {}
+;
+  mermaid.initialize(config);
+  mermaid.run({
+    querySelector: '.language-mermaid',
+  });
+</script>
+
+
+
+  
+</body>
+</html>
+
