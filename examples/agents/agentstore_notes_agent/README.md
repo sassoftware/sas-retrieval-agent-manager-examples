@@ -1,7 +1,7 @@
 # AgentStore Notes Agent
 
 This folder contains an agent example that behaves like the default tool calling agent, but
-uses the `AgentStore` to remember key details across turns in a conversation.
+uses the `AgentStore` to remember key details that persist between conversations.
 
 At a high level, this template shows how to:
 
@@ -37,13 +37,9 @@ For each user message:
    (a direct LLM query, without tools or retrieval), and saves those notes back to the
    `AgentStore` with `ram_client.store.set(...)`.
 
-This gives the agent a lightweight form of memory: instead of replaying the entire session
-history on every turn, it carries forward a condensed summary of what matters.
-
 ### Debug Commands
 
-These commands read/write the store directly, bypassing the LLM, so you can verify what is
-actually persisted:
+These commands read/write the store directly, bypassing the LLM, so you can verify what is persisted:
 
 - `#shownotes`: Return the raw notes currently stored in the `AgentStore`.
 - `#clearnotes`: Clear the stored notes.
@@ -53,17 +49,15 @@ actually persisted:
 Matching ignores case, spaces, and a leading `#`, so `show notes`, `ShowNotes`, and `#shownotes`
 all work the same way.
 
-## Why This Is Different From the LLM "Just Remembering"
+## Note on Persistent Storage
 
-Within a single, continuous conversation, RAM already replays the full session history to the
-LLM on every turn (`ram_client.get_session_history_as_langchain()`). This happens for **every**
-template, including [default_tool_calling_agent](../default_tool_calling_agent/), so recall
-within one conversation is not unique to this template and isn't a good test of `AgentStore`.
+Within a single conversation, RAM already replays the full session history to the
+LLM on every turn (`ram_client.get_session_history_as_langchain()`). This happens for most default
+templates, including [default_tool_calling_agent](../default_tool_calling_agent/).
 
-What `AgentStore` actually adds is memory that survives **outside** the current conversation:
+What `AgentStore` adds is memory that persists **outside** the current conversation:
 
 - It persists across brand-new conversations/sessions with the same agent.
-- It's available to scheduled automation (the `init` hook) with no live chat involved.
 - It stays a small, bounded summary instead of growing with every turn of raw transcript.
 
 ## Automation Hook (Optional)
