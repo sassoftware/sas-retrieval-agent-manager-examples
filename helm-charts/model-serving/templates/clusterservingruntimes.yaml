@@ -23,7 +23,9 @@ spec:
         - --model_path=/mnt/models
         - --port=9000
         - --rest_port=8080
-        - --file_system_poll_wait_seconds=0
+        {{- with .Values.clusterServingRuntimes.openVINO.args }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
       startupProbe:
         periodSeconds: 5
         failureThreshold: 9999
@@ -72,10 +74,9 @@ spec:
         - --host=0.0.0.0
         - --port=8080
         - --trust-remote-code
-        - --gpu-memory-utilization
-        - {{ .Values.clusterServingRuntimes.vllmCPU.gpuMemoryUtilization | quote }}
-        - --max-model-len
-        - {{ .Values.clusterServingRuntimes.vllmCPU.maxModelLen | toString | quote }}
+        {{- with .Values.clusterServingRuntimes.vllmCPU.args }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
       volumeMounts:
         - name: shm
           mountPath: /dev/shm

@@ -14,13 +14,84 @@ tests:
           value: kserve-openvino
         documentIndex: 0
       - equal:
+          path: spec.containers[0].args
+          value:
+            - --model_name={{.Name}}
+            - --model_path=/mnt/models
+            - --port=9000
+            - --rest_port=8080
+            - --file_system_poll_wait_seconds=0
+        documentIndex: 0
+      - equal:
           path: metadata.name
           value: kserve-vllm-cpu
         documentIndex: 1
       - equal:
-          path: spec.containers[0].args[5]
-          value: "0.7"
+          path: spec.containers[0].args
+          value:
+            - /mnt/models
+            - --host=0.0.0.0
+            - --port=8080
+            - --trust-remote-code
+            - --max-model-len
+            - "4096"
         documentIndex: 1
+  - it: appends vllmCPU args after the base args
+    set:
+      clusterServingRuntimes.openVINO.enabled: false
+      clusterServingRuntimes.vllmCPU.args:
+        - --dtype
+        - bfloat16
+    asserts:
+      - equal:
+          path: spec.containers[0].args
+          value:
+            - /mnt/models
+            - --host=0.0.0.0
+            - --port=8080
+            - --trust-remote-code
+            - --dtype
+            - bfloat16
+  - it: omits extra args when the list is empty
+    set:
+      clusterServingRuntimes.openVINO.enabled: false
+      clusterServingRuntimes.vllmCPU.args: []
+    asserts:
+      - equal:
+          path: spec.containers[0].args
+          value:
+            - /mnt/models
+            - --host=0.0.0.0
+            - --port=8080
+            - --trust-remote-code
+  - it: appends openVINO args after the base args
+    set:
+      clusterServingRuntimes.vllmCPU.enabled: false
+      clusterServingRuntimes.openVINO.args:
+        - --target_device=CPU
+        - --log_level=DEBUG
+    asserts:
+      - equal:
+          path: spec.containers[0].args
+          value:
+            - --model_name={{.Name}}
+            - --model_path=/mnt/models
+            - --port=9000
+            - --rest_port=8080
+            - --target_device=CPU
+            - --log_level=DEBUG
+  - it: omits extra openVINO args when the list is empty
+    set:
+      clusterServingRuntimes.vllmCPU.enabled: false
+      clusterServingRuntimes.openVINO.args: []
+    asserts:
+      - equal:
+          path: spec.containers[0].args
+          value:
+            - --model_name={{.Name}}
+            - --model_path=/mnt/models
+            - --port=9000
+            - --rest_port=8080
   - it: allows either custom runtime to be disabled
     set:
       clusterServingRuntimes.openVINO.enabled: false
