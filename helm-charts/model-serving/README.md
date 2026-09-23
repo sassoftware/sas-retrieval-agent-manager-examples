@@ -82,6 +82,47 @@ under `helm-charts/`, discovering them by listing the directory.
 
 ## Values migration
 
+### 0.2.0: runtime arguments
+
+Each entry of `clusterServingRuntimes` now takes one `args` list instead of a
+fixed key for each flag. The chart tracked a moving target: every new runtime
+flag needed a new value, a new template branch, and a new schema property. A
+list passes any flag the runtime image accepts, so the chart no longer has to
+follow upstream releases.
+
+| Removed value | Replacement entry in `clusterServingRuntimes.vllmCPU.args` |
+| --- | --- |
+| `maxModelLen: 4096` | `- --max-model-len` then `- "4096"` |
+| `gpuMemoryUtilization: "0.7"` | `- --gpu-memory-utilization` then `- "0.7"` |
+
+The removed keys are rejected by the values schema, so a values file that still
+sets them fails `helm lint` and `helm install` instead of being ignored.
+
+```yaml
+clusterServingRuntimes:
+  vllmCPU:
+    args:
+      - --max-model-len
+      - "4096"
+```
+
+Three rules apply to both runtimes:
+
+- Every entry must be a string. Kubernetes container `args` take strings only,
+  so quote a numeric value such as `"4096"`.
+- Helm replaces lists, it does not merge them. Setting `args` discards the
+  chart default, so copy forward any default that is still wanted.
+- The flag style follows the runtime. vLLM takes the flag and its value as two
+  entries. OpenVINO Model Server takes `--flag=value` as one entry.
+
+The arguments that KServe depends on stay in the template and cannot be
+overridden: `--model_name`, `--model_path`, `--port`, and `--rest_port` for
+OpenVINO, and `/mnt/models`, `--host`, `--port`, and `--trust-remote-code` for
+vLLM. `--rest_port` is fixed because the startup probe and the Prometheus
+annotations refer to the same port.
+
+### Native KServe dependencies
+
 The previous chart passed one shared `kserve` map into copied templates. Native dependencies use a value root for each chart:
 
 | Previous value | New value |
