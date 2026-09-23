@@ -409,7 +409,15 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add -- "$CHART_PATH/Chart.yaml"
-          git commit -m "chore(${CHART_NAME}): set chart version to ${{ steps.chart.outputs.version }} [skip ci]"
+          # Do not put a CI skip marker in this message. The push below already
+          # cannot start another run, because a push made with GITHUB_TOKEN never
+          # triggers a workflow. A skip marker here is not only redundant, it is
+          # actively harmful: this commit later becomes one bullet of the squashed
+          # commit message when a branch holding it is squash-merged, and GitHub
+          # reads that marker in the head commit of the push to main. That silences
+          # every workflow for the whole merge, so no chart and no documentation is
+          # published. See the note on persist-credentials in the checkout step.
+          git commit -m "chore(${CHART_NAME}): set chart version to ${{ steps.chart.outputs.version }}"
 
           # Rebase on the newest main so a parallel commit does not reject the push.
           git pull --rebase origin main
