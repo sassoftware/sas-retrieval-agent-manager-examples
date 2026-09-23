@@ -1,0 +1,28 @@
+apiVersion: v2
+name: litellm
+description: >
+  LiteLLM proxy with pluggable routing. Serves the OpenAI-compatible gateway,
+  the management API, and the Admin UI from one Deployment, and publishes it
+  through an Ingress, a Gateway API HTTPRoute, a Contour HTTPProxy, or an
+  OpenShift Route. Models are managed either from config.yaml or from
+  PostgreSQL.
+type: application
+version: 0.1.0
+# The upstream LiteLLM release this chart targets. It is the default container
+# tag: `image.tag` is empty by default and falls back to this value, so one edit
+# here moves the proxy and the migration Job together and can never leave them
+# on different releases. Bump it with every upgrade to a new LiteLLM version.
+appVersion: "v1.101.0"
+kubeVersion: ">=1.25.0-0"
+home: https://docs.litellm.ai/
+sources:
+  - https://github.com/BerriAI/litellm
+keywords:
+  - litellm
+  - llm
+  - proxy
+  - gateway
+  - openai
+annotations:
+  org.opencontainers.image.source: "https://github.com/BerriAI/litellm"
+  org.opencontainers.image.url: "https://docs.litellm.ai/"

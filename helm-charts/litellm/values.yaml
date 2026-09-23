@@ -1,0 +1,500 @@
+# yaml-language-server: $schema=values.schema.json
+
+nameOverride: ""
+fullnameOverride: ""
+
+# Applied to every object this chart renders.
+commonLabels: {}
+commonAnnotations: {}
+
+# ─── Data flow ───────────────────────────────────────────────────────────────
+# Which of the two supported model-management flows this release runs.
+#
+# config   Models live in this file, under `models` / `proxyConfig.model_list`,
+#          and are rendered into the proxy's config.yaml ConfigMap. No
+#          database and no migration Job are deployed. Adding or changing a
+#          model is a `helm upgrade`, which rolls the Deployment (the pod
+#          template carries a checksum of the ConfigMap). Model state is
+#          reproducible from Git; nothing can be changed at runtime.
+#
+# database Models live in PostgreSQL. The chart sets
+#          `general_settings.store_model_in_db`, runs a migration Job
+#          (`prisma migrate deploy`) ahead of the proxy, and points the proxy
+#          at the database. Models are added and edited at runtime through the
+#          Admin UI or the /model/* API, with no redeploy. config.yaml is
+#          still mounted and still owns everything that is not a model
+#          (callbacks, router settings, guardrails, general_settings).
+#
+# Virtual keys, teams, budgets, and spend tracking need `database` — they have
+# no config.yaml representation.
+modelManagement:
+  mode: config
+
+  # database mode only. When true, `models` below is rendered into config.yaml
+  # as well, so those entries load on every start regardless of what the
+  # database holds. Use it to pin a floor of always-present models. They
+  # cannot be edited from the UI, because config entries are read-only there.
+  seedFromConfig: false
+
+# ─── Model catalog (config flow) ─────────────────────────────────────────────
+# Appended to `proxyConfig.model_list`. Secrets belong in an
+# `environmentSecrets` Secret and are referenced as `os.environ/<NAME>`; never
+# put a literal API key here.
+models:
+  # Replace this entry. It exists only so that a default `helm install`
+  # produces a proxy that starts: it points at LiteLLM's public mock endpoint
+  # and serves no real model.
+  - model_name: fake-openai-endpoint
+    litellm_params:
+      model: openai/fake
+      api_key: fake-key
+      api_base: https://exampleopenaiendpoint-production.up.railway.app/
+  # - model_name: gpt-4o
+  #   litellm_params:
+  #     model: azure/gpt-4o
+  #     api_base: https://example.openai.azure.com/
+  #     api_key: os.environ/AZURE_OPENAI_API_KEY
+  #   model_info:
+  #     mode: chat
+
+# Everything else in the proxy's config.yaml. Rendered verbatim, so any key the
+# proxy understands is available here. The chart fills in `master_key` and, in
+# database mode, `store_model_in_db` only when you have not set them yourself.
+# Reference: https://docs.litellm.ai/docs/proxy/configs
+proxyConfig:
+  general_settings: {}
+  # litellm_settings:
+  #   drop_params: true
+  #   callbacks: ["prometheus"]
+  # router_settings:
+  #   routing_strategy: usage-based-routing-v2
+
+config:
+  # Mount an existing ConfigMap instead of rendering one. `models` and
+  # `proxyConfig` are ignored in that mode.
+  existingConfigMap:
+    name: ""
+    key: config.yaml
+  # Path the config file is mounted at inside the container.
+  mountPath: /etc/litellm/config.yaml
+
+# ─── Workload ────────────────────────────────────────────────────────────────
+replicaCount: 1
+# Passed as --num_workers. Leave empty to let the image decide.
+numWorkers: ""
+# Address the proxy binds to inside the pod.
+listen: "0.0.0.0"
+
+image:
+  repository: ghcr.io/berriai/litellm
+  # Leave empty. The tag then follows the chart's appVersion, which is the
+  # upstream LiteLLM release this chart was written against, and the proxy and
+  # the migration Job are guaranteed to run the same one. Set it only to pin a
+  # different release than the chart targets; `latest` and `main-latest` are
+  # rejected, because a tag that moves between a Job run and a pod restart puts
+  # a different proxy version against the schema that Job just migrated.
+  tag: ""
+  pullPolicy: IfNotPresent
+imagePullSecrets: []
+
+serviceAccount:
+  # LiteLLM never calls the Kubernetes API, so it does not need one of its own.
+  # Create one when a cloud IAM binding (IRSA, Workload Identity) must be
+  # attached for IAM database auth.
+  create: false
+  automount: true
+  annotations: {}
+  name: ""
+
+deploymentAnnotations: {}
+deploymentLabels: {}
+deploymentMinReadySeconds: 0
+podAnnotations: {}
+podLabels: {}
+
+# e.g. {type: RollingUpdate, rollingUpdate: {maxUnavailable: 0, maxSurge: 1}}
+strategy: {}
+
+# Keep this a few seconds above GRACEFUL_SHUTDOWN_TIMEOUT (30s by default) so
+# in-flight requests finish before SIGKILL.
+terminationGracePeriodSeconds: 90
+topologySpreadConstraints: []
+
+podSecurityContext: {}
+# The image writes to the filesystem on startup. With
+# readOnlyRootFilesystem: true the chart adds emptyDir volumes for /tmp,
+# /.cache, and /.npm so the proxy still starts.
+securityContext: {}
+#  readOnlyRootFilesystem: true
+#  runAsNonRoot: true
+#  runAsUser: 1000
+#  allowPrivilegeEscalation: false
+#  capabilities:
+#    drop: ["ALL"]
+
+# Unset so the chart installs on a small cluster. A worker at DB-connected
+# steady state needs roughly 1 CPU and 4Gi; scale both with numWorkers.
+resources: {}
+#  requests:
+#    cpu: "1"
+#    memory: 4Gi
+#  limits:
+#    cpu: "1"
+#    memory: 4Gi
+
+nodeSelector: {}
+tolerations: []
+affinity: {}
+
+# Prefer the proxy's own /health/drain over a fixed sleep. It needs
+# general_settings.enable_drain_endpoint: true, and a drain_endpoint_token sent
+# on the X-Drain-Token header whenever the port is reachable from other pods.
+lifecycle: {}
+
+volumes: []
+volumeMounts: []
+extraContainers: []
+extraInitContainers: []
+
+# Override the image entrypoint. Leave empty to use the image default.
+command: []
+# Override the proxy arguments. Leave empty to use --config (and --num_workers).
+args: []
+
+# ─── Environment ─────────────────────────────────────────────────────────────
+# Secrets and ConfigMaps mounted wholesale as environment variables. Their keys
+# are what `os.environ/<NAME>` in config.yaml resolves against.
+environmentSecrets: []
+environmentConfigMaps: []
+
+# Sets LITELLM_LOG. Rendered as a direct `env:` entry, which outranks any
+# `envFrom:` source — set to "" to source it from a Secret or ConfigMap instead.
+logLevel: INFO
+
+# Plain key/value pairs, rendered as `env:` entries.
+envVars: {}
+# Full Kubernetes EnvVar list, for valueFrom and friends.
+extraEnvVars: []
+
+masterKey:
+  # Leave empty to generate `sk-...` on first install. Later upgrades reuse the
+  # value already in the Secret, so upgrading never rotates the key.
+  value: ""
+  # Use a Secret you manage instead. The chart then renders no Secret of its own.
+  existingSecret:
+    name: ""
+    key: masterkey
+
+# Enterprise license, read from a Secret into LITELLM_LICENSE.
+license:
+  existingSecret:
+    name: ""
+    key: license
+
+ui:
+  # Admin UI login, read from a Secret into UI_USERNAME / UI_PASSWORD. Without
+  # it, the UI is reached with the master key.
+  credentialsSecret:
+    name: ""
+    usernameKey: username
+    passwordKey: password
+
+# ─── Service ─────────────────────────────────────────────────────────────────
+service:
+  type: ClusterIP
+  port: 4000
+  annotations: {}
+  # Only used when type is LoadBalancer.
+  loadBalancerClass: ""
+  loadBalancerSourceRanges: []
+
+# Serve Prometheus /metrics from a separate process and port, so a scrape never
+# lands on an inference worker. The port carries no virtual-key auth: keep it
+# off public routing. Needs image v1.101.0 or newer.
+metricsServer:
+  enabled: false
+  port: 4001
+
+serviceMonitor:
+  enabled: false
+  labels: {}
+  annotations: {}
+  interval: 15s
+  scrapeTimeout: 10s
+  relabelings: []
+  namespaceSelector:
+    matchNames: []
+
+livenessProbe:
+  path: /health/liveliness
+  initialDelaySeconds: 0
+  periodSeconds: 15
+  timeoutSeconds: 5
+  successThreshold: 1
+  failureThreshold: 5
+
+readinessProbe:
+  path: /health/readiness
+  initialDelaySeconds: 0
+  periodSeconds: 10
+  timeoutSeconds: 5
+  successThreshold: 1
+  failureThreshold: 3
+
+startupProbe:
+  path: /health/readiness
+  initialDelaySeconds: 0
+  periodSeconds: 10
+  timeoutSeconds: 5
+  successThreshold: 1
+  failureThreshold: 30
+
+# ─── Routing ─────────────────────────────────────────────────────────────────
+# Shared settings first, then one block per implementation. More than one may
+# be enabled at a time, which is how you migrate from Ingress to Gateway API
+# without a gap.
+#
+# The chart never assembles a DATABASE_URL-style connection string here: each
+# implementation is rendered as its own native object, so controller-specific
+# fields stay first-class instead of being smuggled through annotations.
+routing:
+  # Hostnames this release answers on. Required for ingress and httpProxy;
+  # optional for httpRoute (a route with no hostname matches the listener's)
+  # and for route (OpenShift generates one).
+  hosts: []
+  # - litellm.example.com
+
+  # Path prefix the proxy is published under. The proxy serves the OpenAI API,
+  # the management API, and the UI from the same port, so one prefix covers all.
+  path: /
+
+  tls:
+    enabled: false
+    # Secret of type kubernetes.io/tls. Ignored by `route`, which carries its
+    # own termination settings below.
+    secretName: ""
+
+  # Merged into every routing object this chart renders.
+  annotations: {}
+  labels: {}
+
+  # networking.k8s.io/v1 Ingress. Works with ingress-nginx, HAProxy, Traefik,
+  # and any other classic controller.
+  ingress:
+    enabled: false
+    className: ""
+    pathType: Prefix
+    annotations: {}
+    # Extra paths per host, e.g. to send /metrics somewhere else.
+    extraPaths: []
+    # - path: /ui
+    #   pathType: Prefix
+    #   service:
+    #     name: other-service
+    #     port: 8080
+
+  # gateway.networking.k8s.io/v1 HTTPRoute. Envoy Gateway, Contour, Istio,
+  # NGINX Gateway Fabric, and every other Gateway API implementation.
+  httpRoute:
+    enabled: false
+    # Required. The Gateway (or Gateways) this route attaches to.
+    parentRefs: []
+    # - name: eg
+    #   namespace: envoy-gateway-system
+    #   sectionName: https
+    # Overrides the match built from routing.path.
+    matches: []
+    # Applied to the generated rule, e.g. a URLRewrite or RequestHeaderModifier.
+    filters: []
+    # e.g. {request: 0s, backendRequest: 0s} to let long completions run.
+    timeouts: {}
+    # Appended after the generated rule.
+    extraRules: []
+    annotations: {}
+
+  # projectcontour.io/v1 HTTPProxy. Use this over a plain Ingress when you want
+  # Contour's retry policy, timeouts, or per-route load balancer policy.
+  httpProxy:
+    enabled: false
+    ingressClassName: ""
+    tls:
+      # Defaults to routing.tls.secretName.
+      secretName: ""
+      minimumProtocolVersion: "1.2"
+      passthrough: false
+    # Contour MatchConditions; overrides the prefix built from routing.path.
+    conditions: []
+    loadBalancerPolicy: {}
+    # e.g. {responseTimeout: 600s, idleConnectionTimeout: 60s}
+    timeoutPolicy: {}
+    retryPolicy: {}
+    # Appended after the generated route.
+    extraRoutes: []
+    includes: []
+    annotations: {}
+
+  # route.openshift.io/v1 Route.
+  route:
+    enabled: false
+    wildcardPolicy: None
+    tls:
+      termination: edge
+      insecureEdgeTerminationPolicy: Redirect
+      # Only needed for reencrypt or passthrough with a custom certificate.
+      destinationCACertificate: ""
+    annotations: {}
+
+# ─── Database (database flow) ────────────────────────────────────────────────
+# Forced on when modelManagement.mode is `database`. Turn it on independently to
+# get virtual keys, teams, budgets, and spend tracking while still managing
+# models from config.yaml.
+#
+# This chart deploys no database. Point it at a PostgreSQL 14 or later server
+# you already run — a managed one (Azure Database for PostgreSQL, RDS,
+# Cloud SQL) or an operator-managed cluster.
+#
+# Credentials are read from a Secret only; the chart accepts no inline password.
+# It emits the discrete DATABASE_* variables and lets the proxy assemble and
+# percent-encode the URL, so reserved characters in a password cannot corrupt it.
+database:
+  enabled: false
+
+  host: ""
+  port: 5432
+  name: litellm
+  # Postgres schema, when the proxy does not own the whole database.
+  schema: ""
+
+  # Appended to the assembled URL. `verify-full` with a root cert is the
+  # setting a managed PostgreSQL service expects.
+  sslMode: ""
+  # In-container path to a CA certificate, from a Secret you mount through
+  # `volumes` / `volumeMounts`. Setting it implies sslMode verify-full.
+  sslRootCert: ""
+
+  auth:
+    # password   DATABASE_PASSWORD, read from the Secret below.
+    # awsIam     IAM_TOKEN_DB_AUTH. The proxy mints an RDS IAM token at
+    #            startup; no password is read.
+    # azureEntra AZURE_POSTGRESQL_AUTH, for Microsoft Entra ID auth.
+    # Both token modes need a ServiceAccount with the cloud IAM binding, so set
+    # serviceAccount.create and annotate it.
+    mode: password
+
+  existingSecret:
+    name: ""
+    usernameKey: username
+    passwordKey: password
+    # When set, the whole connection URL is taken from this key and the
+    # discrete host/port/name settings above are not emitted. Use it when the
+    # URL carries parameters the discrete fields cannot express.
+    urlKey: ""
+    # When set, the host is read from this key instead of `host` above.
+    hostKey: ""
+
+  # Send read-only queries to a replica. Fields left empty fall back to the
+  # writer's values.
+  readReplica:
+    enabled: false
+    host: ""
+    port: ""
+    existingSecret:
+      name: ""
+      usernameKey: ""
+      passwordKey: ""
+      urlKey: ""
+      hostKey: ""
+
+  # In-pod PgBouncer in transaction mode, shared by every worker. Without it a
+  # pod holds numWorkers x connection_limit upstream connections. A starting
+  # profile for numWorkers 4 is maxDbConnections 20.
+  connectionPool:
+    enabled: false
+    maxDbConnections: 20
+    maxClientConn: 1000
+
+  # Required in front of an external transaction-mode pooler.
+  disablePreparedStatements: false
+  # Seconds. Recycles pooled sockets before infrastructure idle timeouts drop
+  # them. The proxy defaults to 60.
+  maxIdleConnectionLifetime: ""
+
+# ─── Redis ───────────────────────────────────────────────────────────────────
+# The proxy's coordination store: cross-pod tpm/rpm limits, spend tracking, and
+# the pod lock manager. Required for correct rate limiting above one replica.
+# This chart deploys no Redis; point it at one you already run.
+redis:
+  host: ""
+  port: 6379
+  existingSecret:
+    name: ""
+    passwordKey: password
+  sentinel:
+    enabled: false
+    masterSet: mymaster
+  # Render general_settings.coordination_redis from the settings above. Set to
+  # false to wire only the REDIS_* variables, e.g. for response caching alone.
+  # A coordination_redis block you write in proxyConfig always wins.
+  coordination: true
+
+# ─── Migration Job (database flow) ───────────────────────────────────────────
+# Runs `prisma migrate deploy` once, ahead of the proxy, so N replicas do not
+# race one database on every rollout. While it is enabled the proxy starts with
+# DISABLE_SCHEMA_UPDATE=true.
+migrationJob:
+  enabled: true
+  backoffLimit: 4
+  ttlSecondsAfterFinished: 120
+  # Wall-clock budget for the whole Job, shared across every retry. Without it
+  # a migration blocked on the database never fails, and a Helm hook release
+  # waits on it forever. Set to null to opt out.
+  activeDeadlineSeconds: 1800
+  annotations: {}
+  podAnnotations: {}
+  # Needed when the Job requires its own cloud IAM identity for token auth.
+  serviceAccountName: ""
+  resources: {}
+  extraContainers: []
+  extraInitContainers: []
+  hooks:
+    # A Job's pod template is immutable, so a stable-named Job cannot be
+    # updated in place: the first `helm upgrade` that changes the image tag or
+    # an env var is rejected. The Helm hook deletes and recreates the Job
+    # ahead of each install and upgrade, which is what makes repeated upgrades
+    # work. Leave it on for plain Helm.
+    helm:
+      enabled: true
+      weight: "1"
+    # Turn this on and the Helm hook off when a GitOps controller runs the Job
+    # as a PreSync hook. Running both at once migrates twice.
+    argocd:
+      enabled: false
+
+# ─── Scaling ─────────────────────────────────────────────────────────────────
+autoscaling:
+  enabled: false
+  minReplicas: 1
+  maxReplicas: 100
+  targetCPUUtilizationPercentage: 60
+  # Deliberately unset. The prisma query engine's resident memory is a
+  # high-water mark that never comes back down, so a memory target reads the
+  # largest write a pod ever did rather than its current load, and replicas
+  # ratchet up without ever scaling back in. Size memory under `resources`.
+  targetMemoryUtilizationPercentage: ""
+  # autoscaling/v2 Pods metrics on the proxy's own counters. Both need a
+  # Prometheus Adapter serving these names on custom.metrics.k8s.io.
+  targetRequestsPerSecond: ""
+  targetTokensPerSecond: ""
+  behavior: {}
+
+pdb:
+  enabled: false
+  # Set exactly one of the two.
+  minAvailable: null
+  maxUnavailable: null
+  annotations: {}
+  labels: {}
+
+# Arbitrary manifests rendered alongside the release, e.g. an ExternalSecret or
+# a NetworkPolicy. Each entry is a complete object and is run through `tpl`.
+extraResources: []

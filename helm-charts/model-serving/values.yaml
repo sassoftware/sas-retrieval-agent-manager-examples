@@ -39,6 +39,17 @@ clusterServingRuntimes:
     name: kserve-openvino
     image: openvino/model_server:2026.3
     imagePullPolicy: IfNotPresent
+    # Extra arguments appended after the fixed base args
+    # (--model_name, --model_path, --port, --rest_port).
+    #
+    # WARNING: Helm REPLACES lists, it does not merge them. Setting args in
+    # your own values file discards every default below, so copy forward any
+    # default you still want.
+    #
+    # OpenVINO Model Server uses --flag=value, so each entry is one string.
+    # Reference: https://docs.openvino.ai/latest/ovms_docs_parameters.html
+    args:
+      - --file_system_poll_wait_seconds=0
     resources:
       requests:
         cpu: "1"
@@ -51,9 +62,20 @@ clusterServingRuntimes:
     name: kserve-vllm-cpu
     image: public.ecr.aws/q9t5s3a7/vllm-cpu-release-repo:v0.26.0
     imagePullPolicy: IfNotPresent
-    maxModelLen: 4096
-    gpuMemoryUtilization: "0.7"
     shmSize: 1Gi
+    # Extra arguments appended after the fixed base args
+    # (/mnt/models, --host, --port, --trust-remote-code).
+    #
+    # WARNING: Helm REPLACES lists, it does not merge them. Setting args in
+    # your own values file discards every default below, so copy forward any
+    # default you still want.
+    #
+    # Every entry must be a string; quote numeric values. Put the flag and its
+    # value in separate entries.
+    # Reference: https://docs.vllm.ai/en/latest/cli/serve/
+    args:
+      - --max-model-len
+      - "4096"
 
 modelDefaults:
   runtime: kserve-openvino

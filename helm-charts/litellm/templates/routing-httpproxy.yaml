@@ -1,0 +1,71 @@
+{{- if .Values.routing.httpProxy.enabled }}
+{{- $fullName := include "litellm.fullname" . }}
+{{- $svcPort := .Values.service.port }}
+{{- $r := .Values.routing }}
+{{/*
+Contour's own CRD. Prefer it over a plain Ingress when the retry policy,
+response timeout, or load balancer policy matters — on an Ingress those are
+controller-specific annotations that no schema validates.
+
+A streaming completion can outlive Envoy's 15s default response timeout. Set
+routing.httpProxy.timeoutPolicy.response to `infinity` or a generous value.
+*/}}
+apiVersion: projectcontour.io/v1
+kind: HTTPProxy
+metadata:
+  name: {{ $fullName }}
+  labels:
+    {{- include "litellm.labels" . | nindent 4 }}
+    {{- with $r.labels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+  {{- $annotations := merge (dict) (default dict $r.httpProxy.annotations) (default dict $r.annotations) (default dict .Values.commonAnnotations) }}
+  {{- with $annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  {{- with $r.httpProxy.ingressClassName }}
+  ingressClassName: {{ . }}
+  {{- end }}
+  virtualhost:
+    fqdn: {{ first $r.hosts | quote }}
+    {{- if $r.tls.enabled }}
+    tls:
+      {{- if $r.httpProxy.tls.passthrough }}
+      passthrough: true
+      {{- else }}
+      secretName: {{ default $r.tls.secretName $r.httpProxy.tls.secretName }}
+      minimumProtocolVersion: {{ $r.httpProxy.tls.minimumProtocolVersion | quote }}
+      {{- end }}
+    {{- end }}
+  routes:
+    - conditions:
+        {{- if $r.httpProxy.conditions }}
+        {{- toYaml $r.httpProxy.conditions | nindent 8 }}
+        {{- else }}
+        - prefix: {{ $r.path | quote }}
+        {{- end }}
+      services:
+        - name: {{ $fullName }}
+          port: {{ $svcPort }}
+      {{- with $r.httpProxy.loadBalancerPolicy }}
+      loadBalancerPolicy:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with $r.httpProxy.timeoutPolicy }}
+      timeoutPolicy:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with $r.httpProxy.retryPolicy }}
+      retryPolicy:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+    {{- with $r.httpProxy.extraRoutes }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+  {{- with $r.httpProxy.includes }}
+  includes:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+{{- end }}

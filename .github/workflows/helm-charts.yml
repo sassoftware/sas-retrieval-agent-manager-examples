@@ -1,0 +1,438 @@
+name: Helm charts
+
+# One workflow for every chart under helm-charts/. The matrix is built by
+# listing that directory, so a new chart is picked up by existing: nothing here
+# names a chart. Each chart is validated in its own job, and publishes from the
+# last steps of that same job when it is on main and its own files changed.
+
+on:
+  push:
+    paths:
+      - "helm-charts/**"
+      - ".github/workflows/helm-charts.yml"
+  pull_request:
+    paths:
+      - "helm-charts/**"
+      - ".github/workflows/helm-charts.yml"
+  workflow_dispatch:
+    inputs:
+      chart:
+        description: "Limit the run to one chart. Leave empty for every chart."
+        required: false
+        default: ""
+
+permissions:
+  contents: write
+  packages: write
+
+concurrency:
+  # One group for each branch. Two runs cannot claim the same patch number.
+  group: helm-charts-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  CHARTS_DIR: helm-charts
+  # The registry namespace for charts. A container build pipeline can use
+  # "containers" in the same way, so charts and images stay separated.
+  REGISTRY_SUBPATH: charts
+  HELM_VERSION: v3.19.0
+  UNITTEST_VERSION: "1.0.3"
+  WORKFLOW_FILE: .github/workflows/helm-charts.yml
+
+jobs:
+  discover:
+    name: Discover charts
+    runs-on: ubuntu-latest
+    outputs:
+      validate_charts: ${{ steps.detect.outputs.validate_charts }}
+      publish_charts: ${{ steps.detect.outputs.publish_charts }}
+      any_validate: ${{ steps.detect.outputs.any_validate }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          # fetch-depth: 0 fetches the complete history of every branch and tag.
+          # Without it the runner makes a shallow clone of one commit, and no
+          # comparison against an earlier commit is possible.
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: List the charts and compare them against the previous state
+        id: detect
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CHART_INPUT: ${{ inputs.chart }}
+        run: |
+          set -euo pipefail
+
+          # ── Every directory under helm-charts holding a Chart.yaml is a chart ──
+          mapfile -t charts < <(
+            find "$CHARTS_DIR" -mindepth 2 -maxdepth 2 -name Chart.yaml -printf '%h\n' \
+              | sed "s|^${CHARTS_DIR}/||" \
+              | sort
+          )
+          if [[ ${#charts[@]} -eq 0 ]]; then
+            echo "No chart found under $CHARTS_DIR." >&2
+            exit 1
+          fi
+          echo "Charts in the repository: ${charts[*]}"
+
+          if [[ -n "$CHART_INPUT" ]]; then
+            if ! printf '%s\n' "${charts[@]}" | grep -qx -- "$CHART_INPUT"; then
+              echo "The requested chart '$CHART_INPUT' does not exist under $CHARTS_DIR." >&2
+              exit 1
+            fi
+            charts=("$CHART_INPUT")
+            echo "The run was limited to '$CHART_INPUT' by workflow_dispatch."
+          fi
+
+          # ── Resolve the commits to compare ───────────────────────────────────
+          case "${{ github.event_name }}" in
+            pull_request)
+              base="${{ github.event.pull_request.base.sha }}"
+              head="${{ github.event.pull_request.head.sha }}"
+              ;;
+            push)
+              base="${{ github.event.before }}"
+              head="${{ github.sha }}"
+              ;;
+            *)
+              base=""
+              head=""
+              ;;
+          esac
+
+          # Report what the local clone holds. This makes a wrong result easy to read.
+          echo "Local commits: $(git rev-list --count HEAD)"
+          echo "Shallow clone: $(git rev-parse --is-shallow-repository)"
+          echo "Base commit: ${base:-none}"
+          echo "Head commit: ${head:-none}"
+
+          have_commit() {
+            [[ -n "$1" && ! "$1" =~ ^0+$ ]] && git cat-file -e "${1}^{commit}" 2>/dev/null
+          }
+
+          changed_files=""
+          compared=false
+          note="A manual run checks every chart."
+
+          if [[ "$base" =~ ^0+$ ]]; then
+            # The first push of a branch has no previous commit on that branch.
+            # Compare against the default branch instead, so a new branch that does
+            # not touch a chart is correctly reported as unchanged.
+            default_branch="origin/${{ github.event.repository.default_branch }}"
+            if git rev-parse --verify --quiet "$default_branch^{commit}" >/dev/null; then
+              base="$(git rev-parse "$default_branch")"
+              echo "This is the first push of the branch. The base is $default_branch ($base)."
+            else
+              base=""
+              note="The default branch is not available, so every chart is treated as changed."
+            fi
+          fi
+
+          if [[ -n "$base" && -n "$head" ]]; then
+            if have_commit "$base" && have_commit "$head"; then
+              # Three dots compare against the merge base, so a change made only on
+              # the base branch does not count as a change of this branch.
+              changed_files="$(git diff --name-only "$base...$head")"
+              compared=true
+              echo "The local clone held both commits."
+            else
+              # A force push can remove the base commit from the branch history, but
+              # the GitHub compare API still knows it. This keeps the result correct
+              # instead of building every chart every time.
+              echo "A commit is missing from the local clone. The compare API is used."
+              if changed_files="$(gh api "repos/${{ github.repository }}/compare/${base}...${head}" \
+                    --jq '.files[].filename' 2>/dev/null)"; then
+                compared=true
+              else
+                note="Neither the local clone nor the compare API resolved ${base}...${head}. Every chart is treated as changed."
+              fi
+            fi
+          fi
+
+          # ── Split the charts into two lists ──────────────────────────────────
+          # publish: the chart's own files changed, so it earns a new version.
+          # validate: publish, plus every chart when this workflow itself changed,
+          #           so an edit here is actually exercised without republishing
+          #           charts that nobody touched.
+          publish=()
+          validate=()
+
+          if [[ "$compared" == true ]]; then
+            for chart in "${charts[@]}"; do
+              if printf '%s\n' "$changed_files" | grep -q "^${CHARTS_DIR}/${chart}/"; then
+                publish+=("$chart")
+              fi
+            done
+
+            if printf '%s\n' "$changed_files" | grep -qx -- "$WORKFLOW_FILE"; then
+              validate=("${charts[@]}")
+              note="This workflow changed, so every chart is validated. Only a chart whose own files changed is published."
+            else
+              validate=("${publish[@]}")
+              if [[ ${#publish[@]} -eq 0 ]]; then
+                note="No file under $CHARTS_DIR changed."
+              else
+                note="Changed charts: ${publish[*]}"
+              fi
+            fi
+          else
+            validate=("${charts[@]}")
+            publish=("${charts[@]}")
+          fi
+
+          to_json() {
+            if [[ $# -eq 0 ]]; then
+              echo "[]"
+            else
+              printf '%s\n' "$@" | jq -R -s -c 'split("\n") | map(select(length > 0))'
+            fi
+          }
+
+          validate_json="$(to_json ${validate[@]+"${validate[@]}"})"
+          publish_json="$(to_json ${publish[@]+"${publish[@]}"})"
+          any_validate=false
+          [[ ${#validate[@]} -gt 0 ]] && any_validate=true
+
+          {
+            echo "validate_charts=$validate_json"
+            echo "publish_charts=$publish_json"
+            echo "any_validate=$any_validate"
+          } >>"$GITHUB_OUTPUT"
+
+          {
+            echo "### Chart discovery"
+            echo ""
+            echo "| Item | Value |"
+            echo "| --- | --- |"
+            echo "| Charts found | \`${charts[*]}\` |"
+            echo "| Validated | \`$validate_json\` |"
+            echo "| Eligible to publish | \`$publish_json\` |"
+            echo ""
+            echo "$note"
+          } >>"$GITHUB_STEP_SUMMARY"
+
+  chart:
+    name: ${{ matrix.chart }}
+    needs: discover
+    if: needs.discover.outputs.any_validate == 'true'
+    runs-on: ubuntu-latest
+    strategy:
+      # One broken chart must not hide the result of the others.
+      fail-fast: false
+      # The publish block commits the resolved version back to main. Serialising
+      # the matrix keeps two charts from racing on that one branch.
+      max-parallel: 1
+      matrix:
+        chart: ${{ fromJSON(needs.discover.outputs.validate_charts) }}
+    env:
+      CHART_NAME: ${{ matrix.chart }}
+      CHART_PATH: helm-charts/${{ matrix.chart }}
+      # False for a chart pulled in only because this workflow changed. Such a
+      # chart is validated but never republished.
+      CHART_PUBLISHABLE: ${{ contains(fromJSON(needs.discover.outputs.publish_charts), matrix.chart) }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          # The default GITHUB_TOKEN is kept so the commit-back step can push.
+          # A push made with GITHUB_TOKEN never starts another workflow run.
+          persist-credentials: true
+
+      - name: Decide whether this run publishes
+        id: mode
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ "${{ github.ref }}" == "refs/heads/main" \
+             && "${{ github.event_name }}" != "pull_request" \
+             && "$CHART_PUBLISHABLE" == "true" ]]; then
+            echo "publish=true" >>"$GITHUB_OUTPUT"
+            echo "This run validates $CHART_NAME and publishes it."
+          else
+            echo "publish=false" >>"$GITHUB_OUTPUT"
+            if [[ "$CHART_PUBLISHABLE" != "true" ]]; then
+              echo "No file under $CHART_PATH changed. The chart is validated only."
+            else
+              echo "This run validates and packages $CHART_NAME only. Nothing is pushed to the registry."
+            fi
+          fi
+
+      - uses: azure/setup-helm@v4
+        with:
+          version: ${{ env.HELM_VERSION }}
+      - uses: oras-project/setup-oras@v1
+        with:
+          version: 1.2.3
+
+      - name: Resolve the target registry
+        shell: bash
+        run: |
+          set -euo pipefail
+          # GHCR accepts lowercase names only. A fork publishes into its own namespace,
+          # so the workflow can be tested without access to the upstream packages.
+          repository="$(echo "${{ github.repository }}" | tr '[:upper:]' '[:lower:]')"
+          # GHCR supports a nested path. The chart lands at
+          # ghcr.io/<owner>/<repo>/charts/<chart name>, which leaves
+          # ghcr.io/<owner>/<repo>/containers/<image name> free for image builds.
+          echo "OCI_REPOSITORY=oci://ghcr.io/${repository}/${REGISTRY_SUBPATH}" >>"$GITHUB_ENV"
+          echo "This chart becomes ghcr.io/${repository}/${REGISTRY_SUBPATH}/${CHART_NAME}"
+
+      # ── Validate ────────────────────────────────────────────────────────────
+      # Every step below is generic. A chart with no dependencies makes
+      # `helm dependency build` and the lock check no-ops, so nothing here has to
+      # know which charts have subcharts.
+
+      - name: Build locked dependencies
+        run: helm dependency build "$CHART_PATH"
+
+      - name: Verify dependency lock
+        run: git diff --exit-code -- "$CHART_PATH/Chart.lock"
+
+      - name: Lint chart
+        run: helm lint "$CHART_PATH" --strict
+
+      - name: Install helm-unittest
+        run: helm plugin install https://github.com/helm-unittest/helm-unittest.git --version "$UNITTEST_VERSION"
+
+      - name: Run unit tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ -d "$CHART_PATH/tests" ]]; then
+            helm unittest "$CHART_PATH"
+          else
+            echo "$CHART_PATH has no tests directory. Nothing to run."
+          fi
+
+      - name: Run the chart's own checks
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Optional per-chart hook for render assertions that cannot be generic,
+          # such as grepping a rendered manifest for a specific object. It runs
+          # through bash, so the file does not need its executable bit set.
+          if [[ -f "$CHART_PATH/ci/validate.sh" ]]; then
+            CHART_PATH="$CHART_PATH" CHART_NAME="$CHART_NAME" bash "$CHART_PATH/ci/validate.sh"
+          else
+            echo "$CHART_PATH has no ci/validate.sh. Nothing to run."
+          fi
+
+      - name: Rebuild dependencies for packaging
+        run: helm dependency build "$CHART_PATH"
+
+      # ── Publish ─────────────────────────────────────────────────────────────
+      # Reached only when every validation step above passed, because a failed
+      # step ends the job.
+
+      - name: Log in to GHCR
+        # A pull request from a fork gets a read-only token. A failed login must not
+        # stop a validation run, because that run never pushes to the registry.
+        continue-on-error: ${{ steps.mode.outputs.publish != 'true' }}
+        shell: bash
+        run: |
+          echo "${{ secrets.GITHUB_TOKEN }}" | helm registry login ghcr.io --username "${{ github.actor }}" --password-stdin
+          echo "${{ secrets.GITHUB_TOKEN }}" | oras login ghcr.io --username "${{ github.actor }}" --password-stdin
+
+      - name: Resolve the next patch version
+        id: chart
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          chart_version="$(helm show chart "$CHART_PATH" | awk '/^version:/ { print $2 }')"
+          if [[ ! "$chart_version" =~ ^([0-9]+)\.([0-9]+)\.([0-9]+)$ ]]; then
+            echo "Chart.yaml version '$chart_version' is not a MAJOR.MINOR.PATCH version" >&2
+            exit 1
+          fi
+          major="${BASH_REMATCH[1]}"
+          minor="${BASH_REMATCH[2]}"
+          patch="${BASH_REMATCH[3]}"
+
+          # List the published tags for this chart. A missing repository means nothing is published yet.
+          tags="$(oras repo tags "${OCI_REPOSITORY#oci://}/${CHART_NAME}" 2>/dev/null || true)"
+
+          highest=""
+          while read -r tag; do
+            [[ "$tag" =~ ^${major}\.${minor}\.([0-9]+)$ ]] || continue
+            candidate="${BASH_REMATCH[1]}"
+            if [[ -z "$highest" || "$candidate" -gt "$highest" ]]; then
+              highest="$candidate"
+            fi
+          done <<<"$tags"
+
+          if [[ -n "$highest" ]]; then
+            patch="$((highest + 1))"
+          fi
+
+          version="${major}.${minor}.${patch}"
+          echo "Chart.yaml version: $chart_version"
+          echo "Highest published patch for ${major}.${minor}: ${highest:-none}"
+          echo "Version to publish: $version"
+          echo "version=$version" >>"$GITHUB_OUTPUT"
+          echo "chart_version=$chart_version" >>"$GITHUB_OUTPUT"
+
+      - name: Write the resolved version into Chart.yaml
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Only the top-level version key is unindented, so dependency versions stay unchanged.
+          sed -i -E "s|^version: .*$|version: ${{ steps.chart.outputs.version }}|" "$CHART_PATH/Chart.yaml"
+          helm show chart "$CHART_PATH" | awk '/^version:/ { print "Packaged version: " $2 }'
+
+      - name: Package chart
+        run: helm package "$CHART_PATH" --destination /tmp
+
+      - name: Keep the packaged chart as an artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.chart }}-${{ steps.chart.outputs.version }}
+          path: /tmp/${{ matrix.chart }}-${{ steps.chart.outputs.version }}.tgz
+          if-no-files-found: error
+
+      - name: Publish chart
+        if: steps.mode.outputs.publish == 'true'
+        run: helm push "/tmp/${CHART_NAME}-${{ steps.chart.outputs.version }}.tgz" "$OCI_REPOSITORY"
+
+      - name: Commit the resolved version back to main
+        if: steps.mode.outputs.publish == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if git diff --quiet -- "$CHART_PATH/Chart.yaml"; then
+            echo "Chart.yaml already holds ${{ steps.chart.outputs.version }}. No commit is needed."
+            exit 0
+          fi
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -- "$CHART_PATH/Chart.yaml"
+          git commit -m "chore(${CHART_NAME}): set chart version to ${{ steps.chart.outputs.version }} [skip ci]"
+
+          # Rebase on the newest main so a parallel commit does not reject the push.
+          git pull --rebase origin main
+          git push origin HEAD:main
+
+      - name: Report the result
+        if: always()
+        shell: bash
+        run: |
+          if [[ "${{ steps.mode.outputs.publish }}" == "true" ]]; then
+            mode="Published to the registry"
+          elif [[ "$CHART_PUBLISHABLE" != "true" ]]; then
+            mode="Validation only. The chart itself did not change."
+          else
+            mode="Validation only. Nothing was pushed to the registry."
+          fi
+          {
+            echo "### ${CHART_NAME}"
+            echo ""
+            echo "| Item | Value |"
+            echo "| --- | --- |"
+            echo "| Mode | $mode |"
+            echo "| Version in Chart.yaml before the run | ${{ steps.chart.outputs.chart_version }} |"
+            echo "| Resolved version | ${{ steps.chart.outputs.version }} |"
+            echo "| Chart location | ${OCI_REPOSITORY:-unresolved}/${CHART_NAME} |"
+          } >>"$GITHUB_STEP_SUMMARY"

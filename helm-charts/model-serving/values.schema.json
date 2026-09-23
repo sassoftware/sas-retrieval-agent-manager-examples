@@ -49,14 +49,17 @@
         "vllmCPU": {
           "type": "object",
           "additionalProperties": false,
-          "required": ["enabled", "name", "image", "imagePullPolicy", "maxModelLen", "gpuMemoryUtilization", "shmSize"],
+          "required": ["enabled", "name", "image", "imagePullPolicy", "shmSize"],
           "properties": {
             "enabled": { "type": "boolean" },
             "name": { "type": "string", "minLength": 1 },
             "image": { "type": "string", "minLength": 1 },
             "imagePullPolicy": { "enum": ["Always", "IfNotPresent", "Never"] },
-            "maxModelLen": { "type": "integer", "minimum": 1 },
-            "gpuMemoryUtilization": { "type": ["string", "number"] },
+            "args": {
+              "description": "Extra arguments appended after the fixed base args (/mnt/models, --host, --port, --trust-remote-code). WARNING: Helm replaces lists rather than merging them, so setting this discards the chart defaults ['--max-model-len', '4096']; copy forward any you still need. Every entry must be a string; quote numeric values. Flag and value are separate entries, for example ['--max-model-len', '4096'].",
+              "type": "array",
+              "items": { "type": "string" }
+            },
             "shmSize": { "type": "string", "minLength": 1 }
           }
         }
@@ -144,6 +147,11 @@
         "name": { "type": "string", "minLength": 1 },
         "image": { "type": "string", "minLength": 1 },
         "imagePullPolicy": { "enum": ["Always", "IfNotPresent", "Never"] },
+        "args": {
+          "description": "Extra arguments appended after the fixed base args (--model_name, --model_path, --port, --rest_port). WARNING: Helm replaces lists rather than merging them, so setting this discards the chart defaults ['--file_system_poll_wait_seconds=0']; copy forward any you still need. Every entry must be a string. OpenVINO Model Server uses --flag=value, so each entry is a single token.",
+          "type": "array",
+          "items": { "type": "string" }
+        },
         "resources": { "$ref": "#/definitions/resources" }
       }
     },
