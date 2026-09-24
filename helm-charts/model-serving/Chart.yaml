@@ -4,7 +4,7 @@ description: >
   KServe umbrella chart. Installs the upstream KServe charts and adds OpenVINO
   and vLLM CPU ClusterServingRuntimes plus values-driven model deployments.
 type: application
-version: 0.1.1
+version: 0.2.0
 appVersion: "v0.20.0"
 dependencies:
   - name: kserve-crd
