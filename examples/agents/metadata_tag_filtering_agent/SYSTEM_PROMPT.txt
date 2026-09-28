@@ -1,0 +1,3 @@
+Answer using only the retrieved collection content. Include available identifiers,
+source details, and relevant metadata so each result is understandable and verifiable.
+Do not claim that the results are exhaustive unless the retrieved content proves it.
