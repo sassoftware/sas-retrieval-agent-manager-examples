@@ -15,6 +15,44 @@ Model management: {{ .Values.modelManagement.mode }}
   serves traffic.
   {{- end }}
 {{- end }}
+{{- if include "litellm.dbInitEnabled" . }}
+
+Database initialization: Job {{ include "litellm.dbInit.fullname" . }}
+  Created database "{{ .Values.database.name }}"{{ if .Values.database.schema }}, schema "{{ .Values.database.schema }}"{{ end }} and the login role
+  named in Secret {{ .Values.database.existingSecret.name }}, which is the same
+  credential the proxy authenticates with.
+
+  Check it did what you expect before trusting the deployment:
+    kubectl -n {{ .Release.Namespace }} logs job/{{ include "litellm.dbInit.fullname" . }} -c db-init
+  {{- if include "litellm.dbInit.cleanupEnabled" . }}
+
+  The administrator credentials have been erased from Secret
+  {{ include "litellm.dbInit.adminSecretName" . }}. Confirm with:
+    kubectl -n {{ .Release.Namespace }} get secret {{ include "litellm.dbInit.adminSecretName" . }} -o jsonpath='{.data}'
+
+  They are restored for the length of the hook window on every upgrade, because
+  re-running this Job needs them. Set database.init.enabled=false once the
+  database exists to stop that happening.
+  {{- if .Values.database.init.admin.password }}
+
+  NOTE: database.init.admin.password is recorded in the Helm release secret,
+  which `helm get values {{ .Release.Name }}` will show. Erasing the Kubernetes
+  Secret does not remove it from there. To keep it out of the release entirely,
+  create the Secret yourself and name it under
+  database.init.admin.existingSecret.
+  {{- end }}
+  {{- else if not (include "litellm.dbInit.ownsAdminSecret" .) }}
+
+  The administrator credentials come from Secret
+  {{ .Values.database.init.admin.existingSecret.name }}, which this chart does
+  not own and therefore has not modified. Rotate or delete it yourself now that
+  initialization is done.
+  {{- else }}
+
+  database.init.cleanup is false, so the administrator credentials remain
+  readable in Secret {{ include "litellm.dbInit.adminSecretName" . }}.
+  {{- end }}
+{{- end }}
 
 Reach the proxy:
 {{- if .Values.routing.ingress.enabled }}
@@ -25,8 +63,24 @@ Reach the proxy:
              Check it was accepted: kubectl -n {{ .Release.Namespace }} get httproute {{ include "litellm.fullname" . }} -o jsonpath='{.status.parents[*].conditions[?(@.type=="Accepted")].status}'
 {{- end }}
 {{- if .Values.routing.httpProxy.enabled }}
+  {{- if .Values.routing.httpProxy.delegated }}
+  {{- if not .Values.routing.httpProxy.ingressClassName }}
+
+  WARNING: routing.httpProxy.ingressClassName is empty. If Contour runs with
+           --ingress-class-name (the common case) it will ignore this proxy
+           silently, and the delegating parent will report IncludeNotFound as
+           though it did not exist. Set it to the controller's class.
+  {{- end }}
+  HTTPProxy: delegated. This release publishes nothing on its own: it is a child
+             proxy, reachable only while another release's root HTTPProxy
+             includes it under {{ .Values.routing.path }}.
+             Confirm the parent adopted it (an un-included child reports
+             "orphaned" and serves no traffic):
+               kubectl -n {{ .Release.Namespace }} get httpproxy {{ include "litellm.fullname" . }} -o jsonpath='{.status.description}'
+  {{- else }}
   HTTPProxy: {{ first .Values.routing.hosts }}
              Check it is valid: kubectl -n {{ .Release.Namespace }} get httpproxy {{ include "litellm.fullname" . }} -o jsonpath='{.status.currentStatus}'
+  {{- end }}
 {{- end }}
 {{- if .Values.routing.route.enabled }}
   Route:     kubectl -n {{ .Release.Namespace }} get route {{ include "litellm.fullname" . }} -o jsonpath='{.spec.host}'

@@ -1,0 +1,132 @@
+{{- include "litellm.validate" . -}}
+{{- if include "litellm.dbInitEnabled" . }}
+{{/*
+Creates the database, the login role, and the schema on a PostgreSQL server
+that is running but empty.
+
+Runs at a lower hook weight than the migration Job, so the objects exist before
+`prisma migrate deploy` looks for them, and long before the proxy starts.
+
+Like the migration Job, this is a Helm hook because a Job's pod template is
+immutable: a stable-named Job could not be updated in place, and the first
+upgrade that changed the image or an environment variable would be rejected.
+*/}}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "litellm.dbInit.fullname" . }}
+  labels:
+    {{- include "litellm.dbInit.labels" . | nindent 4 }}
+  annotations:
+    {{- include "litellm.dbInit.hookAnnotations" (dict "root" . "weight" .Values.database.init.hooks.helm.weight "extra" (list .Values.commonAnnotations .Values.database.init.annotations)) | nindent 4 }}
+spec:
+  backoffLimit: {{ .Values.database.init.backoffLimit }}
+  ttlSecondsAfterFinished: {{ .Values.database.init.ttlSecondsAfterFinished }}
+  {{- with .Values.database.init.activeDeadlineSeconds }}
+  activeDeadlineSeconds: {{ . }}
+  {{- end }}
+  template:
+    metadata:
+      labels:
+        {{- include "litellm.dbInit.labels" . | nindent 8 }}
+      {{- with .Values.database.init.podAnnotations }}
+      annotations:
+        {{- tpl (toYaml .) $ | nindent 8 }}
+      {{- end }}
+    spec:
+      restartPolicy: OnFailure
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- if include "litellm.dbInit.cleanupEnabled" . }}
+      serviceAccountName: {{ include "litellm.dbInit.serviceAccountName" . }}
+      {{- end }}
+      {{- with .Values.database.init.podSecurityContext }}
+      securityContext:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- if include "litellm.dbInit.cleanupEnabled" . }}
+      initContainers:
+        {{- include "litellm.dbInit.psqlContainer" . | nindent 8 }}
+      containers:
+        {{- /*
+          Erases the administrator credentials. Runs only after the init
+          container above has exited 0, so a failed initialization leaves them
+          in place for the retry.
+
+          A JSON merge patch setting both keys to null removes them and
+          succeeds whether or not they are still there, so this is idempotent
+          with no conditional logic — which is what lets it invoke kubectl
+          directly. The upstream kubectl image is distroless and has no shell,
+          so a script here would not run at all.
+
+          The Secret object itself is kept: Helm owns it and would recreate it
+          on the next upgrade regardless, and the Role deliberately carries no
+          `delete` verb.
+        */}}
+        - name: admin-secret-cleanup
+          image: "{{ .Values.database.init.kubectlImage.repository }}:{{ .Values.database.init.kubectlImage.tag }}"
+          imagePullPolicy: {{ .Values.database.init.kubectlImage.pullPolicy }}
+          command: ["/bin/kubectl"]
+          args:
+            - --namespace={{ .Release.Namespace }}
+            - patch
+            - secret
+            - {{ include "litellm.dbInit.adminSecretName" . }}
+            - --type=merge
+            - -p
+            - '{"data":{"username":null,"password":null}}'
+          {{- with .Values.database.init.securityContext }}
+          securityContext:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .Values.database.init.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+      {{- else }}
+      containers:
+        {{- include "litellm.dbInit.psqlContainer" . | nindent 8 }}
+      {{- end }}
+      volumes:
+        - name: scripts
+          configMap:
+            name: {{ include "litellm.dbInit.fullname" . }}-scripts
+            defaultMode: 0555
+        - name: admin-credentials
+          secret:
+            {{- /* optional, because a successful run erases these keys. Without
+                   it the kubelet would refuse to start the pod on a re-run and
+                   a clean no-op would look like a failure. */}}
+            optional: true
+            secretName: {{ include "litellm.dbInit.adminSecretName" . }}
+            items:
+              - key: {{ include "litellm.dbInit.adminUsernameKey" . }}
+                path: username
+              - key: {{ include "litellm.dbInit.adminPasswordKey" . }}
+                path: password
+        - name: service-credentials
+          secret:
+            secretName: {{ .Values.database.existingSecret.name }}
+            items:
+              - key: {{ .Values.database.existingSecret.usernameKey }}
+                path: username
+              - key: {{ .Values.database.existingSecret.passwordKey }}
+                path: password
+        {{- with .Values.volumes }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      {{- with .Values.database.init.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.database.init.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.database.init.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+{{- end }}

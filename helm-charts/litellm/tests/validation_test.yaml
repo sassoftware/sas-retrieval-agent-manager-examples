@@ -47,6 +47,32 @@ tests:
       - failedTemplate:
           errorMessage: "routing.httpRoute.parentRefs is required when routing.httpRoute.enabled is true. An HTTPRoute with no parent attaches to no Gateway and publishes nothing."
 
+  - it: rejects a root HTTPProxy with no host
+    set:
+      routing.httpProxy.enabled: true
+    asserts:
+      - failedTemplate:
+          errorPattern: routing\.hosts is required when routing\.httpProxy\.enabled is true
+
+  # A child inherits the parent's hostname, so the same render must succeed
+  # once it is delegated.
+  - it: accepts a delegated HTTPProxy with no host
+    set:
+      routing.httpProxy.enabled: true
+      routing.httpProxy.delegated: true
+    asserts:
+      - isKind:
+          of: Deployment
+
+  - it: rejects TLS passthrough on a delegated HTTPProxy
+    set:
+      routing.httpProxy.enabled: true
+      routing.httpProxy.delegated: true
+      routing.httpProxy.tls.passthrough: true
+    asserts:
+      - failedTemplate:
+          errorPattern: passthrough cannot be combined with
+
   - it: rejects an Ingress with no host
     set:
       routing.ingress.enabled: true
