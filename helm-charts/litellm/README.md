@@ -23,7 +23,10 @@ More than one may be enabled at a time, which is how you move from Ingress to Ga
 - [Model management](#model-management)
 - [Provider credentials](#provider-credentials)
 - [Routing](#routing)
+- [Sharing a hostname](#sharing-a-hostname)
+- [Single sign-on](#single-sign-on)
 - [Database](#database)
+- [Creating the database](#creating-the-database)
 - [Redis](#redis)
 - [Migration Job](#migration-job)
 - [Secrets](#secrets)
@@ -226,6 +229,26 @@ Shared settings live under `routing`; each implementation adds its own block. `r
 
 The proxy serves the OpenAI API, the management API, and the UI from one port, so a single path prefix covers everything and no path-based dispatch is needed.
 
+`routing.path` defaults to `/litellm` and must match `serverRootPath`, which is the prefix the proxy actually serves under — see [Sharing a hostname](#sharing-a-hostname).
+
+### Forwarded headers
+
+TLS terminates at the ingress, so the request arriving at the pod is plaintext. Left to itself the proxy takes that at face value and emits `http://` URLs — the trailing-slash redirect on `/ui` sends the browser to a plaintext address, downgrading a release this chart published over HTTPS.
+
+uvicorn already parses the `X-Forwarded-*` headers that say otherwise, but ignores them unless the sender is trusted, and its default is `127.0.0.1` — which in Kubernetes is never the ingress. `trustedProxies` supplies that list, and defaults to `*`:
+
+```yaml
+trustedProxies: ["*"]
+```
+
+`*` trusts any client that can reach the pod. The Service is ClusterIP, so that means in-cluster callers rather than the internet, and the only header they could forge is consulted for the client IP in logs and for LiteLLM's optional `allowed_ips`. On a cluster without NetworkPolicy, narrow it to whatever fronts the release:
+
+```yaml
+trustedProxies: ["10.244.0.0/16"]   # pod CIDR
+```
+
+CIDR notation needs uvicorn 0.30 or newer, which the chart's pinned image carries. Setting `trustedProxies: []` leaves the variable unset and restores uvicorn's own default.
+
 ### Ingress
 
 ```yaml
@@ -296,6 +319,55 @@ Prefer this over a plain Ingress on Contour. The retry policy, response timeout,
 
 One HTTPProxy carries one virtual host. The chart fails the render rather than silently publishing only the first entry when `routing.hosts` has more than one.
 
+#### Sharing a hostname another release already owns
+
+Contour allows one **root** HTTPProxy per FQDN, and a root is any proxy that declares a `virtualhost`. When another application already owns the hostname this release has to answer on, a second root is rejected — and it is undefined which of the two loses, so the attempt risks taking the incumbent down.
+
+The way through is delegation: that application includes this one under a path prefix, and this release renders a **child** proxy with no `virtualhost` of its own.
+
+In the owning release's root HTTPProxy:
+
+```yaml
+includes:
+  - name: litellm
+    namespace: litellm
+    conditions:
+      - prefix: /litellm
+```
+
+And here:
+
+```yaml
+serverRootPath: /litellm      # must match the delegated prefix
+routing:
+  path: /litellm
+  httpProxy:
+    enabled: true
+    delegated: true
+```
+
+`routing.hosts` and `routing.tls` are not needed and are ignored: the child inherits both from the parent, so it needs no certificate of its own. TLS passthrough is rejected, since it is a property of a virtualhost the child does not have.
+
+The generated route matches `/`, not `routing.path`. Contour concatenates the parent's condition with the child's, so repeating the prefix would publish `/litellm/litellm`. `serverRootPath` must still match the delegated prefix, because that is what the proxy itself serves under.
+
+> [!IMPORTANT]
+> A child is reachable only while the parent includes it. Delete or reconfigure the parent and Contour reports the child as **orphaned** and ignores it — the release keeps running and serves nothing. `kubectl get httpproxy <name> -o jsonpath='{.status.description}'` is what tells you.
+
+Delegation also makes the mount root useful. The proxy answers its own root with a plain `"LiteLLM: RUNNING"` string, so a browser opening `/litellm` lands on nothing helpful; `requestRedirectPolicy` on an exact match sends it to the Admin UI instead:
+
+```yaml
+routing:
+  httpProxy:
+    extraRoutes:
+      - conditions:
+          - exact: /
+        requestRedirectPolicy:
+          path: /litellm/ui/
+          statusCode: 302
+```
+
+An exact match is what keeps this to the bare prefix — a `prefix` condition would redirect `/litellm/v1/...` as well. This works for a root HTTPProxy too; it is only unavailable on a plain Ingress, where Contour ignores the redirect annotations.
+
 ### Route (OpenShift)
 
 ```yaml
@@ -331,6 +403,129 @@ routing:
 ```
 
 Both objects point at the same Service, so neither takes the proxy down.
+
+## Sharing a hostname
+
+At the domain root LiteLLM claims `/ui`, `/v1`, `/docs`, `/health`, `/metrics` and more. That is an awkward neighbour for an application that owns the site, and it is the usual reason to deploy this chart as an add-on rather than as the main tenant.
+
+**The chart therefore ships mounted under `/litellm`**, via `serverRootPath`:
+
+```yaml
+serverRootPath: /litellm
+routing:
+  path: /litellm
+```
+
+The Admin UI is at `/litellm/ui` and the OpenAI-compatible base URL is `https://<host>/litellm/v1`. Nothing outside the prefix is served, so every root path stays available to the other application.
+
+To claim the domain root instead, clear both:
+
+```yaml
+serverRootPath: ""
+routing:
+  path: /
+```
+
+> [!IMPORTANT]
+> Point clients at the prefix. With the default, `OPENAI_BASE_URL` is `https://<host>/litellm/v1`; a client configured for `https://<host>/v1` gets a 404 from the proxy rather than a connection error, which tends to read as a missing model.
+
+### API docs
+
+LiteLLM serves the Swagger UI at its **mount root** — upstream's `DOCS_URL` defaults to `/` — so opening the release in a browser lands on the API reference rather than the Admin UI. This chart moves it to `/docs`:
+
+```yaml
+docs:
+  enabled: true
+  path: /docs
+```
+
+| | URL with the chart defaults |
+| --- | --- |
+| Swagger UI | `https://<host>/litellm/docs` |
+| Admin UI | `https://<host>/litellm/ui` |
+
+Set `path: /` to restore upstream's behaviour, or `enabled: false` to drop the docs page and the OpenAPI schema together — both, because Swagger reads the schema, and removing one without the other leaves a page that renders an error. A path under `/ui` fails the render, since it would be shadowed by the Admin UI.
+
+> [!NOTE]
+> With the docs moved, the mount root itself returns LiteLLM's plain `"LiteLLM: RUNNING"` health string. The proxy has no route that redirects its root to the Admin UI, so link people to `/litellm/ui` directly.
+
+> [!NOTE]
+> The health endpoints keep answering at the **root** as well, which is why the probes in this chart are not prefixed. Verified against the image: with `SERVER_ROOT_PATH` set, `/health/readiness` and `/litellm/health/readiness` both return 200 while `/ui` returns 404 and `/litellm/ui` returns 200. The UI's own asset URLs are rewritten by the image at runtime.
+
+The chart fails the render if `routing.path` does not match the prefix, because publishing `/` anyway would defeat the point, and publishing a *different* prefix would serve 404s.
+
+This changes the client-facing API base URL, so existing callers need updating.
+
+## Single sign-on
+
+Signs in to the Admin UI with an OpenID Connect provider instead of the shared master key, through LiteLLM's generic OIDC support.
+
+> [!IMPORTANT]
+> SSO is a LiteLLM **enterprise** feature. Since v1.76.0 it is free for up to five users; past that it needs a licence in `license.existingSecret`.
+
+```yaml
+sso:
+  enabled: true
+  clientId: litellm
+  authorizationEndpoint: https://idp.example.com/realms/r/protocol/openid-connect/auth
+  tokenEndpoint: https://idp.example.com/realms/r/protocol/openid-connect/token
+  userinfoEndpoint: https://idp.example.com/realms/r/protocol/openid-connect/userinfo
+```
+
+The client secret is generated on first install and reused on every later upgrade, so upgrading never invalidates the provider-side registration. Supply your own with `sso.clientSecret.existingSecret`.
+
+`sso.proxyBaseUrl` is derived from `routing.hosts[0]`, `routing.tls.enabled` and `routing.path` when left empty, including any `serverRootPath` prefix. Deriving it keeps the redirect URI from drifting out of step with the Ingress. The provider must accept `<proxyBaseUrl>/sso/callback`.
+
+### Why the three endpoints are separate
+
+They are not called by the same party, and they are frequently not interchangeable.
+
+| Setting | Called by | Must be reachable from |
+| --- | --- | --- |
+| `authorizationEndpoint` | the browser | the user's machine |
+| `tokenEndpoint` | the proxy pod | inside the cluster |
+| `userinfoEndpoint` | the proxy pod | inside the cluster |
+
+A provider published through a cloud load balancer is often unreachable from inside the same cluster, because the load balancer does not hairpin — yet it still advertises its public URL in its discovery document. Copying all three from that document produces a sign-in that redirects correctly and then fails at the token exchange. Point the browser-facing one at the public address and the other two at the in-cluster Service.
+
+### Keycloak bootstrap
+
+`sso.keycloakBootstrap` adds a one-shot Job that configures the Keycloak side to match:
+
+```yaml
+sso:
+  keycloakBootstrap:
+    enabled: true
+    url: http://keycloak.identity.svc.cluster.local:8080
+    realm: myrealm
+    admin:
+      existingSecret:
+        name: keycloak-admin     # keys: username, password
+```
+
+It creates, in an existing realm:
+
+1. A confidential OIDC client with the right redirect URIs, including LiteLLM's `/sso/debug/callback` claim-dumping route.
+2. Two **client** roles carrying LiteLLM's own role names — `proxy_admin` and `internal_user` by default.
+3. Two groups, `litellm-admins` and `litellm-users`, granted those roles.
+4. A protocol mapper putting the client roles into a flat `roles` claim.
+5. Optionally an `llmadmin` account in the admin group.
+
+Step 4 is the one that is easy to miss. Keycloak nests client roles under `resource_access.<client>.roles`, which LiteLLM does not read, so without the mapper every user signs in carrying no role at all.
+
+Client roles rather than realm roles, and dedicated groups rather than existing ones, so nothing this chart creates appears at realm scope or changes another application's authorization. Point `groups` at existing group names if you would rather reuse them.
+
+Every step reads before it writes, so the Job is safe to re-run and repairs a half-applied earlier run rather than duplicating it. It never creates realms.
+
+> [!WARNING]
+> Realms usually carry a password policy. The generated `llmadmin` password ends in a fixed `Aa1!` so it satisfies the common `upperCase(1) lowerCase(1) digits(1) specialChars(1)` rules by construction — relying on chance would fail roughly one deploy in four hundred. If your policy is stricter, set `sso.keycloakBootstrap.adminUser.password.value`; the Job names the policy in its error output when Keycloak rejects one.
+
+Read the account password with:
+
+```sh
+kubectl -n litellm get secret litellm-sso \
+  -o jsonpath='{.data.admin-user-password}' | base64 -d
+```
 
 ## Database
 
@@ -421,6 +616,112 @@ database:
 ```
 
 Read-only queries go to the replica and writes continue to the writer. Fields left empty fall back to the writer's values, including the credentials Secret.
+
+## Creating the database
+
+Everything above assumes the database, the login role, and the schema already exist — the usual case, because a DBA provisioned them. When they do not, `database.init` adds a one-shot Job that creates them.
+
+It is off by default. Turning it on does not change how the proxy connects; it only adds a step in front.
+
+```yaml
+database:
+  host: litellm-pg.example.com
+  name: litellm
+  schema: litellm
+  existingSecret:
+    name: litellm-db        # keys: username, password
+
+  init:
+    enabled: true
+    admin:
+      existingSecret:
+        name: litellm-pg-admin   # keys: username, password
+```
+
+### Which credential is which
+
+There are two, and conflating them is the easy mistake:
+
+| | Used by | Lifetime |
+| --- | --- | --- |
+| `database.existingSecret` | the proxy, every day | permanent |
+| `database.init.admin` | this Job, once | erased when the Job succeeds |
+
+`database.existingSecret` is the **input** to the Job, not something it reads back. The Job creates a login role with that username and password, makes it the owner of `database.name` and `database.schema`, and exits. The proxy then authenticates as that role. One Secret, written once by you, used by both.
+
+The admin credential is separate because creating a database and a role needs privileges the proxy must never hold.
+
+### What it runs
+
+Against the maintenance database named by `admin.database` (`postgres` by default, because `CREATE DATABASE` cannot run inside the database being created):
+
+1. `CREATE ROLE` for the service user, or `ALTER ROLE` to reset its password to match the Secret.
+2. `CREATE DATABASE` owned by that role.
+
+Then, connected to the new database:
+
+3. `GRANT ALL PRIVILEGES ON DATABASE` to the role.
+4. `CREATE SCHEMA ... AUTHORIZATION` the role, and `GRANT ALL ON SCHEMA`.
+5. `ALTER ROLE ... SET search_path`, so an interactive `psql` session as that role lands in the right schema.
+
+Each step is skipped when the object already exists, so the Job is safe to re-run. Step 4's `GRANT` runs even on an existing schema: PostgreSQL 15 stopped granting `CREATE` on `public` to everyone, and without it `prisma migrate deploy` fails with `permission denied for schema`.
+
+Turn individual steps off with `createDatabase`, `createUser`, and `createSchema` when a DBA has already done part of the work.
+
+### Password rotation
+
+The `ALTER ROLE` in step 1 is unconditional, so changing the password in `database.existingSecret` and upgrading resets the role to match. Without that, rotating the Secret would leave the proxy unable to log in until someone fixed the role by hand.
+
+### Erasing the admin credentials
+
+With inline `admin.username` / `admin.password`, the chart renders a Secret, the Job uses it, and a second container erases both keys from it the moment the Job succeeds.
+
+The ordering is structural rather than best-effort. The `psql` step is an **init container** and the cleanup is the **only ordinary container**, so Kubernetes will not start the cleanup until the init container has exited 0. A failed initialization therefore never reaches the erase step, and the credentials survive for the retry.
+
+The erase is a JSON merge patch setting both keys to `null`. That removes them whether or not they are still there, which makes it idempotent with no conditional logic — and that in turn is what lets it invoke `kubectl` directly, with no shell. The upstream `registry.k8s.io/kubectl` image is distroless and has no `/bin/sh`, so a shell script here would not run at all.
+
+The Secret object itself is kept, with its data keys gone. The Role carries `get` and `patch` on that one Secret name and deliberately no `delete`, so this chart never creates a Role that could delete Secrets in your namespace.
+
+> [!IMPORTANT]
+> Erasing the Kubernetes Secret does not remove an inline password from the **Helm release secret**, which `helm get values` can read. It is also restored for the length of the hook window on every upgrade, because re-running the Job needs it.
+>
+> To keep the admin password out of the release entirely, create the Secret yourself and name it under `admin.existingSecret`. The chart then modifies nothing — it only destroys what it created — and rotating that Secret afterwards is yours to do.
+
+The cleanest sequence for a one-time bootstrap is therefore: install with `init.enabled: true`, confirm the Job succeeded, then set `init.enabled: false` for every later upgrade.
+
+### Ordering
+
+The Job is a Helm hook at weight `-5`, ahead of the migration Job at `1`. The chart rejects a weight that is not below the migration's, because the failure it prevents surfaces as a confusing Prisma error about a database that does not exist rather than as a misconfigured value.
+
+Under a GitOps controller, turn `hooks.helm.enabled` off and `hooks.argocd.enabled` on; the sync waves keep the same order.
+
+The wave is the hook weight. They express the same thing in two dialects, so the
+chart does not ask for both — there is no `syncWave` value to keep in step with
+the weight beside it.
+
+A wave is only meaningful relative to everything else in the same ArgoCD
+Application, which the chart cannot see: how the surrounding Applications are
+numbered, or whether the database is provisioned by this chart at all. Where the
+defaults do not fit, set the annotation directly — it is applied after the
+chart's own and so takes precedence:
+
+```yaml
+migrationJob:
+  annotations:
+    argocd.argoproj.io/sync-wave: "12"
+```
+
+### Ordinary failures
+
+- **`password authentication failed`** for the admin user: `admin.username` is not a login that may `CREATE DATABASE` and `CREATE ROLE`. On a managed service this is the server administrator, not `postgres`.
+- **The Job waits and then times out**: the server is not reachable from the cluster. `waitTimeout` bounds this at 300 seconds.
+- **`permission denied to create database`**: the admin user exists but lacks `CREATEDB`.
+
+Read what it actually did:
+
+```sh
+kubectl -n litellm logs job/litellm-db-init -c db-init
+```
 
 ## Redis
 
@@ -619,6 +920,10 @@ Defaults are the shipped `values.yaml`. Every value is validated by `values.sche
 | `replicaCount` | Proxy replicas, ignored when autoscaling is on | `1` |
 | `numWorkers` | Passed as `--num_workers`; empty lets the image decide | `""` |
 | `listen` | Bind address inside the pod | `0.0.0.0` |
+| `serverRootPath` | Prefix the proxy is mounted under; `""` claims the root | `/litellm` |
+| `trustedProxies` | Senders whose `X-Forwarded-*` headers are believed | `["*"]` |
+| `docs.enabled` | Serve the Swagger UI and the OpenAPI schema | `true` |
+| `docs.path` | Path for the Swagger UI; `/` is upstream's mount root | `/docs` |
 | `image.repository` | Proxy image | `ghcr.io/berriai/litellm` |
 | `image.tag` | Empty follows `appVersion` | `""` |
 | `image.pullPolicy` | | `IfNotPresent` |
@@ -675,7 +980,7 @@ Defaults are the shipped `values.yaml`. Every value is validated by `values.sche
 | Key | Description | Default |
 | --- | --- | --- |
 | `routing.hosts` | Hostnames; required for `ingress` and `httpProxy` | `[]` |
-| `routing.path` | Path prefix the proxy is published under | `/` |
+| `routing.path` | Published prefix; must match `serverRootPath` | `/litellm` |
 | `routing.tls.enabled` | | `false` |
 | `routing.tls.secretName` | `kubernetes.io/tls` Secret | `""` |
 | `routing.annotations`, `routing.labels` | Merged into every routing object | `{}` |
@@ -688,6 +993,7 @@ Defaults are the shipped `values.yaml`. Every value is validated by `values.sche
 | `routing.httpRoute.matches`, `.filters`, `.timeouts` | Passed through | `[]`, `[]`, `{}` |
 | `routing.httpRoute.extraRules` | Appended after the generated rule | `[]` |
 | `routing.httpProxy.enabled` | | `false` |
+| `routing.httpProxy.delegated` | Render a child proxy for a parent that includes it | `false` |
 | `routing.httpProxy.ingressClassName` | | `""` |
 | `routing.httpProxy.tls.*` | Falls back to `routing.tls.secretName` | see values.yaml |
 | `routing.httpProxy.timeoutPolicy`, `.retryPolicy`, `.loadBalancerPolicy` | Contour policies | `{}` |
@@ -696,6 +1002,36 @@ Defaults are the shipped `values.yaml`. Every value is validated by `values.sche
 | `routing.route.tls.termination` | `edge`, `reencrypt`, or `passthrough` | `edge` |
 | `routing.route.tls.insecureEdgeTerminationPolicy` | | `Redirect` |
 | `routing.route.wildcardPolicy` | | `None` |
+
+### Single sign-on
+
+| Key | Description | Default |
+| --- | --- | --- |
+| `sso.enabled` | Sign in to the Admin UI with OIDC. Enterprise; free to five users | `false` |
+| `sso.proxyBaseUrl` | Browser-facing URL; derived from `routing` when empty | `""` |
+| `sso.clientId` | | `litellm` |
+| `sso.scope` | | `openid profile email` |
+| `sso.clientState`, `.usePkce` | Required by some providers | `""`, `false` |
+| `sso.authorizationEndpoint` | Browser-facing; must be publicly reachable | `""` |
+| `sso.tokenEndpoint`, `.userinfoEndpoint` | Called by the pod; may be in-cluster | `""` |
+| `sso.logoutUrl` | | `""` |
+| `sso.clientSecret.value` | Generated on first install when empty | `""` |
+| `sso.clientSecret.existingSecret.name` | Use a Secret you manage | `""` |
+| `sso.keycloakBootstrap.enabled` | Configure the Keycloak side automatically | `false` |
+| `sso.keycloakBootstrap.url` | Admin API base URL, reachable in-cluster | `""` |
+| `sso.keycloakBootstrap.realm` | Must already exist; the Job creates no realms | `""` |
+| `sso.keycloakBootstrap.admin.existingSecret.name` | Required. Keycloak administrator | `""` |
+| `sso.keycloakBootstrap.admin.realm` | Realm holding the admin account | `master` |
+| `sso.keycloakBootstrap.roles.admin`, `.user` | Must be names LiteLLM recognises | `proxy_admin`, `internal_user` |
+| `sso.keycloakBootstrap.groups.admin`, `.user` | Groups granted those roles | `litellm-admins`, `litellm-users` |
+| `sso.keycloakBootstrap.adminUser.enabled` | Create a named administrator account | `true` |
+| `sso.keycloakBootstrap.adminUser.username` | | `llmadmin` |
+| `sso.keycloakBootstrap.adminUser.password.value` | Generated when empty | `""` |
+| `sso.keycloakBootstrap.adminUser.permanentPassword` | False forces a change at first sign-in | `true` |
+| `sso.keycloakBootstrap.extraRedirectUris` | Beyond the two the chart registers | `[]` |
+| `sso.keycloakBootstrap.image.*` | Needs `kcadm.sh`; match the server's minor version | `quay.io/keycloak/keycloak:26.3.2` |
+| `sso.keycloakBootstrap.waitTimeout` | Seconds to wait for Keycloak | `300` |
+| `sso.keycloakBootstrap.hooks.helm.weight` | Runs after the database Jobs | `"2"` |
 
 ### Database
 
@@ -717,6 +1053,31 @@ Defaults are the shipped `values.yaml`. Every value is validated by `values.sche
 | `database.connectionPool.maxClientConn` | | `1000` |
 | `database.disablePreparedStatements` | Required in front of an external pooler | `false` |
 | `database.maxIdleConnectionLifetime` | Seconds; the proxy defaults to 60 | `""` |
+
+### Creating the database
+
+| Key | Description | Default |
+| --- | --- | --- |
+| `database.init.enabled` | Create the database, role, and schema before anything else runs | `false` |
+| `database.init.admin.username` | Administrator login. Recorded in the Helm release secret | `""` |
+| `database.init.admin.password` | Administrator password. Recorded in the Helm release secret | `""` |
+| `database.init.admin.existingSecret.name` | Read the admin credentials from a Secret you own. The chart then erases nothing | `""` |
+| `database.init.admin.existingSecret.usernameKey`, `.passwordKey` | | `username`, `password` |
+| `database.init.admin.database` | Maintenance database to connect to for `CREATE DATABASE` | `postgres` |
+| `database.init.admin.sslMode` | Falls back to `database.sslMode` | `""` |
+| `database.init.createDatabase` | | `true` |
+| `database.init.createUser` | Create the login role, and reset its password to match the Secret | `true` |
+| `database.init.createSchema` | Needs a non-empty `database.schema` | `true` |
+| `database.init.cleanup` | Erase the admin credentials from the Secret the chart created | `true` |
+| `database.init.waitTimeout` | Seconds to wait for the server to accept connections | `300` |
+| `database.init.image.*` | Needs `psql` and `pg_isready` | `postgres:17-alpine` |
+| `database.init.kubectlImage.*` | Cleanup container only | `registry.k8s.io/kubectl:v1.34.0` |
+| `database.init.serviceAccount.create` | ServiceAccount, Role, and RoleBinding for the cleanup container | `true` |
+| `database.init.hooks.helm.weight` | Must be below `migrationJob.hooks.helm.weight`. Also used as the ArgoCD sync wave | `"-5"` |
+| `database.init.hooks.argocd.enabled` | | `false` |
+| `database.init.backoffLimit`, `.ttlSecondsAfterFinished`, `.activeDeadlineSeconds` | | `4`, `120`, `900` |
+| `database.init.resources`, `.nodeSelector`, `.tolerations`, `.affinity` | | `{}` |
+| `database.init.podSecurityContext`, `.securityContext` | | `{}` |
 
 ### Redis
 
@@ -775,6 +1136,19 @@ The chart fails the render, naming the value, rather than producing a workload t
 | `podLabels` setting a selector key | The Deployment selector is immutable; the apply would be rejected |
 | `pdb` with neither or both bounds | Ambiguous |
 | `autoscaling.minReplicas` above `maxReplicas` | Cannot be satisfied |
+| `database.init` with no admin credentials, or with two sources for them | Nothing to authenticate as, or ambiguity about which gets erased |
+| `database.init` under `awsIam` or `azureEntra` | The cloud issues the login, so there is no password to set on a role |
+| `database.init` with `existingSecret.urlKey` | A connection URL carries no separate user to create |
+| `database.init.createSchema` with an empty `database.schema` | Nothing to create |
+| `database.init` hook weight at or above the migration's | The migration would run before the database exists |
+| `serverRootPath` with `routing.path: /` | The release would still claim the whole host |
+| `serverRootPath` and `routing.path` disagreeing | The published prefix would return 404 |
+| `sso.enabled` with no host and no `proxyBaseUrl` | There is no redirect URI to register |
+| `sso.proxyBaseUrl` without a scheme | Providers reject such a `redirect_uri` |
+| `keycloakBootstrap` with no admin Secret | Nothing to authenticate to Keycloak as |
+| `keycloakBootstrap` roles outside LiteLLM's own set | The role is ignored and users get no privileges |
+| `keycloakBootstrap` admin and user groups the same | One group cannot carry two roles |
+| `keycloakBootstrap` without `sso.enabled` | It would register a client nothing uses |
 
 ## Upgrading
 
@@ -836,7 +1210,7 @@ The three CRD-based routing objects are skipped unless you pass `--schema-locati
 
 ## Not included
 
-- **A bundled PostgreSQL or Redis subchart.** See [Prerequisites](#prerequisites).
+- **A bundled PostgreSQL or Redis subchart.** See [Prerequisites](#prerequisites). `database.init` creates a database *on* a server you run; it does not run the server.
 - **The split gateway / backend / UI deployment** from the upstream `helm/litellm` chart. One Deployment keeps the baseline at one pod and avoids path-prefix dispatch that has to track the image's route allowlist. The templates carry `app.kubernetes.io/component` labels and per-component helpers, so the split can be added later without breaking any existing value path.
 - **KEDA autoscaling.** The HPA covers CPU and the two per-pod workload metrics.
 - **Enterprise billable-request metering.**

@@ -1,0 +1,81 @@
+suite: database initialization validation
+release:
+  name: rel
+  namespace: litellm
+templates:
+  - templates/job-db-init.yaml
+set:
+  modelManagement.mode: database
+  database.host: pg.example.com
+  database.existingSecret.name: litellm-db
+  database.init.enabled: true
+  database.init.admin.username: postgres
+  database.init.admin.password: adminpw
+tests:
+  - it: requires administrator credentials
+    set:
+      database.init.admin.username: ""
+      database.init.admin.password: ""
+    asserts:
+      - failedTemplate:
+          errorPattern: database\.init needs administrator credentials
+
+  - it: rejects two sources for the administrator credentials
+    set:
+      database.init.admin.existingSecret.name: my-admin
+    asserts:
+      - failedTemplate:
+          errorPattern: not both
+
+  - it: rejects initialization without the database flow
+    set:
+      modelManagement.mode: config
+      database.enabled: false
+    asserts:
+      - failedTemplate:
+          errorPattern: requires the database flow
+
+  - it: rejects initialization under cloud IAM authentication
+    set:
+      database.auth.mode: azureEntra
+    asserts:
+      # There is no password to set on a role when the cloud issues the login.
+      - failedTemplate:
+          errorPattern: requires database\.auth\.mode
+
+  - it: rejects a connection URL, which carries no separate user to create
+    set:
+      database.existingSecret.urlKey: url
+    asserts:
+      - failedTemplate:
+          errorPattern: cannot be used with database\.existingSecret\.urlKey
+
+  - it: rejects a missing host
+    set:
+      database.host: ""
+    asserts:
+      - failedTemplate:
+          errorPattern: database\.host or database\.existingSecret\.hostKey is required
+
+  - it: rejects creating a schema that has no name
+    set:
+      database.schema: ""
+    asserts:
+      - failedTemplate:
+          errorPattern: createSchema is true but database\.schema is empty
+
+  - it: rejects a hook weight that would run after the migration
+    set:
+      database.init.hooks.helm.weight: "5"
+    asserts:
+      # At weight 5 the migration would run against a database that does not
+      # exist yet, and the failure would name Prisma rather than this value.
+      - failedTemplate:
+          errorPattern: must be below migrationJob\.hooks\.helm\.weight
+
+  - it: accepts a weight below the migration Job
+    set:
+      database.init.hooks.helm.weight: "-1"
+    asserts:
+      - isKind:
+          of: Job

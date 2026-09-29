@@ -19,21 +19,13 @@ metadata:
   labels:
     {{- include "litellm.migrationLabels" . | nindent 4 }}
   annotations:
-    {{- with .Values.commonAnnotations }}
-    {{- toYaml . | nindent 4 }}
-    {{- end }}
-    {{- with .Values.migrationJob.annotations }}
-    {{- toYaml . | nindent 4 }}
-    {{- end }}
-    {{- if .Values.migrationJob.hooks.argocd.enabled }}
-    argocd.argoproj.io/hook: PreSync
-    argocd.argoproj.io/hook-delete-policy: BeforeHookCreation
-    {{- end }}
-    {{- if .Values.migrationJob.hooks.helm.enabled }}
-    helm.sh/hook: pre-install,pre-upgrade
-    helm.sh/hook-delete-policy: before-hook-creation
-    helm.sh/hook-weight: {{ .Values.migrationJob.hooks.helm.weight | default "1" | quote }}
-    {{- end }}
+    {{- /*
+      Through the shared helper rather than inlined, which is how this Job came
+      to be the only one with no sync wave: the inline block set the ArgoCD
+      hook and delete policy but silently omitted the wave, so
+      `migrationJob.hooks.argocd.syncWave` was set, documented, and dead.
+    */ -}}
+    {{- include "litellm.hookAnnotations" (dict "hooks" .Values.migrationJob.hooks "weight" (.Values.migrationJob.hooks.helm.weight | default "1") "extra" (list .Values.commonAnnotations .Values.migrationJob.annotations)) | nindent 4 }}
 spec:
   backoffLimit: {{ .Values.migrationJob.backoffLimit }}
   ttlSecondsAfterFinished: {{ .Values.migrationJob.ttlSecondsAfterFinished }}
