@@ -49,3 +49,35 @@ For each chart it lints, runs the unit tests, runs `ci/validate.sh` when present
 and packages the result. A chart whose own files changed is published to GHCR
 from the same job when the run is on `main`, with the next free patch version
 resolved from the registry.
+
+## Using a certificate for MCP Server
+
+To let RAM trust a certificate authority used by an MCP server, create a
+ConfigMap with the certificate bundle in PEM format. Use the same namespace as
+the RAM Helm release. The key must be `trusted-certs.pem`:
+
+```sh
+kubectl create configmap trusted-certs-bundle \
+	--namespace <namespace> \
+	--from-file=trusted-certs.pem=/path/to/ca-bundle.pem \
+	--dry-run=client -o yaml | kubectl apply -f -
+```
+
+Upgrade the existing RAM release. Replace `<release-name>`, `<chart-reference>`,
+and `<namespace>` with the values for your installation:
+
+```sh
+helm upgrade <release-name> <chart-reference> \
+	--namespace <namespace> \
+	--reuse-values \
+	--set integrations.trustedCerts.enabled=true \
+	--set integrations.trustedCerts.type=configMap \
+	--set integrations.trustedCerts.name=trusted-certs-bundle
+```
+
+The chart mounts the bundle at `/mnt/config/certs/trusted-certs.pem` and sets
+`TRUSTED_CERTS_PATH` for the API. On the first upgrade, enabling these values
+adds the mount and rolls the API pods. RAM can then use the bundle to trust the
+MCP server certificate. To update the bundle later, apply the ConfigMap command
+again. Restart the API pods if the application does not reload the mounted
+file.
