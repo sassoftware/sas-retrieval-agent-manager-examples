@@ -81,3 +81,5 @@ adds the mount and rolls the API pods. RAM can then use the bundle to trust the
 MCP server certificate. To update the bundle later, apply the ConfigMap command
 again. Restart the API pods if the application does not reload the mounted
 file.
+
+If you'd like to use these certificates with an MCP server, they must also be passed in as an environment variable. See [this section for more details](../examples/container_mcp_servers/sas_mcp_server/README.md#configuration-file).

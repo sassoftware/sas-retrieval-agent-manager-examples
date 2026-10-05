@@ -151,3 +151,5 @@ platform administrator or from the CA certificate chain used by the Viya
 ingress. If Viya uses an organization-managed private CA, the administrator
 can usually provide the CA bundle or identify the Kubernetes secret or
 certificate authority that contains it.
+
+This certificate bundle must also be available to the SAS Retrieval Agent Manager API deployment as well in order to establish a trusted TLS connection with the Viya platform. See details in the [Using a certificate for MCP Server](../../../helm-charts/README.md#using-a-certificate-for-mcp-server) section.
