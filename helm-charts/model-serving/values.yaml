@@ -50,6 +50,11 @@ clusterServingRuntimes:
     # Reference: https://docs.openvino.ai/latest/ovms_docs_parameters.html
     args:
       - --file_system_poll_wait_seconds=0
+    # Environment variables for every model served by this runtime, in the
+    # Kubernetes EnvVar form (name/value, or name/valueFrom).
+    #
+    # WARNING: Helm REPLACES lists, it does not merge them.
+    env: []
     resources:
       requests:
         cpu: "1"
@@ -76,6 +81,35 @@ clusterServingRuntimes:
     args:
       - --max-model-len
       - "4096"
+    # Environment variables for every model served by this runtime, in the
+    # Kubernetes EnvVar form (name/value, or name/valueFrom).
+    #
+    # WARNING: Helm REPLACES lists, it does not merge them. Setting env in your
+    # own values file discards every default below, including the structured
+    # output workaround; copy forward any default you still want.
+    env:
+      # Structured output (response_format json_schema, or any guided decoding)
+      # CRASHES the engine on the CPU backend without this.
+      #
+      # vLLM 0.26.0 auto-selects its "v2" model runner for several model
+      # architectures, Gemma among them, even when the device is CPU. That
+      # runner's structured output worker is GPU-only: it hardcodes
+      # torch.tensor(..., pin_memory=True) and drives a Triton kernel over CUDA
+      # streams. On CPU the first schema-constrained request dies with
+      #   RuntimeError: pin_memory=True requires a CUDA or other accelerator
+      #   backend; no pinned memory allocator is available on this system
+      # which kills EngineCore, fails the request with HTTP 500 and restarts
+      # the pod. Plain completions never touch that path, so the model looks
+      # healthy and the InferenceService still reports Ready.
+      #
+      # Selecting the v1 runner routes to a code path that honours the platform
+      # pinned-memory flag, which is False on CPU, and that has an explicit CPU
+      # branch for applying the grammar bitmask.
+      #
+      # Remove once the runtime image carries the upstream fix, which replaces
+      # the hardcoded pin_memory=True with the platform PIN_MEMORY flag.
+      - name: VLLM_USE_V2_MODEL_RUNNER
+        value: "0"
 
 modelDefaults:
   runtime: kserve-openvino
