@@ -90,14 +90,11 @@ the existing certificates. Keep the backup until you verify the updated
 connections.
 
 Combine the existing certificates with the new CA bundle. Use a separate
-output file so that the command does not overwrite either input file:
+output file so that the command does not overwrite either input file.
+Make sure both input files end with a newline:
 
 ```sh
-{
-	cat existing-ca-bundle.pem
-	printf '\n'
-	cat ca-bundle.pem
-} > combined-ca-bundle.pem
+cat existing-ca-bundle.pem ca-bundle.pem > combined-ca-bundle.pem
 ```
 
 For an existing installation, use `/path/to/combined-ca-bundle.pem` in the
