@@ -151,3 +151,19 @@ platform administrator or from the CA certificate chain used by the Viya
 ingress. If Viya uses an organization-managed private CA, the administrator
 can usually provide the CA bundle or identify the Kubernetes secret or
 certificate authority that contains it.
+
+If the CA certificate chain is supplied as separate PEM files, combine the
+root CA certificate and the required intermediate CA certificates into one
+bundle. Replace the example file names with your certificate file names:
+
+```sh
+cat root-ca.pem intermediate-ca.pem > bundle.pem
+```
+
+Keep the `-----BEGIN CERTIFICATE-----` and `-----END CERTIFICATE-----` lines
+for each certificate. Each input file must end with a newline. Do not include
+private keys. Supply the complete bundle as the tool server configuration file.
+After you update the bundle, restart the affected tool server or create a new
+tool server.
+
+This certificate bundle must also be available to the SAS Retrieval Agent Manager API deployment as well in order to establish a trusted TLS connection with the Viya platform. See details in the [Using a certificate for MCP Server](../../../helm-charts/README.md#using-a-certificate-for-mcp-server) section.
