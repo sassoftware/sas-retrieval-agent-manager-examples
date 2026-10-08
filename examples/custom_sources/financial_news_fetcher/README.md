@@ -30,7 +30,6 @@ The file is then uploaded to the RAM source through client.save_file.
 - fpdf2
 - yfinance
 
-
 ## Notes and Caveats
 
 - This source relies on external web content and network availability.

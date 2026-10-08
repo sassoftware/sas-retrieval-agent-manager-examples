@@ -65,4 +65,3 @@ The agent includes a set of pre-defined ESG template questions that covers:
 - Time horizons considered in climate-related physical risk analysis
 
 Use the question index and a bank alias (or `ALL`) to run these questions against the document collections.
-

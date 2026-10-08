@@ -60,32 +60,32 @@ following options. Set `VIYA_URL` in every case:
    browser authenticated to Viya, then set `ACCESS_TOKEN` to the
    `access_token` value returned in the browser URL.
 
-```bash
-export VIYA_URL="https://viya.example.com"
-export ACCESS_TOKEN="<access-token>"
-python create_viya_oauth_client.py
-```
+   ```bash
+   export VIYA_URL="https://viya.example.com"
+   export ACCESS_TOKEN="<access-token>"
+   python create_viya_oauth_client.py
+   ```
 
 2. Provide an authorization code. Open the authorization-code URL printed by
    the script in a browser authenticated to Viya, then set `CODE` to the
    returned code. Authorization codes expire after approximately 10 minutes and
    can be used only once.
 
-```bash
-export VIYA_URL="https://viya.example.com"
-export CODE="<authorization-code>"
-python create_viya_oauth_client.py
-```
+   ```bash
+   export VIYA_URL="https://viya.example.com"
+   export CODE="<authorization-code>"
+   python create_viya_oauth_client.py
+   ```
 
 3. Provide Viya user credentials. If `VIYA_USERNAME` is not set, the script
    uses `sasboot`.
 
-```bash
-export VIYA_URL="https://viya.example.com"
-export VIYA_USERNAME="<username>"
-export VIYA_PASSWORD="<password>"
-python create_viya_oauth_client.py
-```
+   ```bash
+   export VIYA_URL="https://viya.example.com"
+   export VIYA_USERNAME="<username>"
+   export VIYA_PASSWORD="<password>"
+   python create_viya_oauth_client.py
+   ```
 
 The script prints the created client details. If the client already exists, it
 prints a message and does not modify it. Update an existing client using the

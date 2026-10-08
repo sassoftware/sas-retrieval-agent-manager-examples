@@ -47,16 +47,16 @@ The following list describes the main components of the application:
 
 1. Create a `.env` file in the website directory based on the `.env.example` file by running the following command:
 
-```bash
-cp .env.example .env
-```
+   ```bash
+   cp .env.example .env
+   ```
 
 2. Update the `.env` file with your SAS Retrieval Agent Manager configuration:
 
-```
-# Base URL for your SAS Retrieval Agent Manager instance
-RAM_URL=https://<your host here>
-```
+   ```ini
+   # Base URL for your SAS Retrieval Agent Manager instance
+   RAM_URL=https://<your host here>
+   ```
 
 **NOTE:** Replace `<your host here>` with the host name of your SAS Retrieval Agent Manager deployment (for example, `https://ram-server.example.com`).
 
@@ -64,7 +64,7 @@ RAM_URL=https://<your host here>
 
 By default, users sign in with the OAuth 2.0 device code flow (no additional configuration required). To also offer a "Sign in" button that redirects users through your identity provider (Keycloak) using the OIDC authorization code flow with PKCE, add the following to your `.env` file:
 
-```
+```ini
 KEYCLOAK_CLIENT_ID=sas-ram-api
 KEYCLOAK_CLIENT_SECRET=
 KEYCLOAK_REDIRECT_URI=http://localhost:3000/auth/callback
@@ -80,15 +80,15 @@ KEYCLOAK_SESSION_SECRET=replace-with-a-long-random-secret
 
 1. Build the Docker image from the website directory by running the following command:
 
-```bash
-docker build -t chat-app .
-```
+   ```bash
+   docker build -t chat-app .
+   ```
 
 2. Run the container by running the following command:
 
-```bash
-docker run -it --rm -p 3000:3000 --env-file .env chat-app
-```
+   ```bash
+   docker run -it --rm -p 3000:3000 --env-file .env chat-app
+   ```
 
 3. Open your browser and navigate to `http://localhost:3000`. You should see a login page with **Sign in** and **Sign in with device code** buttons.
 
@@ -111,15 +111,15 @@ docker run -it --rm -p 3000:3000 --env-file .env chat-app
 
 1. Install dependencies by running the following command:
 
-```bas
-npm install
-```
+   ```bash
+   npm install
+   ```
 
 2. Start the development server by running the following command:
 
-```bash
-npm run dev
-```
+   ```bash
+   npm run dev
+   ```
 
 > If you're testing locally with `NEXT_PUBLIC_BASE_PATH` set (for example `/ChatExtension`), use `npm run dev:basepath` instead. Plain `next dev` (`npm run dev`) doesn't apply the base-path rewriting that the production Docker image gets from `server.js`, so pages/cookies/redirects under a base path won't resolve correctly with it. `dev:basepath` runs the same `server.js` used in production, just in Next's dev mode.
 

@@ -107,7 +107,7 @@ that runner's structured output worker is GPU-only: it hardcodes
 `pin_memory=True` and drives a Triton kernel over CUDA streams. The first
 schema-constrained request fails with
 
-```
+```text
 RuntimeError: pin_memory=True requires a CUDA or other accelerator backend;
 no pinned memory allocator is available on this system
 ```
