@@ -1,0 +1,143 @@
+{{- include "litellm.validate" . -}}
+{{- if include "litellm.keycloakBootstrapEnabled" . }}
+{{- $kb := .Values.sso.keycloakBootstrap }}
+{{/*
+Configures the Keycloak side of SSO before the proxy starts.
+
+Runs at a higher hook weight than the database Jobs, so by the time anyone can
+reach the UI the identity provider already knows about this release. Like the
+other Jobs in this chart it is a Helm hook, because a Job's pod template is
+immutable and a stable-named Job could not be updated in place on upgrade.
+*/}}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "litellm.keycloakBootstrap.fullname" . }}
+  labels:
+    {{- include "litellm.keycloakBootstrap.labels" . | nindent 4 }}
+  annotations:
+    {{- include "litellm.hookAnnotations" (dict "hooks" $kb.hooks "weight" $kb.hooks.helm.weight "extra" (list .Values.commonAnnotations $kb.annotations)) | nindent 4 }}
+spec:
+  backoffLimit: {{ $kb.backoffLimit }}
+  ttlSecondsAfterFinished: {{ $kb.ttlSecondsAfterFinished }}
+  {{- with $kb.activeDeadlineSeconds }}
+  activeDeadlineSeconds: {{ . }}
+  {{- end }}
+  template:
+    metadata:
+      labels:
+        {{- include "litellm.keycloakBootstrap.labels" . | nindent 8 }}
+      {{- with $kb.podAnnotations }}
+      annotations:
+        {{- tpl (toYaml .) $ | nindent 8 }}
+      {{- end }}
+    spec:
+      restartPolicy: OnFailure
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with $kb.podSecurityContext }}
+      securityContext:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: keycloak-bootstrap
+          image: "{{ $kb.image.repository }}:{{ $kb.image.tag }}"
+          imagePullPolicy: {{ $kb.image.pullPolicy }}
+          {{- /* The Keycloak image's entrypoint starts a server; this replaces
+                 it so the container runs kcadm against an existing one. */}}
+          command: ["/bin/bash", "/scripts/bootstrap.sh"]
+          {{- with $kb.securityContext }}
+          securityContext:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          env:
+            - name: KEYCLOAK_URL
+              value: {{ required "sso.keycloakBootstrap.url is required when the bootstrap Job is enabled" $kb.url | trimSuffix "/" | quote }}
+            - name: REALM
+              value: {{ required "sso.keycloakBootstrap.realm is required when the bootstrap Job is enabled" $kb.realm | quote }}
+            - name: ADMIN_REALM
+              value: {{ $kb.admin.realm | default "master" | quote }}
+            - name: CLIENT_ID
+              value: {{ .Values.sso.clientId | quote }}
+            - name: PROXY_BASE_URL
+              value: {{ include "litellm.proxyBaseUrl" . | quote }}
+            - name: ADMIN_ROLE
+              value: {{ $kb.roles.admin | quote }}
+            - name: USER_ROLE
+              value: {{ $kb.roles.user | quote }}
+            - name: ADMIN_GROUP
+              value: {{ $kb.groups.admin | quote }}
+            - name: USER_GROUP
+              value: {{ $kb.groups.user | quote }}
+            - name: WAIT_TIMEOUT
+              value: {{ $kb.waitTimeout | quote }}
+            {{- if $kb.adminUser.enabled }}
+            - name: LITELLM_ADMIN_USERNAME
+              value: {{ $kb.adminUser.username | quote }}
+            - name: LITELLM_ADMIN_EMAIL
+              value: {{ $kb.adminUser.email | quote }}
+            - name: LITELLM_ADMIN_FIRST_NAME
+              value: {{ $kb.adminUser.firstName | quote }}
+            - name: LITELLM_ADMIN_LAST_NAME
+              value: {{ $kb.adminUser.lastName | quote }}
+            {{- end }}
+          {{- with $kb.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          volumeMounts:
+            - name: scripts
+              mountPath: /scripts
+              readOnly: true
+            - name: keycloak-admin
+              mountPath: /secret/admin
+              readOnly: true
+            - name: sso
+              mountPath: /secret/sso
+              readOnly: true
+      volumes:
+        - name: scripts
+          configMap:
+            name: {{ include "litellm.keycloakBootstrap.fullname" . }}-scripts
+            defaultMode: 0555
+        - name: keycloak-admin
+          secret:
+            secretName: {{ required "sso.keycloakBootstrap.admin.existingSecret.name is required when the bootstrap Job is enabled" $kb.admin.existingSecret.name }}
+            items:
+              - key: {{ $kb.admin.existingSecret.usernameKey }}
+                path: username
+              - key: {{ $kb.admin.existingSecret.passwordKey }}
+                path: password
+        - name: sso
+          projected:
+            {{- /* Projected, because the client secret and the bootstrap
+                   administrator's password may live in two different Secrets:
+                   the chart's own, or ones the operator supplies. */}}
+            sources:
+              - secret:
+                  name: {{ include "litellm.sso.secretName" . }}
+                  items:
+                    - key: {{ include "litellm.sso.secretKey" . }}
+                      path: client-secret
+              {{- if $kb.adminUser.enabled }}
+              - secret:
+                  name: {{ include "litellm.sso.adminUserSecretName" . }}
+                  items:
+                    - key: {{ include "litellm.sso.adminUserSecretKey" . }}
+                      path: admin-user-password
+              {{- end }}
+      {{- with $kb.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with $kb.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with $kb.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+{{- end }}

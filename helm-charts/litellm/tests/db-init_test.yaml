@@ -1,0 +1,222 @@
+suite: database initialization
+release:
+  name: rel
+  namespace: litellm
+set:
+  modelManagement.mode: database
+  database.host: pg.example.com
+  database.existingSecret.name: litellm-db
+  database.init.enabled: true
+  database.init.admin.username: postgres
+  database.init.admin.password: adminpw
+tests:
+  - it: renders nothing when initialization is off
+    templates:
+      - templates/job-db-init.yaml
+      - templates/db-init-secret.yaml
+      - templates/db-init-rbac.yaml
+      - templates/db-init-scripts.yaml
+    set:
+      database.init.enabled: false
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: runs the psql step as an init container so cleanup cannot precede it
+    templates:
+      - templates/job-db-init.yaml
+    asserts:
+      - equal:
+          path: spec.template.spec.initContainers[0].name
+          value: db-init
+      - equal:
+          path: spec.template.spec.containers[0].name
+          value: admin-secret-cleanup
+      - hasDocuments:
+          count: 1
+
+  - it: erases the admin credentials with an idempotent merge patch
+    templates:
+      - templates/job-db-init.yaml
+    asserts:
+      # A JSON merge patch with null values removes the keys whether or not
+      # they are present, so no shell and no conditional logic are needed.
+      - equal:
+          path: spec.template.spec.containers[0].command
+          value: ["/bin/kubectl"]
+      - contains:
+          path: spec.template.spec.containers[0].args
+          content: --type=merge
+      - contains:
+          path: spec.template.spec.containers[0].args
+          content: '{"data":{"username":null,"password":null}}'
+      - contains:
+          path: spec.template.spec.containers[0].args
+          content: --namespace=litellm
+
+  - it: makes the admin credential volume optional so a re-run is a clean no-op
+    templates:
+      - templates/job-db-init.yaml
+    asserts:
+      # After a successful run the keys are gone. Without optional, the kubelet
+      # refuses to start the pod and a no-op looks like a failure.
+      - equal:
+          path: spec.template.spec.volumes[1].secret.optional
+          value: true
+
+  - it: feeds the proxy's own credentials in as the service user to create
+    templates:
+      - templates/job-db-init.yaml
+    set:
+      database.existingSecret.usernameKey: db-user
+      database.existingSecret.passwordKey: db-pass
+    asserts:
+      - equal:
+          path: spec.template.spec.volumes[2].secret.secretName
+          value: litellm-db
+      - equal:
+          path: spec.template.spec.volumes[2].secret.items[0].key
+          value: db-user
+      - equal:
+          path: spec.template.spec.volumes[2].secret.items[0].path
+          value: username
+
+  - it: orders itself ahead of the migration Job
+    templates:
+      - templates/job-db-init.yaml
+    asserts:
+      - equal:
+          path: metadata.annotations["helm.sh/hook"]
+          value: pre-install,pre-upgrade
+      - equal:
+          path: metadata.annotations["helm.sh/hook-weight"]
+          value: "-5"
+
+  - it: creates the admin Secret it will later erase
+    templates:
+      - templates/db-init-secret.yaml
+    asserts:
+      - isKind:
+          of: Secret
+      - equal:
+          path: stringData.username
+          value: postgres
+      # A lower weight than the Job, or the Job starts before the Secret exists.
+      - equal:
+          path: metadata.annotations["helm.sh/hook-weight"]
+          value: "-10"
+
+  - it: grants only get and patch on the one Secret it owns
+    templates:
+      - templates/db-init-rbac.yaml
+    documentIndex: 1
+    asserts:
+      - isKind:
+          of: Role
+      - equal:
+          path: rules[0].verbs
+          value: ["get", "patch"]
+      - equal:
+          path: rules[0].resourceNames
+          value: ["rel-litellm-db-init-admin"]
+
+  - it: creates no Secret and no RBAC when the admin Secret is supplied
+    templates:
+      - templates/db-init-secret.yaml
+      - templates/db-init-rbac.yaml
+    set:
+      database.init.admin.username: ""
+      database.init.admin.password: ""
+      database.init.admin.existingSecret.name: my-admin
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: runs the psql step directly when there is nothing to clean up
+    templates:
+      - templates/job-db-init.yaml
+    set:
+      database.init.admin.username: ""
+      database.init.admin.password: ""
+      database.init.admin.existingSecret.name: my-admin
+    asserts:
+      # No chart-owned Secret means no cleanup container, so the psql step
+      # becomes the Job's only container rather than an init container.
+      - equal:
+          path: spec.template.spec.containers[0].name
+          value: db-init
+      - notExists:
+          path: spec.template.spec.initContainers
+      - notExists:
+          path: spec.template.spec.serviceAccountName
+
+  - it: starts from the maintenance database, not the one being created
+    templates:
+      - templates/job-db-init.yaml
+    asserts:
+      - contains:
+          path: spec.template.spec.initContainers[0].env
+          content:
+            name: PGDATABASE
+            value: postgres
+      - contains:
+          path: spec.template.spec.initContainers[0].env
+          content:
+            name: DB_NAME
+            value: litellm
+
+  - it: reads the host from a Secret key when one is named
+    templates:
+      - templates/job-db-init.yaml
+    set:
+      database.existingSecret.hostKey: host
+    asserts:
+      - contains:
+          path: spec.template.spec.initContainers[0].env
+          content:
+            name: PGHOST
+            valueFrom:
+              secretKeyRef:
+                name: litellm-db
+                key: host
+
+  - it: quotes every identifier and literal it puts into SQL
+    templates:
+      - templates/db-init-scripts.yaml
+    asserts:
+      # The script authenticates as a database administrator, so nothing may
+      # reach SQL through shell interpolation. Credentials arrive via \getenv
+      # and statements are built with format() %I / %L.
+      - matchRegex:
+          path: data["init.sh"]
+          pattern: '\\getenv svc_password SVC_PASSWORD'
+      - matchRegex:
+          path: data["init.sh"]
+          pattern: "format\\('CREATE ROLE %I LOGIN PASSWORD %L'"
+      - notMatchRegex:
+          path: data["init.sh"]
+          pattern: 'PASSWORD ''\$\{'
+
+  - it: skips the schema step when no schema is named
+    templates:
+      - templates/db-init-scripts.yaml
+    set:
+      database.schema: ""
+      database.init.createSchema: false
+    asserts:
+      - notMatchRegex:
+          path: data["init.sh"]
+          pattern: "CREATE SCHEMA"
+
+  - it: omits the owner when it is not creating the role
+    templates:
+      - templates/db-init-scripts.yaml
+    set:
+      database.init.createUser: false
+    asserts:
+      - matchRegex:
+          path: data["init.sh"]
+          pattern: "format\\('CREATE DATABASE %I'"
+      - notMatchRegex:
+          path: data["init.sh"]
+          pattern: "CREATE DATABASE %I OWNER"

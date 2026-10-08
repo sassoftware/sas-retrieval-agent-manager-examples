@@ -63,6 +63,25 @@
     "replicaCount": { "type": "integer", "minimum": 0 },
     "numWorkers": { "type": ["string", "integer"] },
     "listen": { "type": "string" },
+    "trustedProxies": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 1 },
+      "description": "Addresses whose X-Forwarded-* headers are believed (FORWARDED_ALLOW_IPS). An IP, a CIDR, or \"*\"."
+    },
+    "serverRootPath": { "type": "string", "pattern": "^(|/[^/].*[^/]|/[^/])$" },
+    "docs": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["enabled"],
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "path": {
+          "type": "string",
+          "pattern": "^/",
+          "description": "Path the Swagger UI is served on, relative to serverRootPath. \"/\" restores upstream's mount-root behaviour."
+        }
+      }
+    },
 
     "image": {
       "type": "object",
@@ -142,6 +161,121 @@
             "name": { "type": "string" },
             "usernameKey": { "type": "string" },
             "passwordKey": { "type": "string" }
+          }
+        }
+      }
+    },
+
+    "sso": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["enabled"],
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "proxyBaseUrl": { "type": "string" },
+        "clientId": { "type": "string", "minLength": 1 },
+        "scope": { "type": "string" },
+        "clientState": { "type": "string" },
+        "usePkce": { "type": "boolean" },
+        "authorizationEndpoint": { "type": "string" },
+        "tokenEndpoint": { "type": "string" },
+        "userinfoEndpoint": { "type": "string" },
+        "logoutUrl": { "type": "string" },
+        "clientSecret": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "value": { "type": "string" },
+            "existingSecret": { "$ref": "#/definitions/secretRef" }
+          }
+        },
+        "keycloakBootstrap": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["enabled"],
+          "properties": {
+            "enabled": { "type": "boolean" },
+            "url": { "type": "string" },
+            "realm": { "type": "string" },
+            "admin": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "existingSecret": { "$ref": "#/definitions/secretUserRef" },
+                "realm": { "type": "string" }
+              }
+            },
+            "roles": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "admin": { "enum": ["proxy_admin", "proxy_admin_viewer", "internal_user", "internal_user_viewer"] },
+                "user": { "enum": ["proxy_admin", "proxy_admin_viewer", "internal_user", "internal_user_viewer"] }
+              }
+            },
+            "groups": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "admin": { "type": "string", "minLength": 1 },
+                "user": { "type": "string", "minLength": 1 }
+              }
+            },
+            "adminUser": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "enabled": { "type": "boolean" },
+                "username": { "type": "string", "minLength": 1 },
+                "email": { "type": "string" },
+                "firstName": { "type": "string" },
+                "lastName": { "type": "string" },
+                "permanentPassword": { "type": "boolean" },
+                "password": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "value": { "type": "string" },
+                    "existingSecret": { "$ref": "#/definitions/secretRef" }
+                  }
+                }
+              }
+            },
+            "extraRedirectUris": { "type": "array", "items": { "type": "string" } },
+            "image": { "$ref": "#/definitions/image" },
+            "waitTimeout": { "type": "integer", "minimum": 1 },
+            "backoffLimit": { "type": "integer", "minimum": 0 },
+            "ttlSecondsAfterFinished": { "type": "integer", "minimum": 0 },
+            "activeDeadlineSeconds": { "type": ["integer", "null"], "minimum": 1 },
+            "annotations": { "$ref": "#/definitions/stringMap" },
+            "podAnnotations": { "$ref": "#/definitions/stringMap" },
+            "podSecurityContext": { "type": "object", "additionalProperties": true },
+            "securityContext": { "type": "object", "additionalProperties": true },
+            "resources": { "type": "object", "additionalProperties": true },
+            "nodeSelector": { "$ref": "#/definitions/stringMap" },
+            "tolerations": { "$ref": "#/definitions/objectArray" },
+            "affinity": { "type": "object", "additionalProperties": true },
+            "hooks": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "helm": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "enabled": { "type": "boolean" },
+                    "weight": { "type": ["string", "integer"] }
+                  }
+                },
+                "argocd": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "enabled": { "type": "boolean" }
+                  }
+                }
+              }
+            }
           }
         }
       }
@@ -277,6 +411,10 @@
           "required": ["enabled"],
           "properties": {
             "enabled": { "type": "boolean" },
+            "delegated": {
+              "type": "boolean",
+              "description": "Render a child proxy with no virtualhost, for a parent HTTPProxy that includes this one."
+            },
             "ingressClassName": { "type": "string" },
             "tls": {
               "type": "object",
@@ -361,7 +499,74 @@
           }
         },
         "disablePreparedStatements": { "type": "boolean" },
-        "maxIdleConnectionLifetime": { "type": ["string", "integer"] }
+        "maxIdleConnectionLifetime": { "type": ["string", "integer"] },
+        "init": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["enabled"],
+          "properties": {
+            "enabled": { "type": "boolean" },
+            "admin": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "username": { "type": "string" },
+                "password": { "type": "string" },
+                "existingSecret": { "$ref": "#/definitions/secretUserRef" },
+                "database": { "type": "string", "minLength": 1 },
+                "sslMode": { "enum": ["", "disable", "prefer", "require", "verify-ca", "verify-full"] }
+              }
+            },
+            "createDatabase": { "type": "boolean" },
+            "createUser": { "type": "boolean" },
+            "createSchema": { "type": "boolean" },
+            "cleanup": { "type": "boolean" },
+            "waitTimeout": { "type": "integer", "minimum": 1 },
+            "image": { "$ref": "#/definitions/image" },
+            "kubectlImage": { "$ref": "#/definitions/image" },
+            "serviceAccount": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "create": { "type": "boolean" },
+                "name": { "type": "string" },
+                "annotations": { "$ref": "#/definitions/stringMap" }
+              }
+            },
+            "backoffLimit": { "type": "integer", "minimum": 0 },
+            "ttlSecondsAfterFinished": { "type": "integer", "minimum": 0 },
+            "activeDeadlineSeconds": { "type": ["integer", "null"], "minimum": 1 },
+            "annotations": { "$ref": "#/definitions/stringMap" },
+            "podAnnotations": { "$ref": "#/definitions/stringMap" },
+            "podSecurityContext": { "type": "object", "additionalProperties": true },
+            "securityContext": { "type": "object", "additionalProperties": true },
+            "resources": { "type": "object", "additionalProperties": true },
+            "nodeSelector": { "$ref": "#/definitions/stringMap" },
+            "tolerations": { "$ref": "#/definitions/objectArray" },
+            "affinity": { "type": "object", "additionalProperties": true },
+            "hooks": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "helm": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "enabled": { "type": "boolean" },
+                    "weight": { "type": ["string", "integer"] }
+                  }
+                },
+                "argocd": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "enabled": { "type": "boolean" }
+                  }
+                }
+              }
+            }
+          }
+        }
       }
     },
 
@@ -421,7 +626,9 @@
             "argocd": {
               "type": "object",
               "additionalProperties": false,
-              "properties": { "enabled": { "type": "boolean" } }
+              "properties": {
+                "enabled": { "type": "boolean" }
+              }
             }
           }
         }
@@ -486,6 +693,25 @@
         "passwordKey": { "type": "string" },
         "urlKey": { "type": "string" },
         "hostKey": { "type": "string" }
+      }
+    },
+    "secretUserRef": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "name": { "type": "string" },
+        "usernameKey": { "type": "string" },
+        "passwordKey": { "type": "string" }
+      }
+    },
+    "image": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["repository", "tag"],
+      "properties": {
+        "repository": { "type": "string", "minLength": 1 },
+        "tag": { "type": "string", "minLength": 1 },
+        "pullPolicy": { "enum": ["Always", "IfNotPresent", "Never"] }
       }
     },
     "probe": {

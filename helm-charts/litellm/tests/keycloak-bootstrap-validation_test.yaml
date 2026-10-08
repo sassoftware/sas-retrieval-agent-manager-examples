@@ -1,0 +1,71 @@
+suite: keycloak bootstrap validation
+release:
+  name: rel
+  namespace: litellm
+# Suite level, because helm-unittest resolves `failedTemplate` only against
+# templates named here. With a per-test `templates:` it reports a misleading
+# "No failed document" instead of matching.
+templates:
+  - templates/job-keycloak-bootstrap.yaml
+set:
+  routing.hosts: [llm.example.com]
+  routing.tls.enabled: true
+  routing.tls.secretName: tls
+  sso.enabled: true
+  sso.authorizationEndpoint: https://kc.example.com/realms/r/protocol/openid-connect/auth
+  sso.tokenEndpoint: http://kc.internal:8080/realms/r/protocol/openid-connect/token
+  sso.userinfoEndpoint: http://kc.internal:8080/realms/r/protocol/openid-connect/userinfo
+  sso.keycloakBootstrap.enabled: true
+  sso.keycloakBootstrap.url: http://kc.internal:8080
+  sso.keycloakBootstrap.realm: myrealm
+  sso.keycloakBootstrap.admin.existingSecret.name: kc-admin
+tests:
+  - it: renders with the defaults above
+    asserts:
+      - isKind:
+          of: Job
+
+  - it: rejects one group carrying both roles
+    set:
+      sso.keycloakBootstrap.groups.admin: shared
+      sso.keycloakBootstrap.groups.user: shared
+    asserts:
+      - failedTemplate:
+          errorPattern: must differ
+
+  - it: requires the Keycloak administrator Secret
+    set:
+      sso.keycloakBootstrap.admin.existingSecret.name: ""
+    asserts:
+      # The Job authenticates as a Keycloak administrator; the chart reads
+      # those credentials from a Secret only.
+      - failedTemplate:
+          errorPattern: admin\.existingSecret\.name is required
+
+  - it: rejects a bootstrap with SSO itself turned off
+    set:
+      sso.enabled: false
+    asserts:
+      # It would register a client this release then never uses.
+      - failedTemplate:
+          errorPattern: requires sso\.enabled
+
+  - it: requires a browser-facing URL it can derive or be told
+    set:
+      routing.hosts: []
+    asserts:
+      - failedTemplate:
+          errorPattern: needs a browser-facing URL
+
+  - it: requires the base URL to carry a scheme
+    set:
+      sso.proxyBaseUrl: llm.example.com
+    asserts:
+      # A provider rejects a redirect_uri with no scheme, and the resulting
+      # error names the provider rather than this value.
+      - failedTemplate:
+          errorPattern: must include the scheme
+
+  # A role name outside LiteLLM's own set is rejected by the enum on
+  # sso.keycloakBootstrap.roles in values.schema.json before any template
+  # renders, so it cannot be asserted here.

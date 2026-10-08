@@ -9,6 +9,10 @@ controller-specific annotations that no schema validates.
 
 A streaming completion can outlive Envoy's 15s default response timeout. Set
 routing.httpProxy.timeoutPolicy.response to `infinity` or a generous value.
+
+With routing.httpProxy.delegated this renders a CHILD proxy: no virtualhost,
+so it does not compete for the hostname, and a route condition of `/` because
+the including parent already contributes the prefix.
 */}}
 apiVersion: projectcontour.io/v1
 kind: HTTPProxy
@@ -28,6 +32,7 @@ spec:
   {{- with $r.httpProxy.ingressClassName }}
   ingressClassName: {{ . }}
   {{- end }}
+  {{- if not $r.httpProxy.delegated }}
   virtualhost:
     fqdn: {{ first $r.hosts | quote }}
     {{- if $r.tls.enabled }}
@@ -39,10 +44,18 @@ spec:
       minimumProtocolVersion: {{ $r.httpProxy.tls.minimumProtocolVersion | quote }}
       {{- end }}
     {{- end }}
+  {{- end }}
   routes:
     - conditions:
         {{- if $r.httpProxy.conditions }}
         {{- toYaml $r.httpProxy.conditions | nindent 8 }}
+        {{- else if $r.httpProxy.delegated }}
+        {{- /*
+          The parent's include already carries the prefix, and Contour
+          concatenates the two, so repeating routing.path here would serve
+          /litellm/litellm.
+        */}}
+        - prefix: "/"
         {{- else }}
         - prefix: {{ $r.path | quote }}
         {{- end }}
