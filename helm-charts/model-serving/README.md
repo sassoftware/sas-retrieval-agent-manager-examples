@@ -82,6 +82,49 @@ under `helm-charts/`, discovering them by listing the directory.
 
 ## Values migration
 
+### 0.3.0: runtime environment
+
+Each entry of `clusterServingRuntimes` now also takes an `env` list, in the
+Kubernetes `EnvVar` form. KServe merges it into the predictor pod, so it
+applies to every model served by that runtime. Nothing has to be migrated: the
+value is additive, and `env: []` renders no `env` block at all.
+
+`clusterServingRuntimes.vllmCPU.env` ships one default, and it is load-bearing:
+
+```yaml
+clusterServingRuntimes:
+  vllmCPU:
+    env:
+      - name: VLLM_USE_V2_MODEL_RUNNER
+        value: "0"
+```
+
+Without it, a request that asks for structured output, meaning
+`response_format: {"type": "json_schema"}` or any other guided decoding, kills
+the vLLM engine on the CPU backend. vLLM 0.26.0 picks its "v2" model runner for
+several model architectures, Gemma among them, even when the device is CPU, and
+that runner's structured output worker is GPU-only: it hardcodes
+`pin_memory=True` and drives a Triton kernel over CUDA streams. The first
+schema-constrained request fails with
+
+```
+RuntimeError: pin_memory=True requires a CUDA or other accelerator backend;
+no pinned memory allocator is available on this system
+```
+
+which returns HTTP 500 and restarts the pod. Plain completions never reach that
+code path, so the model otherwise looks healthy and the InferenceService still
+reports `Ready`; a rising restart count is the only outward symptom.
+
+Selecting the v1 runner routes to a path that honours the platform
+pinned-memory flag, which is `False` on CPU, and that has an explicit CPU branch
+for applying the grammar bitmask. Drop the variable once the runtime image
+carries the upstream fix, which replaces the hardcoded `pin_memory=True` with
+the platform flag.
+
+The same list-replacement rule as `args` applies: setting `env` discards the
+chart default, so copy the variable forward if it is still needed.
+
 ### 0.2.0: runtime arguments
 
 Each entry of `clusterServingRuntimes` now takes one `args` list instead of a

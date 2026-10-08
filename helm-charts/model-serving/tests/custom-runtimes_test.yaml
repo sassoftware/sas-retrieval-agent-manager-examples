@@ -92,6 +92,57 @@ tests:
             - --model_path=/mnt/models
             - --port=9000
             - --rest_port=8080
+  # Structured output crashes the vLLM CPU engine without this variable, so the
+  # default is load-bearing rather than cosmetic. Assert it by default, and
+  # assert that overriding it is still possible.
+  - it: ships the vLLM CPU structured output workaround by default
+    set:
+      clusterServingRuntimes.openVINO.enabled: false
+    asserts:
+      - equal:
+          path: spec.containers[0].env
+          value:
+            - name: VLLM_USE_V2_MODEL_RUNNER
+              value: "0"
+  - it: replaces the vllmCPU env when the operator sets it
+    set:
+      clusterServingRuntimes.openVINO.enabled: false
+      clusterServingRuntimes.vllmCPU.env:
+        - name: VLLM_LOGGING_LEVEL
+          value: DEBUG
+    asserts:
+      - equal:
+          path: spec.containers[0].env
+          value:
+            - name: VLLM_LOGGING_LEVEL
+              value: DEBUG
+  - it: omits the vllmCPU env block when the list is empty
+    set:
+      clusterServingRuntimes.openVINO.enabled: false
+      clusterServingRuntimes.vllmCPU.env: []
+    asserts:
+      - notExists:
+          path: spec.containers[0].env
+  # openVINO defaults to no env at all, so the block must not appear unless the
+  # operator asks for it.
+  - it: omits the openVINO env block by default
+    set:
+      clusterServingRuntimes.vllmCPU.enabled: false
+    asserts:
+      - notExists:
+          path: spec.containers[0].env
+  - it: renders openVINO env when the operator sets it
+    set:
+      clusterServingRuntimes.vllmCPU.enabled: false
+      clusterServingRuntimes.openVINO.env:
+        - name: LOG_LEVEL
+          value: DEBUG
+    asserts:
+      - equal:
+          path: spec.containers[0].env
+          value:
+            - name: LOG_LEVEL
+              value: DEBUG
   - it: allows either custom runtime to be disabled
     set:
       clusterServingRuntimes.openVINO.enabled: false

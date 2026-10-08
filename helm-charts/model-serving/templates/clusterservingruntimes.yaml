@@ -26,6 +26,10 @@ spec:
         {{- with .Values.clusterServingRuntimes.openVINO.args }}
         {{- toYaml . | nindent 8 }}
         {{- end }}
+      {{- with .Values.clusterServingRuntimes.openVINO.env }}
+      env:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
       startupProbe:
         periodSeconds: 5
         failureThreshold: 9999
@@ -77,6 +81,10 @@ spec:
         {{- with .Values.clusterServingRuntimes.vllmCPU.args }}
         {{- toYaml . | nindent 8 }}
         {{- end }}
+      {{- with .Values.clusterServingRuntimes.vllmCPU.env }}
+      env:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
       volumeMounts:
         - name: shm
           mountPath: /dev/shm
