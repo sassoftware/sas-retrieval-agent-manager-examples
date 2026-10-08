@@ -1,13 +1,14 @@
-## SAS Viya MCP Tool Server Template
+# SAS Viya MCP Tool Server Template
 
 This README.md documents how to setup the SAS Viya MCP container from
 [sassoftware/sas-mcp-server](https://github.com/sassoftware/sas-mcp-server)
 for use in Retrieval Agent Manager.
 
-### Viya Setup
+## Viya Setup
 
 See [Register a Custom Application (OAuth Client)](https://go.documentation.sas.com/doc/en/sasadmincdc/v_076/calauthmdl/n1iyx40th7exrqn1ej8t12gfhm88.htm#n0ce1kz53qzmukn165fzrqdsws3e)
 for instructions to register a custom application.  The client should be registered with a custom group, UID, and GID.  An example client might look like this:
+
 ```json
 {
     "client_id": "client-id",
@@ -19,7 +20,7 @@ for instructions to register a custom application.  The client should be registe
 }
 ```
 
-#### Create the OAuth Client with the Example Script
+### Create the OAuth Client with the Example Script
 
 The `create_viya_oauth_client.py` script creates the OAuth client in Viya with the
 `client_credentials` grant type, along with a matching custom group. It requires
@@ -90,7 +91,7 @@ The script prints the created client details. If the client already exists, it
 prints a message and does not modify it. Update an existing client using the
 [SASLogon update client API](https://developer.sas.com/rest-apis/SASLogon/updateClient).
 
-#### Clean Up with the Example Script
+### Clean Up with the Example Script
 
 The `delete_viya_oauth_client.py` script removes the group and OAuth client
 created above. It uses the same `VIYA_URL`, `CLIENT_ID`, and authentication
@@ -106,14 +107,14 @@ export VIYA_PASSWORD="<password>"
 python delete_viya_oauth_client.py
 ```
 
-### Template Settings (required fields)
+## Template Settings (required fields)
 
 - Container image: ghcr.io/sassoftware/sas-mcp-server:latest
 - Transport: HTTP
 - Port: 8134
 - Base Path: /mcp
 
-### Authentication
+## Authentication
 
 Authentication requires OAuth client credentials.
 
@@ -121,7 +122,7 @@ Authentication requires OAuth client credentials.
 - The OAuth Token URL should be set to `<Viya URL>/SASLogon/oauth/token`.
 - The OAuth Scope can be left empty.
 
-### Environment Variables
+## Environment Variables
 
 These environment variables are used by the container. You do not need to set a default value
 for them. You can set your specific Viya URL when you instantiate this template
@@ -130,7 +131,7 @@ in the **MCP Tools** view in Retrieval Agent Manager.
 - VIYA_ENDPOINT
 - ALLOW_RAW_BEARER: true
 
-### Configuration File
+## Configuration File
 
 To use a custom CA certificate bundle for the Viya TLS connection, set the
 configuration file to:
