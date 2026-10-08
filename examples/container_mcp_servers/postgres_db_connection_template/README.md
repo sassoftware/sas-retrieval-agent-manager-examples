@@ -1,7 +1,7 @@
 # Postgres DB Connection Template
 
 This README.md documents how to setup the GenAI toolbox MCP server
-for use in SAS Retrieval Agent Manager (RAM). It uses the MCP toolbox server from Google: https://github.com/googleapis/genai-toolbox
+for use in SAS Retrieval Agent Manager (RAM). It uses the MCP toolbox server from Google: <https://github.com/googleapis/genai-toolbox>
 
 The MCP toolbox server contains many prebuilt tool configurations for various
 database connections. This example uses the prebuilt postgres tools configuration.

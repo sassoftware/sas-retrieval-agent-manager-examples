@@ -28,6 +28,7 @@ on:
       - "_includes/**"
       - "_plugins/**"
       - "assets/**"
+      - ".markdownlint-cli2.jsonc"
       - ".github/workflows/deploy-doc.yml"
 
 concurrency:
@@ -38,7 +39,20 @@ permissions:
   contents: read
 
 jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      # Rules and ignores come from .markdownlint-cli2.jsonc. Reproduce a
+      # failure locally with `npx markdownlint-cli2` and fix the mechanical
+      # ones with `npx markdownlint-cli2 --fix`.
+      - name: Lint Markdown
+        uses: DavidAnson/markdownlint-cli2-action@v20
+
   validate:
+    needs: lint
     runs-on: ubuntu-latest
     steps:
       - name: Check out repository
