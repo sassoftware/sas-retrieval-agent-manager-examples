@@ -7,7 +7,7 @@ description: >
   OpenShift Route. Models are managed either from config.yaml or from
   PostgreSQL.
 type: application
-version: 0.1.0
+version: 0.1.1
 # The upstream LiteLLM release this chart targets. It is the default container
 # tag: `image.tag` is empty by default and falls back to this value, so one edit
 # here moves the proxy and the migration Job together and can never leave them
