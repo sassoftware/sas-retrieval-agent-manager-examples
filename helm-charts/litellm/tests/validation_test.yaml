@@ -120,3 +120,22 @@ tests:
     asserts:
       - failedTemplate:
           errorMessage: "autoscaling.minReplicas must not exceed autoscaling.maxReplicas"
+
+  # Not a feature of this chart -- it reads no global value -- but the one thing
+  # that decides whether the chart can be a dependency at all. Helm writes a
+  # `global` key into every subchart's values unconditionally, even when the
+  # parent sets none, and then validates those values against this chart's
+  # schema. Without `global` declared, `additionalProperties: false` rejects
+  # Helm's own injection, and EVERY parent chart fails to render with
+  # "at '': additional properties 'global' not allowed".
+  #
+  # Nothing else here would catch that: a standalone `helm template` never
+  # injects `global`, so the chart looks perfectly healthy right up until
+  # someone depends on it.
+  - it: accepts the global key Helm injects into every subchart
+    set:
+      global:
+        imageRegistry: registry.example.com
+    asserts:
+      - isKind:
+          of: Deployment

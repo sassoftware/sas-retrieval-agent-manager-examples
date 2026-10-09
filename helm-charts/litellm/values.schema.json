@@ -664,7 +664,9 @@
       }
     },
 
-    "extraResources": { "$ref": "#/definitions/objectArray" }
+    "extraResources": { "$ref": "#/definitions/objectArray" },
+
+    "global": { "type": "object", "additionalProperties": true }
   },
 
   "definitions": {

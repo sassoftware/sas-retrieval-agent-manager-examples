@@ -210,7 +210,7 @@ echo "── Every value the schema declares is mentioned in the README ──�
 # byte-equality, so the prose stays hand-written and only genuinely
 # undocumented values fail the build.
 #
-# Measured at 225/243 leaves when this was added; the 18 exceptions below are
+# Measured at 225/243 leaves when this was added; the exceptions below are
 # listed individually so that adding to them is a visible decision.
 python3 - "$CHART_PATH" <<'PY'
 import json
@@ -223,6 +223,12 @@ chart = sys.argv[1]
 # and probe/annotation passthroughs whose meaning is upstream Kubernetes rather
 # than anything this chart decides.
 ALLOWED = {
+    # `global` is not a setting of this chart at all -- no template reads it.
+    # It is declared only because Helm writes the key into every subchart's
+    # values and then validates them against this schema, so a chart that does
+    # not declare it cannot be used as a dependency. Documenting it in the
+    # README would describe a feature that does not exist.
+    "global",
     "nameOverride", "fullnameOverride",
     "serviceAccount.automount", "serviceAccount.name",
     "deploymentMinReadySeconds",
