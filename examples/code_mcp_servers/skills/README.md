@@ -27,16 +27,16 @@ Loads and returns the procedural instructions for a skill by name.
 ```xml
 <available_skills>
   <skill>
+    <name>support_ticket_analyzer</name>
+    <description>Analyzes customer support inquiries to extract issue category, customer sentiment, and priority level.</description>
+  </skill>
+  <skill>
     <name>table_formatter</name>
     <description>Formats unorganized text, data records, or raw lists into clean Markdown tables.</description>
   </skill>
   <skill>
     <name>text_summarizer</name>
     <description>Summarizes lengthy articles, transcripts, or reports into structured executive briefings.</description>
-  </skill>
-  <skill>
-    <name>support_ticket_analyzer</name>
-    <description>Analyzes customer support inquiries to extract issue category, customer sentiment, and priority level.</description>
   </skill>
 </available_skills>
 ```
