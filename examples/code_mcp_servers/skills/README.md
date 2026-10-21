@@ -76,7 +76,7 @@ No environment variables are required for this example.
 
 ## How to add skills
 
-1. On the **Code Templates** page in RAM, creat a new **Code MCP Server**.
+1. On the **Code Templates** page in RAM, create a new **Code MCP Server**.
 2. On the Code tab:
    - Hit + and add `run.py`
    - Copy the content of `run.py` into the editor's `run.py`.
