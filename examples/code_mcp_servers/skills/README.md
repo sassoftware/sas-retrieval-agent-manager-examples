@@ -2,7 +2,7 @@
 
 This folder contains a Code MCP server template implementing the conversational agent skills pattern in SAS Retrieval Agent Manager (RAM).
 
-Instead of putting procedural instructions or step-by-step guides directly into an agent system prompt, this server exposes an `invoke_skill` tool. The tool description dynamically lists all available skills in a standardized XML catalog (`<available_skills>`), which is automatically injected into the agent context through the tool schema. When the agent determines a task requires a specific skill, it invokes `invoke_skill` with the skill name to fetch the full instructions on demand.
+Instead of injecting the full content of some procedural instructions or step-by-step guides or whatever else you include in the skill into the system prompt at all times, this server exposes an `invoke_skill` tool. Only the names and descriptions of all included skills are in the agent's context at all times. When the agent determines a task requires a specific skill, it invokes that skill with the skill name to dynamically the full content of the skill. 
 
 Users can add, customize, or remove skills simply by uploading or modifying Markdown files in the code template without changing Python code.
 
@@ -74,15 +74,11 @@ If frontmatter is omitted, the server uses the filename stem (without `.md`) as 
 
 No environment variables are required for this example.
 
-## Deployment and Usage in RAM
+## How to add skills
 
-1. Navigate to **Code Templates** in the RAM navigation menu and click **New template**.
-2. Select **Code MCP Server**, enter a name (such as `Skills MCP Server`), and click **Save**.
-3. In the template editor:
+1. On the **Code Templates** page in RAM, creat a new **Code MCP Server**.
+2. On the Code tab:
+   - Hit + and add `run.py`
    - Copy the content of `run.py` into the editor's `run.py`.
-   - Add new files for your skills (for example, upload files from `example_skills/`).
-4. Click **Publish** to publish version 1.
-5. Navigate to **MCP Tools**, click **New MCP tool server**, select **Custom**, and choose your published template.
-6. Once the MCP tool server pod starts and reaches `Running` status, navigate to your agent experiment.
-7. Under the experiment **Tools** tab, attach the `invoke_skill` tool and save.
-8. Start the agent production server. The agent can now discover and invoke skills on demand.
+   - Upload new files for your skills with the "Browse" button (for example, upload files from `example_skills/`).
+3. Save it and add it to a custom MCP Tool Server
