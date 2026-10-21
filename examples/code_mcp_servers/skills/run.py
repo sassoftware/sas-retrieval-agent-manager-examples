@@ -1,14 +1,9 @@
 import html
-import logging
 from pathlib import Path
 import re
 from typing import Dict, Tuple
 
 from sasram.mcp import mcp
-
-logger = logging.getLogger(__name__)
-if not logger.handlers:
-    logging.basicConfig(level=logging.INFO)
 
 FRONTMATTER_PATTERN = re.compile(r"^---\s*\n(.*?)\n---\s*\n(.*)$", re.DOTALL)
 
@@ -18,17 +13,11 @@ def parse_skill_file(file_path: Path) -> Tuple[str, str, str]:
 
     Supports optional YAML frontmatter at the top of the file.
     """
-    logger.info("Reading skill file: %s", file_path)
     text = file_path.read_text(encoding="utf-8")
     stem_name = file_path.stem
 
     match = FRONTMATTER_PATTERN.match(text)
     if not match:
-        logger.info(
-            "No YAML frontmatter found in %s, falling back to stem name '%s'",
-            file_path.name,
-            stem_name,
-        )
         return stem_name, "", text
 
     header, body = match.group(1), match.group(2)
@@ -46,27 +35,18 @@ def parse_skill_file(file_path: Path) -> Tuple[str, str, str]:
             if parsed_desc:
                 desc = parsed_desc
 
-    logger.info(
-        "Parsed skill file '%s' -> name: '%s', description: '%s'",
-        file_path.name,
-        name,
-        desc,
-    )
     return name, desc, body
 
 
 def discover_skills(base_dir: Path) -> Dict[str, Dict[str, str]]:
     """Scan base directory and subdirectories for markdown skills, ignoring README and hidden paths."""
-    logger.info("Discovering skills starting from directory: %s", base_dir)
     discovered: Dict[str, Dict[str, str]] = {}
 
     for path in sorted(base_dir.rglob("*.md")):
         parts = path.relative_to(base_dir).parts
         if any(part.startswith(".") for part in parts):
-            logger.info("Skipping hidden file or directory: %s", path)
             continue
         if path.name.lower() == "readme.md":
-            logger.info("Skipping README file: %s", path)
             continue
 
         name, desc, body = parse_skill_file(path)
@@ -75,7 +55,6 @@ def discover_skills(base_dir: Path) -> Dict[str, Dict[str, str]]:
         if normalized_key in discovered:
             first_path = discovered[normalized_key]["file_path"]
             err_msg = f"Duplicate skill name '{name}' detected. Colliding files: '{first_path}' and '{path}'"
-            logger.error(err_msg)
             raise ValueError(err_msg)
 
         discovered[normalized_key] = {
@@ -85,7 +64,6 @@ def discover_skills(base_dir: Path) -> Dict[str, Dict[str, str]]:
             "file_path": str(path),
         }
 
-    logger.info("Skill discovery complete. Loaded %d skill(s).", len(discovered))
     return discovered
 
 
@@ -115,27 +93,16 @@ TOOL_DOCSTRING = (
 
 def invoke_skill(skill_name: str) -> str:
     """Load and return instructions for a skill."""
-    logger.info("invoke_skill called with skill_name: '%s'", skill_name)
     normalized_query = skill_name.strip().lower()
 
     if normalized_query in SKILLS:
         matched_skill = SKILLS[normalized_query]
-        logger.info(
-            "Found matching skill '%s' for query '%s'",
-            matched_skill["name"],
-            skill_name,
-        )
         return matched_skill["body"]
 
     available = ", ".join(f"'{s['name']}'" for s in SKILLS.values())
     err = f"Unknown skill '{skill_name}'. Available skills: {available}"
-    logger.warning(err)
     raise ValueError(err)
 
 
 invoke_skill.__doc__ = TOOL_DOCSTRING
 mcp.tool(invoke_skill)
-logger.info(
-    "Registered invoke_skill tool with FastMCP. Tool description length: %d chars",
-    len(TOOL_DOCSTRING),
-)
