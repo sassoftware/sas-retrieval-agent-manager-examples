@@ -448,7 +448,6 @@ Set `path: /` to restore upstream's behaviour, or `enabled: false` to drop the d
 
 > [!NOTE]
 > With the docs moved, the mount root itself returns LiteLLM's plain `"LiteLLM: RUNNING"` health string. The proxy has no route that redirects its root to the Admin UI, so link people to `/litellm/ui` directly.
-
 > [!NOTE]
 > The health endpoints keep answering at the **root** as well, which is why the probes in this chart are not prefixed. Verified against the image: with `SERVER_ROOT_PATH` set, `/health/readiness` and `/litellm/health/readiness` both return 200 while `/ui` returns 404 and `/litellm/ui` returns 200. The UI's own asset URLs are rewritten by the image at runtime.
 
@@ -656,15 +655,13 @@ The admin credential is separate because creating a database and a role needs pr
 Against the maintenance database named by `admin.database` (`postgres` by default, because `CREATE DATABASE` cannot run inside the database being created):
 
 1. `CREATE ROLE` for the service user, or `ALTER ROLE` to reset its password to match the Secret.
-2. `CREATE DATABASE` owned by that role.
+1. `CREATE DATABASE` owned by that role.
+  Then, connected to the new database:
+1. `GRANT ALL PRIVILEGES ON DATABASE` to the role.
+1. `CREATE SCHEMA ... AUTHORIZATION` the role, and `GRANT ALL ON SCHEMA`.
+1. `ALTER ROLE ... SET search_path`, so an interactive `psql` session as that role lands in the right schema.
 
-Then, connected to the new database:
-
-3. `GRANT ALL PRIVILEGES ON DATABASE` to the role.
-4. `CREATE SCHEMA ... AUTHORIZATION` the role, and `GRANT ALL ON SCHEMA`.
-5. `ALTER ROLE ... SET search_path`, so an interactive `psql` session as that role lands in the right schema.
-
-Each step is skipped when the object already exists, so the Job is safe to re-run. Step 4's `GRANT` runs even on an existing schema: PostgreSQL 15 stopped granting `CREATE` on `public` to everyone, and without it `prisma migrate deploy` fails with `permission denied for schema`.
+Each step is skipped when the object already exists, so the Job is safe to re-run. The schema `GRANT` runs even on an existing schema: PostgreSQL 15 stopped granting `CREATE` on `public` to everyone, and without it `prisma migrate deploy` fails with `permission denied for schema`.
 
 Turn individual steps off with `createDatabase`, `createUser`, and `createSchema` when a DBA has already done part of the work.
 

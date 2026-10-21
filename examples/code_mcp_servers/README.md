@@ -50,4 +50,5 @@ with your agent.
 | [Finance Tools](./finance_tools/) | Finance and quantitative analysis tools, including market data lookup, regression, summary statistics, and arithmetic helpers |
 | [News Search Tools](./news_search_tools/) | Web search tools for finding news from NYT, Reddit, DuckDuckGo, and Yahoo Finance |
 | [Simple Calculator](./simple_calculator/) | A minimal single-tool MCP server example that adds two integers |
+| [Street View](./street_view/) | Google Street View imagery and route distance tools using the Google Maps Platform APIs |
 | [Web Search](./web_search/) | A lightweight web search tool example built on DuckDuckGo search via the `ddgs` package |
