@@ -1,7 +1,18 @@
+import importlib.util
 import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import MagicMock
+
+# Mock sasram.mcp if running outside an environment where sasram is installed
+if "sasram" not in sys.modules and importlib.util.find_spec("sasram") is None:
+    mock_mcp_module = MagicMock()
+    mock_mcp = MagicMock()
+    mock_mcp.tool.side_effect = lambda fn: fn
+    mock_mcp_module.mcp = mock_mcp
+    sys.modules["sasram"] = MagicMock()
+    sys.modules["sasram.mcp"] = mock_mcp_module
 
 # Ensure the skills example folder is on the Python path
 sys.path.insert(0, str(Path(__file__).resolve().parent))

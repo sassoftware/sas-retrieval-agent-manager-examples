@@ -4,12 +4,7 @@ from pathlib import Path
 import re
 from typing import Dict, Tuple
 
-try:
-    from sasram.mcp import mcp
-except ImportError:
-    from fastmcp import FastMCP
-
-    mcp = FastMCP("skills")
+from sasram.mcp import mcp
 
 logger = logging.getLogger(__name__)
 if not logger.handlers:
