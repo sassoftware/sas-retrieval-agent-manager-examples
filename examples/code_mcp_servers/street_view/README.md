@@ -31,7 +31,7 @@ Calculates route distance and estimated travel time using Google Routes. This is
 
 1. In a Google Cloud project, enable the Street View Static API and Routes API, and configure billing and API quotas.
 2. Create an API key restricted to the APIs used by this server.
-3. In the RAM Code MCP server template, use `run.py` and configure `GOOGLE_MAPS_API_KEY` as a secret environment variable. 
+3. In the RAM Code MCP server template, use `run.py` and configure `GOOGLE_MAPS_API_KEY` as a secret environment variable.
 4. Save and publish the template, create an MCP Tool Server from it, and register the tools with an agent.
 
 No additional Python packages are required beyond the `sasram` runtime provided by RAM. Both tools require network access and are subject to Google Maps Platform coverage, quotas, billing, and terms. Street View imagery is available only where Google has panorama coverage.
