@@ -2,7 +2,7 @@
 
 This folder contains a Code MCP server template implementing the conversational agent skills pattern in SAS Retrieval Agent Manager (RAM).
 
-Instead of injecting the full content of some procedural instructions or step-by-step guides or whatever else you include in the skill into the system prompt at all times, this server exposes an `invoke_skill` tool. Only the names and descriptions of all included skills are in the agent's context at all times. When the agent determines a task requires a specific skill, it invokes that skill with the skill name to dynamically the full content of the skill. 
+Instead of injecting the full content of some procedural instructions or step-by-step guides or whatever else you include in the skill into the system prompt at all times, this server exposes an `invoke_skill` tool. Only the names and descriptions of all included skills are in the agent's context at all times. When the agent determines a task requires a specific skill, it invokes that skill with the skill name to dynamically the full content of the skill.
 
 Users can add, customize, or remove skills simply by uploading or modifying Markdown files in the code template without changing Python code.
 
