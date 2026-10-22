@@ -184,6 +184,101 @@ echo "── SSO is off by default ───────────────
 assert_absent "GENERIC_CLIENT_ID" "$out/database.yaml" \
   "The database flow must not enable SSO unless asked."
 
+echo "── Response cache against the bundled Valkey ─────────────────────────────"
+# `valkey.enabled` is the whole configuration: the address, the port, and the
+# coordination block all follow from the subchart, so the two cannot drift.
+render cache-valkey \
+  --set cache.enabled=true \
+  --set valkey.enabled=true \
+  --set cache.ttl=3600 \
+  --set cache.namespace=litellm
+
+assert_present "^kind: Deployment$" "$out/cache-valkey.yaml" \
+  "Enabling valkey.enabled must deploy the subchart's workload."
+assert_present 'value: "litellm-valkey.litellm.svc.cluster.local"' "$out/cache-valkey.yaml" \
+  "REDIS_HOST must resolve to the bundled Valkey's Service, fully qualified."
+assert_present "cache_params" "$out/cache-valkey.yaml" \
+  "cache.enabled must render litellm_settings.cache_params."
+assert_present "ttl: 3600" "$out/cache-valkey.yaml" \
+  "cache.ttl must reach cache_params."
+# The cache and the coordination store are the same Redis; both have to be
+# wired from it, or rate limits stay per-pod while the cache is shared.
+assert_present "coordination_redis" "$out/cache-valkey.yaml" \
+  "A release with a Redis must still render the coordination block."
+# Unauthenticated by the subchart's default, so there is no Secret to read and
+# a REDIS_PASSWORD reference would point at a key that does not exist.
+assert_absent "REDIS_PASSWORD" "$out/cache-valkey.yaml" \
+  "An unauthenticated Valkey must not produce a password reference."
+
+echo "── Response cache against an external Redis ──────────────────────────────"
+render cache-external \
+  --set cache.enabled=true \
+  --set redis.host=redis.example.com \
+  --set redis.existingSecret.name=litellm-redis
+
+assert_present 'value: "redis.example.com"' "$out/cache-external.yaml" \
+  "An external redis.host must reach the proxy as REDIS_HOST."
+assert_present "REDIS_PASSWORD" "$out/cache-external.yaml" \
+  "A named Redis Secret must produce a password reference."
+assert_absent "^kind: StatefulSet$" "$out/cache-external.yaml" \
+  "An external Redis must not deploy the Valkey subchart."
+
+echo "── A cache with nowhere to cache is rejected ─────────────────────────────"
+if helm template litellm "$CHART_PATH" --namespace litellm \
+  --kube-version "$KUBE_VERSION" --set cache.enabled=true >/dev/null 2>&1; then
+  echo "cache.enabled with no Redis rendered successfully; it must fail." >&2
+  exit 1
+fi
+
+echo "── Langfuse against an existing server ───────────────────────────────────"
+render langfuse \
+  --set langfuse.enabled=true \
+  --set langfuse.host=http://langfuse-web.observability.svc.cluster.local:3000 \
+  --set langfuse.existingSecret.name=litellm-langfuse \
+  --set 'proxyConfig.litellm_settings.success_callback={datadog}'
+
+assert_present "LANGFUSE_PUBLIC_KEY" "$out/langfuse.yaml" \
+  "Langfuse keys must reach the proxy."
+assert_present 'value: "http://langfuse-web.observability.svc.cluster.local:3000"' \
+  "$out/langfuse.yaml" "LANGFUSE_HOST must be the host that was given."
+# Callbacks are a set of independent sinks. Replacing the list would silently
+# switch off whatever the operator was already sending traces to.
+assert_present "      - datadog" "$out/langfuse.yaml" \
+  "A callback list the operator wrote must keep every entry it had."
+assert_present "      - langfuse" "$out/langfuse.yaml" \
+  "langfuse must be appended to the callback list."
+# Pointing at a server is not deploying one.
+assert_absent "clickhouse" "$out/langfuse.yaml" \
+  "Wiring Langfuse must not pull in the Langfuse platform."
+
+echo "── Langfuse deployed as a subchart ───────────────────────────────────────"
+# crdCheck is the subchart's own switch for rendering without the ClickHouse
+# operator's CRDs visible, which is exactly this situation: no cluster.
+render langfuse-deploy \
+  --set langfuse.enabled=true \
+  --set langfuse.deploy.enabled=true \
+  --set langfuse.existingSecret.name=litellm-langfuse \
+  --set langfuse.clickhouse.crdCheck=false
+
+assert_present 'value: "http://litellm-langfuse-web.litellm.svc.cluster.local:3000"' \
+  "$out/langfuse-deploy.yaml" \
+  "A bundled Langfuse must default LANGFUSE_HOST to its own in-cluster Service."
+assert_present "langfuse-web" "$out/langfuse-deploy.yaml" \
+  "The Langfuse subchart must render its web workload."
+# The footprint the README warns about, asserted so it cannot quietly change.
+for workload in clickhouse postgresql; do
+  assert_present "$workload" "$out/langfuse-deploy.yaml" \
+    "A bundled Langfuse is expected to bring ${workload} with it."
+done
+
+echo "── Both features are off by default ──────────────────────────────────────"
+assert_absent "LANGFUSE_HOST" "$out/config.yaml" \
+  "A default install must not wire Langfuse."
+assert_absent "cache_params" "$out/config.yaml" \
+  "A default install must not enable the response cache."
+assert_absent "REDIS_HOST" "$out/config.yaml" \
+  "A default install must not deploy or wire a Redis."
+
 echo "── The proxy and the migration Job share one image tag ───────────────────"
 app_version="$(helm show chart "$CHART_PATH" | awk '/^appVersion:/ { gsub(/"/, "", $2); print $2 }')"
 tags="$(grep -E '^\s+image: ' "$out/database.yaml" | awk '{ print $2 }' | tr -d '"' | sort -u)"

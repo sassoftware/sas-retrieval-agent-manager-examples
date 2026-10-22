@@ -1,0 +1,77 @@
+apiVersion: v2
+name: semantic-router
+description: >
+  vLLM Semantic Router in front of LiteLLM. Deploys an Envoy data plane that
+  calls the router as an ext_proc filter over gRPC, forwards the selected model
+  to the LiteLLM proxy, and publishes the entrypoint through an Ingress, a
+  Gateway API HTTPRoute, a Contour HTTPProxy, or an OpenShift Route. The router
+  itself comes from the upstream vllm-project chart; this chart seeds its
+  config, locks down its management API, and wires it to LiteLLM.
+type: application
+version: 0.1.0
+# The upstream Semantic Router release this chart targets. It matches the
+# `appVersion` of the pinned subchart below, and is the version every statement
+# in README.md and every config key in values.yaml was verified against.
+appVersion: "v0.4.0"
+kubeVersion: ">=1.25.0-0"
+home: https://vllm-semantic-router.com/
+sources:
+  - https://github.com/vllm-project/semantic-router
+keywords:
+  - semantic-router
+  - vllm
+  - litellm
+  - llm
+  - routing
+  - envoy
+  - ext-proc
+
+# The router workload itself is upstream's chart. This chart owns the Envoy
+# data plane in front of it, the publishing objects, the NetworkPolicy around
+# its two ports, and the seed config — see README.md, "What this chart adds".
+#
+# Version pinning, and how 0.4.0 was chosen
+# -----------------------------------------
+# Upstream's own documentation is inconsistent about this version: the
+# `Chart.yaml` committed at the v0.4.0 *application* tag says `version: 0.2.0`,
+# and the install snippets variously use `0.4.0` and `0.0.0-latest`. None of
+# those are authoritative. The registry is:
+#
+#   $ helm show chart oci://ghcr.io/vllm-project/charts/semantic-router
+#   Pulled: ghcr.io/vllm-project/charts/semantic-router:0.4.0
+#   Digest: sha256:86e495f70a418c50a1255145e14d67ae99b2b58ecf2a07caa4e81995e0b2e889
+#   apiVersion: v2
+#   appVersion: v0.4.0
+#   version: 0.4.0
+#
+# So the published chart *does* track the application version, and 0.4.0 is
+# what an unversioned pull resolves to today. It is pinned exactly rather than
+# as a range: a release should render the same bytes in six months as it does
+# today, and `helm dependency update` is a deliberate act that moves the pin
+# and rewrites Chart.lock in the same commit. The digest above is recorded so a
+# future `helm dependency build` that produces different content is noticed.
+#
+# The condition lets a release run the Envoy data plane against a Semantic
+# Router that something else deploys (an operator, or a shared router in
+# another namespace). Helm skips a dependency whose condition is false
+# entirely, templates and all — but still requires it to be present in
+# charts/, which is why CI runs `helm dependency build` before it lints,
+# tests, or renders.
+#
+# The subchart has the same name as this chart. That is intentional and safe:
+# Helm keys its values off the dependency name, so upstream's documented values
+# paths (`replicaCount`, `persistence.size`, …) are reached here as
+# `semantic-router.<path>`, exactly as upstream documents them minus the
+# prefix. Every template this chart defines is named `srouter.*` precisely so
+# that it cannot collide with upstream's `semantic-router.*` templates — with
+# one deliberate exception, `semantic-router.effectiveConfig`, documented at
+# length in templates/_helpers.tpl.
+dependencies:
+  - name: semantic-router
+    version: "0.4.0"
+    repository: oci://ghcr.io/vllm-project/charts
+    condition: semantic-router.enabled
+
+annotations:
+  org.opencontainers.image.source: "https://github.com/vllm-project/semantic-router"
+  org.opencontainers.image.url: "https://vllm-semantic-router.com/"

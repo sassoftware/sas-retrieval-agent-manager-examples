@@ -55,6 +55,20 @@
             "name": { "type": "string", "minLength": 1 },
             "image": { "type": "string", "minLength": 1 },
             "imagePullPolicy": { "enum": ["Always", "IfNotPresent", "Never"] },
+            "securityContext": { "$ref": "#/definitions/securityContext" },
+            "probes": { "$ref": "#/definitions/probes" },
+            "cacheVolume": {
+              "description": "Identity and cache environment for the non-root container, plus the emptyDir the cache paths point at. USER and LOGNAME are mandatory with a non-root securityContext: the published vLLM CPU image has no /etc/passwd entry for uid 1000, so getpass.getuser() raises \"KeyError: 'getpwuid(): uid not found: 1000'\" while vllm is still being imported. The cache paths matter afterwards, because vLLM writes its compile, Hugging Face and engine caches under $HOME. These env entries are rendered before the env list, so an entry in env with the same name wins. Disabling this while the securityContext forces a non-root uid fails the render.",
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["enabled"],
+              "properties": {
+                "enabled": { "type": "boolean" },
+                "mountPath": { "type": "string", "minLength": 1 },
+                "sizeLimit": { "type": "string", "minLength": 1 },
+                "env": { "type": "array", "items": { "type": "object" } }
+              }
+            },
             "args": {
               "description": "Extra arguments appended after the fixed base args (/mnt/models, --host, --port, --trust-remote-code). WARNING: Helm replaces lists rather than merging them, so setting this discards the chart defaults ['--max-model-len', '4096']; copy forward any you still need. Every entry must be a string; quote numeric values. Flag and value are separate entries, for example ['--max-model-len', '4096'].",
               "type": "array",
@@ -66,6 +80,57 @@
               "items": { "type": "object" }
             },
             "shmSize": { "type": "string", "minLength": 1 }
+          }
+        }
+      }
+    },
+    "placementProfiles": {
+      "description": "Named bundles of nodeSelector, tolerations and affinity, referenced by a model or LLM service through placementProfile. Naming a profile that is not defined here fails the render.",
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "nodeSelector": { "type": "object", "additionalProperties": { "type": "string" } },
+          "tolerations": { "type": "array", "items": { "type": "object" } },
+          "affinity": { "type": "object", "additionalProperties": true }
+        }
+      }
+    },
+    "localModelCache": {
+      "description": "KServe LocalModel cache. Off by default. Requires node-local storage and the KServe local model controller, which has its own switch under kserve-localmodel-resources.kserve.localmodel.enabled.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["enabled"],
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "requireController": { "type": "boolean" },
+        "defaultSize": { "type": "string", "minLength": 1 },
+        "nodeGroups": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["name"],
+            "properties": {
+              "name": { "type": "string", "minLength": 1 },
+              "size": { "type": "string", "minLength": 1 },
+              "storageLimit": { "type": "string", "minLength": 1 },
+              "storageClassName": { "type": "string" },
+              "hostPath": { "type": "string" },
+              "persistentVolumeReclaimPolicy": { "enum": ["Delete", "Retain", "Recycle"] },
+              "nodeAffinity": { "type": "object", "additionalProperties": true },
+              "persistentVolumeSpec": {
+                "description": "Full PersistentVolumeSpec. Replaces the generated one; the chart does not merge the two.",
+                "type": "object",
+                "additionalProperties": true
+              },
+              "persistentVolumeClaimSpec": {
+                "description": "Full PersistentVolumeClaimSpec. Replaces the generated one; the chart does not merge the two.",
+                "type": "object",
+                "additionalProperties": true
+              }
+            }
           }
         }
       }
@@ -134,7 +199,7 @@
     "fullnameOverride": { "type": "string" },
     "global": { "type": "object", "additionalProperties": true }
   },
-  "required": ["components", "namespace", "hfSecret", "serviceAccount", "clusterServingRuntimes", "modelDefaults", "models", "llmDefaults", "llmInferenceServices"],
+  "required": ["components", "namespace", "hfSecret", "serviceAccount", "clusterServingRuntimes", "placementProfiles", "localModelCache", "modelDefaults", "models", "llmDefaults", "llmInferenceServices"],
   "definitions": {
     "component": {
       "type": "object",
@@ -143,6 +208,30 @@
       "properties": { "enabled": { "type": "boolean" } }
     },
     "resources": { "type": "object", "additionalProperties": true },
+    "securityContext": {
+      "description": "Container securityContext passed through verbatim. Helm merges maps, so set the whole key to null (not to {}) to render no securityContext at all.",
+      "type": "object",
+      "additionalProperties": true
+    },
+    "probes": {
+      "description": "Container probes. Each entry is a verbatim Kubernetes Probe; an empty or null entry renders no probe. Helm merges maps, so removing a probe the chart defines means setting that entry to null.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "startup": { "type": "object", "additionalProperties": true },
+        "readiness": { "type": "object", "additionalProperties": true },
+        "liveness": { "type": "object", "additionalProperties": true }
+      }
+    },
+    "placement": {
+      "type": "object",
+      "properties": {
+        "placementProfile": { "type": "string" },
+        "nodeSelector": { "type": "object", "additionalProperties": { "type": "string" } },
+        "tolerations": { "type": "array", "items": { "type": "object" } },
+        "affinity": { "type": "object", "additionalProperties": true }
+      }
+    },
     "runtime": {
       "type": "object",
       "additionalProperties": true,
@@ -162,23 +251,46 @@
           "type": "array",
           "items": { "type": "object" }
         },
-        "resources": { "$ref": "#/definitions/resources" }
+        "resources": { "$ref": "#/definitions/resources" },
+        "securityContext": { "$ref": "#/definitions/securityContext" },
+        "probes": { "$ref": "#/definitions/probes" }
       }
     },
     "modelSettings": {
       "type": "object",
       "additionalProperties": true,
+      "allOf": [{ "$ref": "#/definitions/placement" }],
       "properties": {
         "runtime": { "type": "string" },
         "modelFormat": { "type": "string" },
         "args": { "type": "array", "items": { "type": "string" } },
         "env": { "type": "array", "items": { "type": "object" } },
-        "resources": { "$ref": "#/definitions/resources" }
+        "resources": { "$ref": "#/definitions/resources" },
+        "replicas": {
+          "description": "Renders as both predictor.minReplicas and predictor.maxReplicas. Leaving it unset renders neither, which is not the same as 1: it lets the KServe defaults and any autoscaler configuration apply.",
+          "type": "integer",
+          "minimum": 0
+        },
+        "localCache": {
+          "description": "Opt in to the KServe LocalModel cache for this model. Requires localModelCache.enabled and at least one node group.",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["enabled"],
+          "properties": {
+            "enabled": { "type": "boolean" },
+            "name": { "type": "string", "minLength": 1 },
+            "size": { "type": "string", "minLength": 1 },
+            "nodeGroups": { "type": "array", "items": { "type": "string" } },
+            "serviceAccountName": { "type": "string" },
+            "storage": { "type": "object", "additionalProperties": true }
+          }
+        }
       }
     },
     "llmSettings": {
       "type": "object",
       "additionalProperties": true,
+      "allOf": [{ "$ref": "#/definitions/placement" }],
       "properties": {
         "replicas": { "type": "integer", "minimum": 1 },
         "image": { "type": "string" },

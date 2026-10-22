@@ -5,6 +5,7 @@
 {{- $resources := .resources | default $defaults.resources }}
 {{- $inject := true }}
 {{- if hasKey . "injectHfToken" }}{{- $inject = .injectHfToken }}{{- end }}
+{{- $placement := trim (include "model-serving.placement" (dict "root" $ "entry" . "defaults" $defaults "kind" "LLMInferenceService")) }}
 ---
 apiVersion: serving.kserve.io/v1alpha1
 kind: LLMInferenceService
@@ -24,6 +25,9 @@ spec:
     {{- toYaml . | nindent 4 }}
   {{- end }}
   template:
+    {{- with $placement }}
+    {{- . | nindent 4 }}
+    {{- end }}
     containers:
       - name: main
         image: {{ $image }}
@@ -44,6 +48,9 @@ spec:
   {{- if hasKey . "worker" }}
   {{- $worker := .worker | default dict }}
   worker:
+    {{- with $placement }}
+    {{- . | nindent 4 }}
+    {{- end }}
     containers:
       - name: main
         image: {{ $worker.image | default $image }}

@@ -1,0 +1,828 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# semantic-router
+#
+# Two workloads, one release:
+#
+#   client ──▶ Envoy (this chart) ──▶ LiteLLM ──▶ KServe / external providers
+#                │  ▲
+#                ▼  │ gRPC :50051 (ext_proc)
+#          Semantic Router (upstream subchart)  ◀── :8080 management API ── model controller
+#
+# Envoy terminates the OpenAI API, hands every chat request to the router over
+# ext_proc, and forwards the result to the LiteLLM Service. The router rewrites
+# the `model` field; it never sees or replaces the caller's credential. LiteLLM
+# therefore still enforces its own per-key budgets, caching and logging on the
+# model the router picked.
+#
+# Values are grouped: this chart's own Envoy data plane first, then the knobs
+# the router config needs (under `global.semanticRouter`, for the reason given
+# there), then the upstream subchart under `semantic-router`.
+# ─────────────────────────────────────────────────────────────────────────────
+
+nameOverride: ""
+fullnameOverride: ""
+
+# Merged into every object this chart renders. Objects from the upstream
+# subchart carry its own labels instead.
+commonLabels: {}
+commonAnnotations: {}
+
+# ─── Envoy data plane ────────────────────────────────────────────────────────
+
+# Envoy is stateless: it holds no routing decision, no learning state and no
+# cache, so it scales horizontally without coordination. Two replicas is the
+# right production setting; the default is 1 so a stock install fits a laptop
+# cluster alongside the router, which wants a CPU and several gigabytes.
+replicaCount: 1
+
+image:
+  repository: docker.io/envoyproxy/envoy
+  # The distroless variant: no shell, no package manager, and it already runs
+  # as uid 101. Pinned exactly — a floating tag means a `helm upgrade` that
+  # changes nothing in this chart can still change the proxy under it.
+  tag: distroless-v1.35.3
+  pullPolicy: IfNotPresent
+
+imagePullSecrets: []
+
+serviceAccount:
+  create: true
+  # Envoy talks to no Kubernetes API. Leaving the token unmounted removes the
+  # only credential in the pod.
+  automount: false
+  annotations: {}
+  name: ""
+
+deploymentAnnotations: {}
+deploymentLabels: {}
+podAnnotations: {}
+podLabels: {}
+
+# e.g. {type: RollingUpdate, rollingUpdate: {maxSurge: 1, maxUnavailable: 0}}
+strategy: {}
+
+# Envoy drains connections on SIGTERM. A streaming completion can run for
+# minutes, so the grace period is generous by default.
+terminationGracePeriodSeconds: 90
+
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 101
+  runAsGroup: 101
+  seccompProfile:
+    type: RuntimeDefault
+
+securityContext:
+  runAsNonRoot: true
+  runAsUser: 101
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop:
+      - ALL
+
+# Envoy proxies bytes; it runs no model. These defaults carry a few hundred
+# concurrent streams. Raise the memory limit before raising
+# `envoy.perConnectionBufferLimitBytes`: buffering a request body is what makes
+# ext_proc able to read the prompt, and the buffer is per connection.
+resources:
+  requests:
+    cpu: 100m
+    memory: 128Mi
+  limits:
+    cpu: "1"
+    memory: 512Mi
+
+nodeSelector: {}
+tolerations: []
+affinity: {}
+topologySpreadConstraints: []
+
+# Mounted into the Envoy pod, e.g. a TLS certificate for a downstream listener
+# added through `envoy.extraClusters` and a routing object.
+extraVolumes: []
+extraVolumeMounts: []
+extraEnv: []
+
+# All three probes hit Envoy's own `/ready` endpoint on the stats listener (see
+# `envoy.statsPort`), which reports NOT ready until every listener and cluster
+# has a config. The admin interface it proxies stays bound to 127.0.0.1.
+startupProbe:
+  path: /ready
+  initialDelaySeconds: 0
+  periodSeconds: 2
+  timeoutSeconds: 2
+  successThreshold: 1
+  failureThreshold: 30
+readinessProbe:
+  path: /ready
+  initialDelaySeconds: 0
+  periodSeconds: 5
+  timeoutSeconds: 2
+  successThreshold: 1
+  failureThreshold: 3
+livenessProbe:
+  path: /ready
+  initialDelaySeconds: 10
+  periodSeconds: 15
+  timeoutSeconds: 3
+  successThreshold: 1
+  failureThreshold: 5
+
+envoy:
+  # The OpenAI-compatible listener. This is what `service.port` publishes and
+  # what clients call.
+  listenerPort: 8080
+
+  # Envoy's admin interface. It exposes /quitquitquit and the full config dump,
+  # so it is bound to 127.0.0.1 and never appears in a Service. The stats
+  # listener below re-publishes only /ready and /stats/prometheus from it.
+  adminPort: 19000
+  statsPort: 19001
+
+  # One JSON line per request on stdout, including the model the router
+  # selected (x-selected-model) — the single most useful field when a routing
+  # decision has to be explained after the fact.
+  accessLog:
+    enabled: true
+
+  # Completions are long. Every one of these defaults to five minutes because
+  # Envoy's stock values (15s response, 1h idle) cut off streaming answers
+  # while leaving dead connections open.
+  timeouts:
+    # Per-route upstream timeout. `0s` disables it, which is what a deployment
+    # serving very long reasoning traces usually wants.
+    route: 300s
+    # Whole-request timeout measured from the first byte of headers.
+    request: 300s
+    streamIdle: 300s
+    idle: 300s
+
+  # ext_proc can only classify a prompt it has seen, and the prompt is in the
+  # request body, so the body is buffered up to this limit. 50 MiB matches
+  # upstream's reference configuration and covers large multi-turn histories.
+  perConnectionBufferLimitBytes: 52428800
+
+  extProc:
+    # FAIL-CLOSED. With `false`, a request that cannot reach the router is
+    # rejected instead of being forwarded unrouted.
+    #
+    # Upstream's Istio reference sets this to `true`, which is reasonable for a
+    # router that only *improves* a request. It is the wrong default here: this
+    # router chooses which LiteLLM model — and therefore which key boundary,
+    # budget and data-handling policy — a prompt crosses, and the guards that
+    # block jailbreak and PII prompts run inside it. Failing open would quietly
+    # forward the prompt that the guard was meant to stop.
+    #
+    # Set it to `true` only for a deployment where the router is an
+    # optimisation and `providers.defaults.model` is an acceptable answer to
+    # every prompt.
+    failureModeAllow: false
+
+    # How long Envoy waits for one ext_proc message before applying the failure
+    # mode. Classification plus (when enabled) guard inference happens inside
+    # this budget, on CPU.
+    messageTimeout: 300s
+    # Upper bound the router may request through its own dynamic override.
+    maxMessageTimeout: 600s
+
+    # BUFFERED request body: the router needs the whole prompt to classify it.
+    # STREAMED response body: tokens reach the client as they are produced,
+    # which is the difference between a usable chat UI and a 30s pause. Set the
+    # response mode to BUFFERED only when a response-side guard (for example
+    # `response_jailbreak`) must inspect the complete answer before it is sent.
+    requestBodyMode: BUFFERED
+    responseBodyMode: STREAMED
+
+    # Lets the router downgrade the processing mode per request, which is how
+    # `global.router.skip_processing` and non-chat passthrough stay cheap.
+    allowModeOverride: true
+
+    # The ext_proc cluster points at the router's HEADLESS Service, so Envoy
+    # load balances gRPC streams across router pods itself instead of pinning
+    # every stream to whichever pod the ClusterIP picked first.
+    useHeadlessService: true
+    connectTimeout: 5s
+
+  routes:
+    # Paths forwarded to LiteLLM. Everything else is denied (see `deny`), which
+    # is the counterpart of the fail-closed ext_proc mode: this listener is a
+    # routing entrypoint for chat, not a general-purpose proxy in front of
+    # LiteLLM's management API and Admin UI.
+    #
+    # Each entry is {prefix: …} or {path: …}, matching Envoy's route matchers.
+    allowedPaths:
+      - path: /v1/chat/completions
+
+    # /v1/models from the router rather than LiteLLM.
+    #
+    # The router's list includes the virtual model name clients are meant to
+    # ask for (`vllm-sr/auto`), which LiteLLM knows nothing about. It is off by
+    # default because that endpoint lives on the router's management port,
+    # which this chart locks down with bearer auth and a NetworkPolicy — turn
+    # it on only together with `networkPolicy.allowEnvoyToManagementApi`.
+    modelsFromRouter: false
+    modelsPath: /v1/models
+
+    # Appended after the generated routes and before the catch-all deny.
+    extraRoutes: []
+
+    # The catch-all. 404 would be a lie — the path exists on LiteLLM, it is
+    # simply not published through the router — so the deny is explicit.
+    deny:
+      status: 403
+      contentType: application/json
+      body: '{"error":{"message":"This path is not published through the semantic router. Call LiteLLM directly for anything other than chat completions.","type":"invalid_request_error","code":"path_not_routed"}}'
+
+  # Raw cluster definitions appended to the generated ones, for a route added
+  # through `routes.extraRoutes`.
+  extraClusters: []
+
+service:
+  type: ClusterIP
+  port: 8080
+  annotations: {}
+  # LoadBalancer only.
+  loadBalancerClass: ""
+  loadBalancerSourceRanges: []
+
+# ─── Routing ─────────────────────────────────────────────────────────────────
+# Identical in shape to the litellm chart: shared settings first, then one
+# block per implementation, more than one of which may be enabled at a time so
+# a migration from Ingress to Gateway API has no gap.
+routing:
+  hosts: []
+  # - router.example.com
+
+  # Published prefix. `/v1` rather than `/` because Envoy here serves exactly
+  # the OpenAI surface listed in `envoy.routes.allowedPaths`, and claiming the
+  # whole hostname would take the root away from every neighbouring
+  # application. Unlike the litellm chart there is no server-side root path to
+  # keep in step: Envoy matches the path the client sent, so publishing any
+  # other prefix needs a rewrite filter on the routing object as well.
+  path: /v1
+
+  tls:
+    enabled: false
+    secretName: ""
+
+  annotations: {}
+  labels: {}
+
+  ingress:
+    enabled: false
+    className: ""
+    pathType: Prefix
+    annotations: {}
+    extraPaths: []
+
+  httpRoute:
+    enabled: false
+    parentRefs: []
+    matches: []
+    filters: []
+    # Streaming completions outlive most defaults; {backendRequest: 0s} removes
+    # the cap.
+    timeouts: {}
+    extraRules: []
+    annotations: {}
+
+  httpProxy:
+    enabled: false
+    # Render a CHILD proxy: no virtualhost, so it does not compete for a
+    # hostname another release already owns as a root. The parent delegates a
+    # prefix through its own `includes`, and Contour concatenates the two
+    # conditions — which is why the generated condition is `/` here.
+    delegated: false
+    ingressClassName: ""
+    tls:
+      secretName: ""
+      minimumProtocolVersion: "1.2"
+      passthrough: false
+    conditions: []
+    loadBalancerPolicy: {}
+    # e.g. {response: infinity, idleConnectionTimeout: 60s}
+    timeoutPolicy: {}
+    retryPolicy: {}
+    extraRoutes: []
+    includes: []
+    annotations: {}
+
+  route:
+    enabled: false
+    wildcardPolicy: None
+    tls:
+      termination: edge
+      insecureEdgeTerminationPolicy: Redirect
+      destinationCACertificate: ""
+    annotations: {}
+
+# ─── Availability and observability ──────────────────────────────────────────
+
+pdb:
+  # Off by default because the default is a single Envoy replica, and a PDB
+  # with minAvailable: 1 over one replica blocks every node drain.
+  enabled: false
+  minAvailable: ""
+  maxUnavailable: ""
+  annotations: {}
+  labels: {}
+
+serviceMonitor:
+  enabled: false
+  interval: 30s
+  scrapeTimeout: 10s
+  labels: {}
+  annotations: {}
+  namespaceSelector:
+    matchNames: []
+  relabelings: []
+  # A second ServiceMonitor for the router's own metrics Service (port 9190),
+  # which carries the classification, decision and guard counters. Upstream's
+  # chart ships no ServiceMonitor of its own.
+  router:
+    enabled: true
+    path: /metrics
+
+# The router's two ports have very different audiences: :50051 is the data
+# path, :8080 is a configuration API that can rewrite routing policy. Nothing
+# in a default Kubernetes namespace stops any pod from reaching either.
+networkPolicy:
+  enabled: true
+
+  # ── Who may reach the management API (:8080) ───────────────────────────────
+  #
+  # TWO CLIENTS, AND THEY ARE NOT EQUIVALENT.
+  #
+  #   modelController  WRITES. It reconciles routable LiteLLM models and the
+  #                    stored policy into the live router config with
+  #                    `PATCH /api/v1/config`, guarded by an If-Match ETag.
+  #                    It is the ONLY writer: one writer on an ETag-guarded
+  #                    resource is what keeps two reconcilers from fighting
+  #                    over the config and losing an edit to last-write-wins.
+  #
+  #   extensionApi     READS. The RAM extension's API container serves the
+  #                    routing-policy editor, and calls the management API
+  #                    read-only to do it: `GET /api/v1/config` to show the
+  #                    live config, `POST /api/v1/config/validate` to reject a
+  #                    policy before it is stored, `GET /api/v1/status` to
+  #                    report convergence per replica, and
+  #                    `POST /api/v1/routing/preview` to answer "which model
+  #                    would this prompt go to?". Its client interface
+  #                    deliberately has no PatchConfig method.
+  #
+  # They are separate selectors, not one widened selector, because they are
+  # separate workloads with separate labels — in the ram-extension release the
+  # API carries no component label at all — and because the asymmetry above is
+  # worth being able to see, and to revoke one half of, in the rendered policy.
+  # A later "tidy-up" that collapses them into a single rule throws that away.
+  #
+  # Neither default is `{}`: an empty selector on this port would admit every
+  # pod in the namespace to an API that can redirect prompts to a different
+  # LiteLLM key boundary. The chart refuses to render one.
+  modelController:
+    enabled: true
+    # Matches the ram-extension chart's controller Deployment, which labels its
+    # pods `app.kubernetes.io/component: model-controller`.
+    podSelector:
+      matchLabels:
+        app.kubernetes.io/component: model-controller
+    # Empty means "this namespace". Set it when the client runs elsewhere.
+    namespaceSelector: {}
+
+  extensionApi:
+    enabled: true
+    # Matches the ram-extension chart's API Deployment. That workload carries
+    # `app.kubernetes.io/name: ram-extension` and NO component label — its
+    # Service selects on name and instance alone — so there is no component
+    # label to select on here, and the name is what distinguishes it.
+    #
+    # Change it for a release that renames the chart (`nameOverride`), and add
+    # `app.kubernetes.io/instance: <release>` to pin the rule to one release
+    # when several share a namespace. Instance is NOT in the default because
+    # this chart is installed both inside the ram-extension release and as a
+    # release of its own, and only one of those shares a release name with its
+    # clients.
+    podSelector:
+      matchLabels:
+        app.kubernetes.io/name: ram-extension
+    namespaceSelector: {}
+
+  # Needed only with `envoy.routes.modelsFromRouter`, which makes Envoy a
+  # client of the management port as well as the data port.
+  allowEnvoyToManagementApi: false
+
+  # Who may scrape the router's metrics port (9190). Empty selectors mean "any
+  # pod in this namespace", which is what a sidecar-mode Prometheus needs.
+  metricsScrape:
+    enabled: true
+    podSelector: {}
+    namespaceSelector: {}
+
+  # Appended to the router policy's ingress rules verbatim.
+  extraIngress: []
+
+# Rendered as-is. Useful for a Gateway, a ReferenceGrant, or an
+# AuthorizationPolicy that belongs with this release.
+extraResources: []
+
+# ─── Values shared with the router subchart ──────────────────────────────────
+#
+# WHY THESE LIVE UNDER `global`
+#
+# Helm does not template values: a parent chart cannot compute
+# `semantic-router.configOverride` from the release name, and the upstream
+# subchart does not run its values through `tpl`. The one map both charts can
+# read is `global`. Everything the *router config* needs therefore lives here,
+# and this chart assembles the final config at render time by defining
+# `semantic-router.effectiveConfig` — see templates/_helpers.tpl, "Seeding the
+# router config", for exactly how and why that works.
+#
+# The practical consequence: change a guard threshold here, not in
+# `semantic-router.configOverride` below, which is only the static skeleton.
+global:
+  semanticRouter:
+    # ── The LiteLLM backend ──────────────────────────────────────────────────
+    litellm:
+      # The Service the litellm chart creates. That chart's fullname collapses
+      # `<release>-litellm` to `<release>` when the release name already
+      # contains "litellm", so a stock `helm install litellm ./litellm` ends up
+      # with a Service called plainly `litellm` — which is why that is the
+      # default here. For a release named something else, set `releaseName`
+      # (or `serviceName` outright).
+      releaseName: litellm
+      serviceName: ""
+      # Empty means this release's namespace.
+      namespace: ""
+      port: 4000
+
+      # The prefix LiteLLM is mounted under — the litellm chart's
+      # `serverRootPath`, which defaults to /litellm so the release does not
+      # claim the whole hostname. It MUST match, because it is part of the path
+      # the proxy actually serves.
+      serverRootPath: /litellm
+
+      # Overrides the derived URL entirely, for a LiteLLM this release does not
+      # deploy. It must end in the OpenAI base path (`…/v1`) — see below.
+      baseUrl: ""
+
+      # Why the derived URL ends in `/v1`
+      # --------------------------------
+      # In the router's config a backend ref's `base_url` REPLACES the
+      # protocol's canonical base path; the OpenAI protocol then appends
+      # `/chat/completions` to it. A `base_url` of
+      # `http://litellm:4000/litellm` therefore produces
+      # `/litellm/chat/completions` and a 404, not `/litellm/v1/...`. The
+      # correct value is `http://litellm:4000/litellm/v1`, which this chart
+      # derives. Do not set `chat_path` to compensate: it replaces the whole
+      # path instead of being appended to the base.
+
+      # ── NO CREDENTIAL IS CONFIGURED FOR THIS BACKEND. THAT IS THE DESIGN. ──
+      #
+      # The router passes the caller's own `Authorization` header through to
+      # LiteLLM *by omission*: with no `access_key`, no `api_key`, no
+      # `api_key_env` and no custom `global.services.authz.providers`, its
+      # credential resolver finds no key, leaves the header alone, and LiteLLM
+      # sees the end user's virtual key.
+      #
+      # Setting a key here would NOT "add" authentication. It would overwrite
+      # every caller's `Authorization` with one shared static credential, so
+      # every request would arrive at LiteLLM as the same principal and every
+      # per-key budget, rate limit, model permission and spend attribution
+      # would collapse into one. There is no named "pass-through" flag to turn
+      # on instead — omission *is* the mechanism.
+      #
+      # This chart refuses to render a config that carries a backend
+      # credential, and ci/validate.sh asserts that no `access_key` appears in
+      # the rendered ConfigMap. If you genuinely need a static key (a LiteLLM
+      # that is not key-per-user), set it in `semantic-router.configOverride`
+      # and accept that you have removed LiteLLM's enforcement boundary.
+
+    # The router Service the Envoy data plane talks to. Empty means "the one
+    # this release deploys"; set it to run against a router deployed elsewhere
+    # with `semantic-router.enabled: false`.
+    routerService:
+      name: ""
+      namespace: ""
+      grpcPort: 50051
+      apiPort: 8080
+      metricsPort: 9190
+
+    # ── The model the client asks for ────────────────────────────────────────
+    # Names that mean "let the router decide". A request naming any of these is
+    # classified and rewritten; a request naming a concrete LiteLLM model is
+    # passed through untouched, which is how embeddings and pinned-model
+    # traffic bypass routing.
+    autoModelNames:
+      - vllm-sr/auto
+      - auto
+
+    # ── Management API (:8080) ───────────────────────────────────────────────
+    # The port the model controller writes routing policy to. Upstream's
+    # default is `auth.mode: disabled`, which combined with a ClusterIP Service
+    # means any pod in the cluster could rewrite routing policy.
+    managementApi:
+      auth:
+        # bearer | disabled. `disabled` is accepted so a local debugging
+        # release can skip the Secret; NOTES.txt says so out loud rather than
+        # letting it pass silently.
+        mode: bearer
+        # The env var the router reads the admin token from. It is set from the
+        # Secret below through the subchart's `envFromSecrets`.
+        tokenEnv: VSR_MGMT_TOKEN
+      token:
+        # Generated on first install and read back out of the live Secret on
+        # every later upgrade, so `helm upgrade` never rotates the token out
+        # from under the controller.
+        create: true
+        value: ""
+        existingSecret:
+          # Fixed rather than `<release>-semantic-router-management-token`,
+          # because the subchart reads the Secret name from its own values and
+          # Helm cannot template values. Change it and change the matching
+          # `semantic-router.envFromSecrets` entry; the chart checks that the
+          # two agree.
+          name: semantic-router-management-token
+          # The key must equal `auth.tokenEnv`: `envFromSecrets` projects every
+          # key of the Secret as an env var of the same name.
+          key: VSR_MGMT_TOKEN
+
+    # ── Guards ───────────────────────────────────────────────────────────────
+    # Both guards are classifier modules that run inside the router, before
+    # LiteLLM is reached, on CPU. They need two things to work: the module
+    # block, and an entry in `global.model_catalog.system` naming the
+    # checkpoint. Upstream ships NEITHER by default — a guard enabled without a
+    # catalog entry silently classifies nothing — so this chart renders both
+    # from the switches below, and refuses to render one without the other.
+    #
+    # The checkpoints are downloaded on first start into the router's
+    # persistent volume (see `semantic-router.persistence`), which is why the
+    # startup probe allows an hour.
+    guards:
+      jailbreak:
+        enabled: false
+        # Score above which a prompt counts as an injection attempt. Upstream's
+        # reference config uses 0.5 for the module and 0.8 for a signal rule;
+        # 0.7 is a deliberate middle ground — lower it after measuring false
+        # negatives on your own traffic, not before.
+        threshold: 0.7
+        # allow | block. What happens when the classifier itself fails:
+        # `block` treats an un-scoreable prompt as a hit, because an inference
+        # failure means the content could not be verified safe. `allow` is
+        # upstream's default and keeps a broken model from taking the service
+        # down.
+        onError: block
+        modelPath: models/Vela-1.0-Encoder-307M-Guard
+      pii:
+        enabled: false
+        # PII detection is per-entity and noisier than jailbreak detection;
+        # upstream's own reference uses 0.9.
+        threshold: 0.9
+        onError: block
+        modelPath: models/Vela-1.0-Encoder-307M-PII
+        # Entity types that may pass even when the prompt is flagged. Empty
+        # means "none" — every detected type counts.
+        allowedTypes: []
+        # Documents longer than 512 tokens are scanned in overlapping windows.
+        maxSequenceLength: 32768
+
+    # ── Semantic cache ───────────────────────────────────────────────────────
+    # Off by default, and not a substitute for LiteLLM's response cache: this
+    # one answers a *similar* prompt from a previous answer, which changes
+    # behaviour rather than only latency.
+    #
+    # The in-process `memory` backend is per replica. Anything beyond one
+    # router replica needs `backend: redis` and a shared server — see the note
+    # on scaling under `semantic-router.replicaCount`.
+    semanticCache:
+      enabled: false
+      # memory | redis
+      backend: memory
+      # How close two prompts must be to share an answer. 0.8 is upstream's
+      # default and is already loose enough to merge "write a haiku about
+      # spring" with "write a haiku about autumn" on short prompts, so this
+      # chart starts tighter.
+      similarityThreshold: 0.9
+      maxEntries: 1000
+      ttlSeconds: 3600
+      evictionPolicy: fifo
+      embeddingModel: mmbert
+      redis:
+        # Reuse the Valkey the litellm chart already deploys, e.g.
+        # `litellm-valkey:6379`. Required when backend is `redis`.
+        address: ""
+        database: 0
+        password: ""
+        tls:
+          enabled: false
+
+    # ── Tracing ──────────────────────────────────────────────────────────────
+    tracing:
+      enabled: false
+      # OTLP endpoint, e.g. `jaeger-collector:4317`. The bundled Jaeger
+      # dependency stays off (see `semantic-router.dependencies`).
+      endpoint: ""
+      samplingRate: 0.1
+
+# ─── Upstream subchart ───────────────────────────────────────────────────────
+# Everything below is `oci://ghcr.io/vllm-project/charts/semantic-router` 0.4.0
+# and uses ITS value names, not this chart's. Only the values that differ from
+# upstream's defaults are set here; the rest come from the subchart.
+semantic-router:
+  # Set to false to run the Envoy data plane against a router deployed by
+  # something else (an operator, or a shared router in another namespace); then
+  # name it in `global.semanticRouter.routerService`.
+  enabled: true
+
+  # ONE REPLICA, DELIBERATELY.
+  #
+  # Upstream's `safetyGuards.rejectMultiReplicaLocalLearningState` (left on
+  # below) refuses to render more than one replica while Router Learning keeps
+  # request-time state in the pod. Before scaling past 1, three things have to
+  # move to shared storage:
+  #
+  #   * global.router.learning.state_store  → backend: redis
+  #   * global.services.response_api        → store_backend: redis (the chart
+  #                                           default is in-process `memory`)
+  #   * global.stores.response_cache        → backend_type: redis, if the
+  #                                           semantic cache is enabled
+  #
+  # Each router pod also downloads its own copy of the classifier models into
+  # its own ReadWriteOnce volume, so N replicas means N first starts of up to
+  # an hour unless the storage class supports ReadWriteMany.
+  replicaCount: 1
+
+  safetyGuards:
+    rejectMultiReplicaLocalLearningState: true
+
+  persistence:
+    enabled: true
+    # Upstream defaults to 10Gi. The guard, PII, domain and embedding
+    # checkpoints are ~307M-parameter encoders at fp32 — roughly 1.2 GB each —
+    # and the Hugging Face cache keeps both the download and the extracted
+    # snapshot, so a release with two guards and the default embedding model is
+    # already past half of 10Gi before any knowledge base or learning state.
+    # 40Gi leaves room to add classifiers without migrating the volume, which
+    # for a ReadWriteOnce PVC means recreating the pod.
+    size: 40Gi
+    # Empty uses the cluster default StorageClass. Upstream hardcodes
+    # "standard", which does not exist on most clusters and leaves the PVC
+    # Pending with no obvious cause.
+    storageClassName: ""
+    accessMode: ReadWriteOnce
+
+  # Models download on first container start. Upstream allows 360 × 10s = one
+  # hour before the pod is declared failed, which is not excessive on a slow
+  # registry or a cold cache — keep it.
+  startupProbe:
+    enabled: true
+    periodSeconds: 10
+    failureThreshold: 360
+
+  # The admin token Secret, projected as env vars (every key becomes a variable
+  # of the same name). The name is matched against
+  # `global.semanticRouter.managementApi.token.existingSecret.name` at render
+  # time, because Helm cannot template this value from that one.
+  envFromSecrets:
+    - semantic-router-management-token
+
+  # Changing this revision makes the next `helm upgrade` overwrite the live
+  # ConfigMap with the config this chart renders. Leaving it unchanged
+  # PRESERVES what the management API wrote — which is the whole point once the
+  # model controller owns routing policy. Treat a bump as "discard controller
+  # state and start again from the seed".
+  configMap:
+    applyValuesRevision: ""
+
+  # The seed config skeleton.
+  #
+  # `configOverride` replaces the subchart's own `config` block atomically
+  # rather than merging into it, which is what keeps upstream's
+  # `replace-with-your-model` placeholders out of the rendered file.
+  #
+  # The parts that depend on the release (the LiteLLM URL), on a switch
+  # (guards, cache, management auth) or on a Secret are filled in at render
+  # time from `global.semanticRouter` above. Everything here is the static
+  # skeleton: edit it to add signals and decisions by hand, or leave it alone
+  # and let the model controller push policy through the management API.
+  configOverride:
+    version: v0.3
+
+    listeners:
+      - name: grpc-50051
+        address: 0.0.0.0
+        port: 50051
+        timeout: 300s
+      - name: http-8080
+        address: 0.0.0.0
+        port: 8080
+        timeout: 300s
+
+    providers:
+      defaults:
+        # The model used when a decision names no candidate. It must name an
+        # entry in `providers.models`.
+        model: litellm-default
+        reasoning_effort: medium
+      models:
+        - name: litellm-default
+          # The model name LiteLLM knows. The model controller replaces this
+          # list with one entry per routable LiteLLM model; until then this
+          # single entry keeps the router startable.
+          provider_model_id: gpt-4o-mini
+          api_format: openai
+          backend_refs:
+            - name: litellm
+              provider: openai
+              # base_url is set at render time. Deliberately no api_key,
+              # api_key_env, auth_header or chat_path — see the long comment
+              # under global.semanticRouter.litellm.
+              weight: 100
+
+    routing:
+      modelCards:
+        - name: litellm-default
+      signals:
+        domains:
+          - name: general
+            description: Catch-all domain
+            mmlu_categories: ["other"]
+      decisions:
+        # THE FALLBACK. There is no `default_model` field in the v0.3 config —
+        # the fallback is an ordinary decision with the lowest priority and no
+        # conditions, so every request that matched nothing else lands here.
+        - name: fallback
+          description: Every request that matched no other decision.
+          priority: 1
+          rules:
+            operator: AND
+            conditions: []
+          modelRefs:
+            - model: litellm-default
+              use_reasoning: false
+
+    global:
+      router:
+        # The router answers for these model names; everything else is passed
+        # through to LiteLLM unchanged. Replaced at render time from
+        # `global.semanticRouter.autoModelNames`.
+        auto_model_names: []
+        strategy: priority
+        include_config_models_in_list: true
+      services:
+        # NO `authz` BLOCK. Adding one flips the credential resolver's
+        # `fail_open` default and starts rewriting the caller's `Authorization`
+        # header — see the comment under global.semanticRouter.litellm. If you
+        # ever add one, set `fail_open` explicitly and re-check the
+        # pass-through assertion in ci/validate.sh.
+        response_api:
+          # In-process store. Shared Redis is required before scaling past one
+          # replica.
+          enabled: false
+          store_backend: memory
+          ttl_seconds: 86400
+          max_responses: 1000
+      stores:
+        # Filled in from `global.semanticRouter.semanticCache`.
+        response_cache:
+          enabled: false
+      integrations:
+        tools:
+          enabled: false
+
+  # ── Upstream optional dependencies: all off ────────────────────────────────
+  # Every one of these deploys a second platform into the release. The router
+  # works without all of them, and the two that would otherwise be tempting are
+  # the two worth naming:
+  #
+  #   * jaeger — upstream pins `jaeger.allInOne.image.tag: "latest"`, so a
+  #     release that enables it has no reproducible image at all. Point
+  #     `global.semanticRouter.tracing.endpoint` at a collector you already run
+  #     instead.
+  #   * redis/milvus — bitnami/redis, whose versioned image tags were
+  #     withdrawn. Use the Valkey the litellm chart deploys.
+  dependencies:
+    semanticCache:
+      redis:
+        enabled: false
+      milvus:
+        enabled: false
+    responseApi:
+      redis:
+        enabled: false
+      milvus:
+        enabled: false
+    observability:
+      jaeger:
+        enabled: false
+      prometheus:
+        enabled: false
+      grafana:
+        enabled: false
+
+  # The upstream web dashboard writes routing policy through the same
+  # management API as the model controller. Two writers means last-write-wins
+  # on an ETag-guarded resource, so it stays off: policy is owned by the
+  # controller and edited in the RAM UI.
+  dashboard:
+    enabled: false

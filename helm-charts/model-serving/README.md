@@ -60,6 +60,157 @@ llmInferenceServices:
 
 Supply tokens through a protected values file or `--set-string`; never commit credentials.
 
+## Replicas and node placement
+
+Every entry in `models` and `llmInferenceServices` accepts `nodeSelector`,
+`tolerations` and `affinity`, plus a `placementProfile` that names an entry in
+the top-level `placementProfiles` map. `models` additionally accepts `replicas`.
+The same keys can be set on `modelDefaults` and `llmDefaults` to apply to every
+entry.
+
+```yaml
+placementProfiles:
+  cpu-inference:
+    nodeSelector:
+      node.kubernetes.io/instance-type: m6i.8xlarge
+    tolerations:
+      - key: workload
+        operator: Equal
+        value: inference
+        effect: NoSchedule
+
+models:
+  - name: example-model
+    storageUri: hf://organization/model
+    replicas: 2
+    placementProfile: cpu-inference
+    # Explicit fields win over the profile, field by field.
+    tolerations:
+      - key: dedicated
+        operator: Equal
+        value: example
+        effect: NoSchedule
+```
+
+Precedence is resolved per field, highest first:
+
+1. the field on the model or LLM service entry
+2. the same field on the profile that entry names
+3. the same field on `modelDefaults` or `llmDefaults`
+
+Resolving field by field is what lets a model adopt a profile wholesale and
+still change one toleration. A profile name that is not defined in
+`placementProfiles` fails the render, naming both the workload and the profile.
+Falling back to "no placement" would be worse than failing: the workload
+schedules somewhere arbitrary, the scheduler reports success, and the mistake
+only surfaces later as an eviction or an OOM on a node that was never meant to
+run the model.
+
+`replicas` renders as both `predictor.minReplicas` and `predictor.maxReplicas`,
+because that is how KServe is told to hold a fixed pod count; there is no single
+`replicas` field on a predictor. Leaving it unset renders neither field, which
+is not the same as `replicas: 1`: it leaves the KServe defaults and any
+autoscaler configuration in charge.
+
+`LLMInferenceService` has its own `spec.replicas`, so `replicas` keeps its
+existing meaning there. Placement is applied to `spec.template`, and to
+`spec.worker` when a worker is requested, because the CRD models both as a full
+PodSpec.
+
+An empty map or list means "not set" and falls through to the next level. To
+stop a profile's `nodeSelector` from applying to one model, name a different
+profile or set the field to a value, rather than to `{}`.
+
+## Local model cache
+
+KServe's LocalModel feature downloads model weights onto a set of nodes once and
+mounts them from node-local disk, instead of every pod pulling its own copy. An
+`InferenceService` whose `storageUri` matches a `LocalModelCache` is mounted
+from the node cache and is pinned by the scheduler to the nodes in that cache's
+node groups.
+
+The feature is off by default and renders nothing.
+
+### Prerequisites
+
+The chart cannot create any of these for you:
+
+- **Node-local storage.** A StorageClass that provisions node-local volumes
+  (local-path provisioner, LVM, or similar), or hand-made `local` PersistentVolumes.
+  Network storage defeats the purpose and will usually fail the node affinity check.
+- **Labelled nodes.** The node group's `nodeAffinity` has to select real nodes,
+  and those nodes need the label the local model agent's DaemonSet selects on
+  (`kserve/localmodel: worker` by default, see
+  `kserve-localmodel-resources.kserve.localmodelnode.controller.nodeSelector`).
+- **Disk headroom.** `modelSize` is how KServe decides whether a node group has
+  room. Too small and the download is scheduled onto a node that then runs out
+  of space.
+- **The local model controller.** It runs a controller plus a per-node agent
+  DaemonSet that writes to a host path.
+
+### Enabling it
+
+```yaml
+localModelCache:
+  enabled: true
+  nodeGroups:
+    - name: inference-cache
+      size: 200Gi
+      storageClassName: local-storage
+      hostPath: /mnt/models
+      nodeAffinity:
+        required:
+          nodeSelectorTerms:
+            - matchExpressions:
+                - key: kserve/localmodel
+                  operator: In
+                  values: ["worker"]
+
+models:
+  - name: example-model
+    storageUri: hf://organization/model
+    localCache:
+      enabled: true
+      size: 20Gi
+      nodeGroups: [inference-cache]
+
+# Helm cannot set a subchart value from a parent value, so the controller has
+# its own switch. The chart fails the render if the two disagree.
+components:
+  localModel:
+    enabled: true
+kserve-localmodel-resources:
+  kserve:
+    localmodel:
+      enabled: true
+```
+
+Each `localModelCache.nodeGroups` entry renders one cluster-scoped
+`LocalModelNodeGroup`. The chart generates `persistentVolumeSpec` and
+`persistentVolumeClaimSpec` from the convenience keys (`size`,
+`storageClassName`, `hostPath`, `nodeAffinity`, `persistentVolumeReclaimPolicy`)
+because the full specs are verbose and nearly always the same shape. Setting
+either spec explicitly replaces the generated one entirely; the chart does not
+merge them, because a half-merged volume spec is harder to debug than a copied
+one.
+
+`nodeAffinity` is the PersistentVolume's own node affinity. It is what actually
+pins the cache, and therefore every pod using it, to the node group. Without it
+the volume can bind anywhere and the cache is useless.
+
+Each model with `localCache.enabled` renders one cluster-scoped
+`LocalModelCache` whose `sourceModelUri` is the model's `storageUri`. That URI
+is immutable in the CRD and is what KServe matches an `InferenceService`
+against, so changing a cached model's `storageUri` means deleting and recreating
+the cache. `size` defaults to `localModelCache.defaultSize`, and `nodeGroups`
+defaults to every node group the release defines.
+
+Turning `localModelCache.enabled` on while the controller is off fails the
+render. Creating objects that nothing reconciles would be worse than failing:
+the `InferenceService` would wait indefinitely for a cache that never fills.
+Set `localModelCache.requireController: false` when the controller is
+deliberately owned by another release.
+
 ## Components
 
 Every upstream chart can be disabled under `components`. All seven are enabled by default. `kserve-resources` is the sole owner of shared resources; keep `kserve-llmisvc-resources.kserve.createSharedResources` disabled.
@@ -81,6 +232,141 @@ render checks. `.github/workflows/helm-charts.yml` runs both for every chart
 under `helm-charts/`, discovering them by listing the directory.
 
 ## Values migration
+
+### 0.4.0: vLLM CPU hardening, placement, local model cache
+
+Three additions. Only the first changes an existing release's render.
+
+**vLLM CPU runtime hardening.** The only change that affects an existing
+release's render, and the one to read before upgrading: it moves the vLLM
+container to a non-root uid, which that image does not tolerate without help.
+
+Until 0.4.0 the `vllmCPU` runtime had neither probes nor a `securityContext`,
+while the OpenVINO runtime next to it had both.
+That asymmetry was an oversight rather than a decision, and it had two
+consequences: KServe marked the `InferenceService` `Ready` as soon as the
+container process existed, long before vLLM could answer a request, and the
+container ran as whatever user the image chose, which on the published CPU image
+is root.
+
+```yaml
+clusterServingRuntimes:
+  vllmCPU:
+    securityContext:
+      allowPrivilegeEscalation: false
+      capabilities:
+        drop: [ALL]
+      privileged: false
+      runAsNonRoot: true
+      runAsUser: 1000
+      seccompProfile:
+        type: RuntimeDefault
+    probes:
+      startup:
+        periodSeconds: 10
+        failureThreshold: 9999
+        httpGet: {path: /health, port: 8080}
+      readiness:
+        periodSeconds: 10
+        timeoutSeconds: 5
+        failureThreshold: 3
+        httpGet: {path: /health, port: 8080}
+      liveness:
+        periodSeconds: 10
+        timeoutSeconds: 5
+        failureThreshold: 3
+        httpGet: {path: /health, port: 8080}
+    cacheVolume:
+      enabled: true
+      mountPath: /home/vllm
+      sizeLimit: 2Gi
+      env:
+        - {name: USER, value: vllm}
+        - {name: LOGNAME, value: vllm}
+        - {name: HOME, value: /home/vllm}
+        - {name: HF_HOME, value: /home/vllm/.cache/huggingface}
+        - {name: XDG_CACHE_HOME, value: /home/vllm/.cache}
+        - {name: VLLM_CACHE_ROOT, value: /home/vllm/.cache/vllm}
+```
+
+All three probes use vLLM's `GET /health`, which the OpenAI-compatible server
+answers on its serving port; the template pins that to 8080 through the fixed
+`--port=8080` argument. The startup probe uses `failureThreshold: 9999` for the
+same reason as the OpenVINO runtime: a first start downloads and compiles a
+model and has no useful upper bound, and a startup probe that gives up just
+restarts the pod into the same slow path forever.
+
+`cacheVolume` is load-bearing for the non-root change, and it carries two
+different fixes.
+
+**`USER` and `LOGNAME` keep vLLM importable.** This is the part that is easy to
+get wrong, because the failure is not a permissions failure. The published image
+(`public.ecr.aws/q9t5s3a7/vllm-cpu-release-repo:v0.26.0`) declares no `USER` and
+has no `/etc/passwd` entry for uid 1000, so `importing vllm` runs
+`vllm/env_override.py` → `torch._dynamo.package.cache_dir()` →
+`torch._inductor.runtime.cache_dir_utils.default_cache_dir()` →
+`getpass.getuser()` → `pwd.getpwuid(os.getuid())`, which raises:
+
+```text
+KeyError: 'getpwuid(): uid not found: 1000'
+```
+
+This was verified by running the image directly: as root `import vllm` prints
+`0.26.0`; with `--user 1000:1000` it raises the `KeyError` above. It happens at
+*import* time, before vLLM reads any cache path, so no `HOME`, `HF_HOME`,
+`XDG_CACHE_HOME` or `VLLM_CACHE_ROOT` value avoids it, and neither does
+`TORCHINDUCTOR_CACHE_DIR` (tested on its own: still fails). `getpass.getuser()`
+checks `LOGNAME`, `USER`, `LNAME` and `USERNAME` before falling back to `pwd`,
+so one variable is enough; adding `-e USER=vllm` makes the same `--user
+1000:1000` run import cleanly. The chart sets two of them because they cost
+nothing, and the value never has to match a real account.
+
+Because of that, the chart **refuses to render** a `vllmCPU` `securityContext`
+that forces a non-root uid when none of those four variables is present in the
+runtime's environment. Shipping it would produce a crash loop whose traceback
+names `torch` and never mentions this chart.
+
+**The cache paths keep vLLM running once it has started.** vLLM writes its torch
+compile/inductor cache, the Hugging Face hub cache that `--trust-remote-code`
+model code pulls from, and its own cache root under `$HOME`, which in this image
+belongs to root. The chart mounts an `emptyDir` and points `HOME`, `HF_HOME`,
+`XDG_CACHE_HOME` and `VLLM_CACHE_ROOT` at it. The kubelet creates `emptyDir`
+world-writable (0777), so this needs no `fsGroup` — which is just as well,
+because `ClusterServingRuntime` has no pod-level `securityContext` field to put
+one in. That ownership behaviour belongs to the kubelet, not to this chart, and
+is the one part of the arrangement the chart cannot assert.
+
+All of these are rendered *before* `clusterServingRuntimes.vllmCPU.env`, so an
+entry in `env` with the same name wins. Setting `cacheVolume.enabled: false`
+drops the identity variables along with the cache ones, so it is only valid for
+an image that has a real passwd entry for the uid.
+
+To go back to the pre-0.4.0 behaviour entirely:
+
+```yaml
+clusterServingRuntimes:
+  vllmCPU:
+    securityContext: null   # not {}: Helm merges maps, it does not replace them
+```
+
+Also note that `readinessProbe` only applies in raw deployment mode. In
+Knative-backed serverless mode the queue-proxy owns readiness, and KServe may
+rewrite the probe it finds here.
+
+The OpenVINO runtime gained `seccompProfile: RuntimeDefault` for parity, and its
+existing startup probe and `securityContext` moved into values unchanged, so
+they can be overridden the same way. Its `probes.readiness` and `probes.liveness`
+default to empty: nothing about the OVMS behaviour changed, and adding a liveness
+probe to a runtime that already survives in production is a good way to
+introduce restart loops under load.
+
+**Placement and replicas** (`placementProfiles`, plus `replicas`,
+`placementProfile`, `nodeSelector`, `tolerations` and `affinity` on models, LLM
+services and their defaults) are all unset by default and render nothing new.
+See "Replicas and node placement" above.
+
+**The local model cache** (`localModelCache`, plus `localCache` on a model) is
+off by default and renders nothing. See "Local model cache" above.
 
 ### 0.3.0: runtime environment
 
@@ -162,7 +448,8 @@ The arguments that KServe depends on stay in the template and cannot be
 overridden: `--model_name`, `--model_path`, `--port`, and `--rest_port` for
 OpenVINO, and `/mnt/models`, `--host`, `--port`, and `--trust-remote-code` for
 vLLM. `--rest_port` is fixed because the startup probe and the Prometheus
-annotations refer to the same port.
+annotations refer to the same port, and since 0.4.0 vLLM's `--port` is fixed for
+the same reason: its probes hit `/health` on it.
 
 ### Native KServe dependencies
 

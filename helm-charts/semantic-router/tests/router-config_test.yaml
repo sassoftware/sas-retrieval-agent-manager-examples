@@ -1,0 +1,114 @@
+suite: router seed config
+release:
+  name: sr
+  namespace: sr
+templates:
+  - charts/semantic-router/templates/configmap.yaml
+tests:
+  # The one assertion this chart exists to keep true. The router forwards the
+  # caller's Authorization header to LiteLLM only while it has no credential of
+  # its own; a key here would replace every caller's key with one shared
+  # credential and collapse LiteLLM's per-key enforcement into one principal.
+  - it: never configures a backend credential
+    asserts:
+      - notMatchRegex:
+          path: data["config.yaml"]
+          pattern: "access_key"
+      - notMatchRegex:
+          path: data["config.yaml"]
+          pattern: "api_key"
+      - notMatchRegex:
+          path: data["config.yaml"]
+          pattern: "auth_header"
+      # An authz provider flips the credential resolver's fail_open default and
+      # starts rewriting the header.
+      - notMatchRegex:
+          path: data["config.yaml"]
+          pattern: "authz"
+
+  - it: points the backend at LiteLLM's OpenAI base path, including /v1
+    asserts:
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: "base_url: http://litellm\\.sr\\.svc\\.cluster\\.local:4000/litellm/v1\n"
+      # chat_path REPLACES the whole path rather than being appended, so a
+      # chart that set it would drop the /litellm/v1 prefix again.
+      - notMatchRegex:
+          path: data["config.yaml"]
+          pattern: "chat_path"
+
+  - it: follows the LiteLLM release name and mount prefix
+    set:
+      global.semanticRouter.litellm.releaseName: platform
+      global.semanticRouter.litellm.serverRootPath: /gateway
+      global.semanticRouter.litellm.port: 8000
+    asserts:
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: "base_url: http://platform-litellm\\.sr\\.svc\\.cluster\\.local:8000/gateway/v1\n"
+
+  - it: takes an explicit base URL for a LiteLLM it does not deploy
+    set:
+      global.semanticRouter.litellm.baseUrl: https://litellm.example.com/litellm/v1
+    asserts:
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: "base_url: https://litellm\\.example\\.com/litellm/v1\n"
+
+  - it: carries a v0.3 config with a lowest-priority fallback and no default_model
+    asserts:
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: "version: v0.3"
+      # There is no `default_model` field in v0.3; the fallback is an ordinary
+      # decision with no conditions.
+      - notMatchRegex:
+          path: data["config.yaml"]
+          pattern: "default_model"
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: "name: fallback"
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: "conditions: \\[\\]"
+
+  - it: locks the management API behind bearer auth bound to the Secret's env var
+    asserts:
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: "management_api:"
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: "mode: bearer"
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: "env: VSR_MGMT_TOKEN"
+      # 127.0.0.1 is upstream's default and would make the API unreachable from
+      # the model controller's pod.
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: "bind_address: 0.0.0.0"
+
+  - it: answers for the virtual model names clients ask for
+    asserts:
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: "auto_model_names:\n    - vllm-sr/auto\n    - auto"
+
+  - it: leaves the response cache off until it is asked for
+    asserts:
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: "response_cache:\n      enabled: false"
+
+  # Proves the chart's own `semantic-router.effectiveConfig` definition is the
+  # one being called. If a future upstream version renames that helper, the
+  # seed below falls back to upstream's handling and this fails.
+  - it: replaces upstream's placeholder config entirely
+    asserts:
+      - notMatchRegex:
+          path: data["config.yaml"]
+          pattern: "replace-with-your-model"
+      - notMatchRegex:
+          path: data["config.yaml"]
+          pattern: "replace-with-your-vllm-service"

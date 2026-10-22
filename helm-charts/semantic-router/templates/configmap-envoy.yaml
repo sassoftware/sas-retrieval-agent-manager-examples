@@ -1,0 +1,20 @@
+{{- include "srouter.validate" . -}}
+{{/*
+Envoy's bootstrap config. It is static: this chart runs no xDS control plane,
+because the only thing that changes at runtime is the ROUTING POLICY, and that
+lives in the router's own config — Envoy's view of the world is "one upstream,
+one ext_proc service" and stays that way.
+*/}}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "srouter.envoy.fullname" . }}
+  labels:
+    {{- include "srouter.labels" . | nindent 4 }}
+  {{- with .Values.commonAnnotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+data:
+  envoy.yaml: |
+    {{- include "srouter.envoyConfig" . | nindent 4 }}

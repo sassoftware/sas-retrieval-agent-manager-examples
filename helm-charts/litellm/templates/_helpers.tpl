@@ -126,6 +126,157 @@ default
 {{- if and .Values.sso.enabled .Values.sso.keycloakBootstrap.enabled -}}true{{- end -}}
 {{- end -}}
 
+{{/* ── Redis, and the bundled Valkey ───────────────────────────────────── */}}
+
+{{/*
+Where the proxy's Redis lives.
+
+Three settings — address, port, password — have two possible sources: what the
+operator wrote under `redis`, and the Valkey this chart can deploy itself.
+Every template goes through these helpers rather than reading `.Values.redis`
+directly, so the Deployment's environment, the coordination block, the cache
+parameters, the install notes, and the validation rules can never disagree
+about which Redis this release is talking to.
+
+`redis.host` wins whenever it is set. A chart that let a subchart's defaults
+override an address the operator typed would be able to point a release at the
+wrong server silently, which is a worse failure than any convenience it buys.
+
+NOTE on reading subchart values: Helm merges a subchart's own defaults into the
+SUBCHART's values, not into the parent's. `.Values.valkey` here therefore holds
+only what this chart's values.yaml and the operator between them have set —
+`.Values.valkey.service.port` does not exist until someone writes it. Every
+read below goes through `dig` with the subchart's documented default, which is
+why those defaults are repeated here rather than assumed present.
+*/}}
+
+{{/*
+The bundled Valkey's Service name, derived the same way the subchart derives
+it: default name "valkey" (its chart name), overridable by nameOverride, and
+short-circuited entirely by fullnameOverride. Keeping the two in step by
+construction is the point; a hardcoded "<release>-valkey" would break the
+moment anyone set either override.
+*/}}
+{{- define "litellm.valkey.fullname" -}}
+{{- $valkey := default dict .Values.valkey -}}
+{{- if $valkey.fullnameOverride -}}
+{{- $valkey.fullnameOverride | trunc 63 | trimSuffix "-" -}}
+{{- else -}}
+{{- $name := default "valkey" $valkey.nameOverride -}}
+{{- if contains $name .Release.Name -}}
+{{- .Release.Name | trunc 63 | trimSuffix "-" -}}
+{{- else -}}
+{{- printf "%s-%s" .Release.Name $name | trunc 63 | trimSuffix "-" -}}
+{{- end -}}
+{{- end -}}
+{{- end -}}
+
+{{/* Non-empty when this release's Redis is the Valkey the chart deployed. */}}
+{{- define "litellm.redis.bundled" -}}
+{{- if and (dig "enabled" false (default dict .Values.valkey)) (not .Values.redis.host) -}}true{{- end -}}
+{{- end -}}
+
+{{/* Empty when this release has no Redis at all. */}}
+{{- define "litellm.redis.host" -}}
+{{- if .Values.redis.host -}}
+{{- .Values.redis.host -}}
+{{- else if include "litellm.redis.bundled" . -}}
+{{- $domain := dig "clusterDomain" "cluster.local" (default dict .Values.valkey) -}}
+{{- printf "%s.%s.svc.%s" (include "litellm.valkey.fullname" .) .Release.Namespace $domain -}}
+{{- end -}}
+{{- end -}}
+
+{{/*
+The port. Taken from the subchart when the Valkey is bundled, because that is
+the port its Service actually publishes; `redis.port` describes an external
+server and cannot be told apart from its own default.
+*/}}
+{{- define "litellm.redis.port" -}}
+{{- if include "litellm.redis.bundled" . -}}
+{{- dig "service" "port" 6379 (default dict .Values.valkey) -}}
+{{- else -}}
+{{- .Values.redis.port -}}
+{{- end -}}
+{{- end -}}
+
+{{/*
+The Secret holding the Redis password, or empty for an unauthenticated server.
+
+For the bundled Valkey this follows the subchart's own two shapes: a Secret the
+operator created and named in `auth.usersExistingSecret`, or the
+`<fullname>-auth` Secret the subchart writes when the `default` user carries an
+inline password. Either way the proxy receives a secretKeyRef, never a literal.
+*/}}
+{{- define "litellm.redis.secretName" -}}
+{{- if .Values.redis.existingSecret.name -}}
+{{- .Values.redis.existingSecret.name -}}
+{{- else if include "litellm.redis.bundled" . -}}
+{{- $valkey := default dict .Values.valkey -}}
+{{- if dig "auth" "enabled" false $valkey -}}
+{{- $existing := dig "auth" "usersExistingSecret" "" $valkey -}}
+{{- if $existing -}}
+{{- tpl $existing . -}}
+{{- else if dig "auth" "aclUsers" "default" "password" "" $valkey -}}
+{{- printf "%s-auth" (include "litellm.valkey.fullname" .) -}}
+{{- end -}}
+{{- end -}}
+{{- end -}}
+{{- end -}}
+
+{{- define "litellm.redis.passwordKey" -}}
+{{- if .Values.redis.existingSecret.name -}}
+{{- .Values.redis.existingSecret.passwordKey -}}
+{{- else -}}
+{{- $valkey := default dict .Values.valkey -}}
+{{- if dig "auth" "usersExistingSecret" "" $valkey -}}
+{{- dig "auth" "aclUsers" "default" "passwordKey" "default" $valkey -}}
+{{- else -}}
+default-password
+{{- end -}}
+{{- end -}}
+{{- end -}}
+
+{{/* ── Langfuse ────────────────────────────────────────────────────────── */}}
+
+{{/*
+The bundled Langfuse's web Service name, derived the way that subchart derives
+it. Same reasoning as the Valkey helper above.
+*/}}
+{{- define "litellm.langfuse.fullname" -}}
+{{- $langfuse := default dict .Values.langfuse -}}
+{{- if $langfuse.fullnameOverride -}}
+{{- $langfuse.fullnameOverride | trunc 63 | trimSuffix "-" -}}
+{{- else -}}
+{{- $name := default "langfuse" $langfuse.nameOverride -}}
+{{- if contains $name .Release.Name -}}
+{{- .Release.Name | trunc 63 | trimSuffix "-" -}}
+{{- else -}}
+{{- printf "%s-%s" .Release.Name $name | trunc 63 | trimSuffix "-" -}}
+{{- end -}}
+{{- end -}}
+{{- end -}}
+
+{{/*
+Where the proxy posts traces.
+
+`langfuse.host` wins. With the subchart deployed and no host given, this is its
+web Service — in-cluster, so the callback never leaves the cluster and never
+depends on the ingress being up. `externalPort` falls back to `port` here
+because it does so in the subchart's own Service template.
+*/}}
+{{- define "litellm.langfuse.host" -}}
+{{- if .Values.langfuse.host -}}
+{{- .Values.langfuse.host -}}
+{{- else if .Values.langfuse.deploy.enabled -}}
+{{- $langfuse := default dict .Values.langfuse -}}
+{{- $port := dig "langfuse" "web" "service" "externalPort" nil $langfuse -}}
+{{- if not $port -}}
+{{- $port = dig "langfuse" "web" "service" "port" 3000 $langfuse -}}
+{{- end -}}
+{{- printf "http://%s-web.%s.svc.cluster.local:%v" (include "litellm.langfuse.fullname" .) .Release.Namespace $port -}}
+{{- end -}}
+{{- end -}}
+
 {{/* ── Single sign-on ──────────────────────────────────────────────────── */}}
 
 {{/*
@@ -489,10 +640,13 @@ The proxy's config.yaml.
 Model entries are added only in the config flow, or in the database flow when
 modelManagement.seedFromConfig asks for a bootstrap floor. Keys you set in
 proxyConfig always win over the chart's defaults, so an explicit master_key,
-store_model_in_db, or coordination_redis is never overwritten.
+store_model_in_db, coordination_redis, cache, cache_params, or callback list
+is never overwritten.
 */}}
 {{- define "litellm.proxyConfig" -}}
 {{- $config := deepCopy (default dict .Values.proxyConfig) -}}
+{{- $redisHost := include "litellm.redis.host" . -}}
+{{- $redisSecret := include "litellm.redis.secretName" . -}}
 {{- $general := deepCopy (default dict (get $config "general_settings")) -}}
 {{- if not (hasKey $general "master_key") -}}
 {{- $_ := set $general "master_key" "os.environ/PROXY_MASTER_KEY" -}}
@@ -502,21 +656,70 @@ store_model_in_db, or coordination_redis is never overwritten.
 {{- $_ := set $general "store_model_in_db" true -}}
 {{- end -}}
 {{- end -}}
-{{- if and .Values.redis.host .Values.redis.coordination (not (hasKey $general "coordination_redis")) -}}
+{{- if and $redisHost .Values.redis.coordination (not (hasKey $general "coordination_redis")) -}}
 {{- $coordination := dict -}}
 {{- if .Values.redis.sentinel.enabled -}}
-{{- $_ := set $coordination "sentinel_nodes" (list (list .Values.redis.host (int .Values.redis.port))) -}}
+{{- $_ := set $coordination "sentinel_nodes" (list (list $redisHost (int (include "litellm.redis.port" .)))) -}}
 {{- $_ := set $coordination "service_name" (default "mymaster" .Values.redis.sentinel.masterSet) -}}
 {{- else -}}
 {{- $_ := set $coordination "host" "os.environ/REDIS_HOST" -}}
 {{- $_ := set $coordination "port" "os.environ/REDIS_PORT" -}}
 {{- end -}}
-{{- if .Values.redis.existingSecret.name -}}
+{{- if $redisSecret -}}
 {{- $_ := set $coordination "password" "os.environ/REDIS_PASSWORD" -}}
 {{- end -}}
 {{- $_ := set $general "coordination_redis" $coordination -}}
 {{- end -}}
 {{- $_ := set $config "general_settings" $general -}}
+{{- /*
+  litellm_settings is read once and written back once, because two features
+  live in it. `cache` and `cache_params` are set whole: merging into a
+  cache_params block someone wrote by hand would produce a hybrid that matches
+  neither what they asked for nor what this chart documents, and the backends
+  the chart does not model (s3, disk, the semantic caches) take parameters it
+  has no business second-guessing.
+
+  The callback lists are the opposite case and are appended to, because they
+  are a set of independent sinks: adding Langfuse to a release that already
+  logs to Datadog must not remove Datadog. `has` keeps a repeat upgrade
+  idempotent, and keeps an operator who listed `langfuse` themselves from
+  getting it twice.
+*/ -}}
+{{- $litellmSettings := deepCopy (default dict (get $config "litellm_settings")) -}}
+{{- if .Values.cache.enabled -}}
+{{- if not (hasKey $litellmSettings "cache") -}}
+{{- $_ := set $litellmSettings "cache" true -}}
+{{- end -}}
+{{- if not (hasKey $litellmSettings "cache_params") -}}
+{{- $params := dict "type" .Values.cache.type -}}
+{{- $_ := set $params "host" "os.environ/REDIS_HOST" -}}
+{{- $_ := set $params "port" "os.environ/REDIS_PORT" -}}
+{{- if $redisSecret -}}
+{{- $_ := set $params "password" "os.environ/REDIS_PASSWORD" -}}
+{{- end -}}
+{{- with .Values.cache.ttl -}}
+{{- $_ := set $params "ttl" (int .) -}}
+{{- end -}}
+{{- with .Values.cache.namespace -}}
+{{- $_ := set $params "namespace" . -}}
+{{- end -}}
+{{- with .Values.cache.supportedCallTypes -}}
+{{- $_ := set $params "supported_call_types" . -}}
+{{- end -}}
+{{- $_ := set $litellmSettings "cache_params" $params -}}
+{{- end -}}
+{{- end -}}
+{{- if .Values.langfuse.enabled -}}
+{{- range $callback := list "success_callback" "failure_callback" -}}
+{{- $sinks := default list (get $litellmSettings $callback) -}}
+{{- if not (has "langfuse" $sinks) -}}
+{{- $_ := set $litellmSettings $callback (append $sinks "langfuse") -}}
+{{- end -}}
+{{- end -}}
+{{- end -}}
+{{- if $litellmSettings -}}
+{{- $_ := set $config "litellm_settings" $litellmSettings -}}
+{{- end -}}
 {{- $models := default list (get $config "model_list") -}}
 {{- if or (eq .Values.modelManagement.mode "config") .Values.modelManagement.seedFromConfig -}}
 {{- $models = concat $models (default list .Values.models) -}}
@@ -672,19 +875,49 @@ database.existingSecret.urlKey when the discrete fields cannot express it.
 {{- end }}
 {{- end -}}
 
+{{/*
+REDIS_* for the coordination store and the response cache, from whichever
+Redis this release resolved to — an external one, or the bundled Valkey.
+*/}}
 {{- define "litellm.redisEnv" -}}
-{{- if .Values.redis.host }}
+{{- $host := include "litellm.redis.host" . }}
+{{- if $host }}
 - name: REDIS_HOST
-  value: {{ .Values.redis.host | quote }}
+  value: {{ $host | quote }}
 - name: REDIS_PORT
-  value: {{ .Values.redis.port | quote }}
-{{- with .Values.redis.existingSecret.name }}
+  value: {{ include "litellm.redis.port" . | quote }}
+{{- with include "litellm.redis.secretName" . }}
 - name: REDIS_PASSWORD
   valueFrom:
     secretKeyRef:
       name: {{ . }}
-      key: {{ $.Values.redis.existingSecret.passwordKey }}
+      key: {{ include "litellm.redis.passwordKey" $ }}
 {{- end }}
+{{- end }}
+{{- end -}}
+
+{{/*
+Langfuse tracing.
+
+The keys are read from a Secret in both modes — pointing at an existing
+Langfuse and deploying one here — because a project key grants write access to
+every trace in that project, and an inline value would sit in the Helm release
+secret as well as the pod spec.
+*/}}
+{{- define "litellm.langfuseEnv" -}}
+{{- if .Values.langfuse.enabled }}
+- name: LANGFUSE_HOST
+  value: {{ include "litellm.langfuse.host" . | quote }}
+- name: LANGFUSE_PUBLIC_KEY
+  valueFrom:
+    secretKeyRef:
+      name: {{ .Values.langfuse.existingSecret.name }}
+      key: {{ .Values.langfuse.existingSecret.publicKeyKey }}
+- name: LANGFUSE_SECRET_KEY
+  valueFrom:
+    secretKeyRef:
+      name: {{ .Values.langfuse.existingSecret.name }}
+      key: {{ .Values.langfuse.existingSecret.secretKeyKey }}
 {{- end }}
 {{- end -}}
 
@@ -751,6 +984,7 @@ own startup push, or N replicas race one database on every rollout.
 {{- end }}
 {{- include "litellm.databaseEnv" . }}
 {{- include "litellm.redisEnv" . }}
+{{- include "litellm.langfuseEnv" . }}
 {{- include "litellm.ssoEnv" . }}
 {{- if .Values.metricsServer.enabled }}
 - name: PROMETHEUS_METRICS_PORT
@@ -874,6 +1108,43 @@ the value; the same mistake found at runtime is an opaque CrashLoopBackOff.
 
 {{- if and .Values.metricsServer.enabled (eq (int .Values.metricsServer.port) (int .Values.service.port)) -}}
 {{- fail "metricsServer.port must differ from service.port" -}}
+{{- end -}}
+
+{{- if .Values.cache.enabled -}}
+{{- if not (include "litellm.redis.host" .) -}}
+{{- fail "cache.enabled needs a Redis to cache into: set redis.host to a server you run, or valkey.enabled: true to have this chart deploy one. Without either, the proxy starts with a cache it cannot reach and answers every request from the provider while logging connection errors." -}}
+{{- end -}}
+{{- if ne .Values.cache.type "redis" -}}
+{{- fail (printf "cache.type must be \"redis\", got %q. The chart wires only the Redis backend end-to-end. For any other backend, write litellm_settings.cache_params in proxyConfig yourself and leave cache.enabled false." .Values.cache.type) -}}
+{{- end -}}
+{{- end -}}
+
+{{- if and .Values.redis.sentinel.enabled (include "litellm.redis.bundled" .) -}}
+{{- fail "redis.sentinel.enabled cannot be combined with the bundled Valkey. The chart deploys a single Valkey with no Sentinel in front of it, so there is no Sentinel to ask for a master. Point redis.host at your own Sentinel, or turn valkey.enabled off." -}}
+{{- end -}}
+
+{{- if include "litellm.redis.bundled" . -}}
+{{- $valkey := default dict .Values.valkey -}}
+{{- if and (dig "auth" "enabled" false $valkey) (not (include "litellm.redis.secretName" .)) -}}
+{{- fail "valkey.auth.enabled is true but no password reaches the proxy. Set valkey.auth.usersExistingSecret to a Secret holding the `default` user's password (preferred), or give valkey.auth.aclUsers.default.password an inline value, or name a Secret in redis.existingSecret. Without one the proxy connects unauthenticated and every cache read fails with NOAUTH." -}}
+{{- end -}}
+{{- end -}}
+
+{{- if .Values.langfuse.enabled -}}
+{{- if not .Values.langfuse.existingSecret.name -}}
+{{- fail "langfuse.existingSecret.name is required when langfuse.enabled is true. This chart reads the Langfuse project keys from a Secret only, including when it deploys Langfuse itself — the server does not issue keys at install time, so create a project and put its key pair in a Secret." -}}
+{{- end -}}
+{{- $host := include "litellm.langfuse.host" . -}}
+{{- if not $host -}}
+{{- fail "langfuse.enabled needs somewhere to send traces: set langfuse.host, or langfuse.deploy.enabled to bundle a Langfuse and use its in-cluster Service." -}}
+{{- end -}}
+{{- if not (or (hasPrefix "http://" $host) (hasPrefix "https://" $host)) -}}
+{{- fail (printf "langfuse.host must include the scheme, got %q. The LiteLLM SDK uses it as a base URL verbatim, and a schemeless value fails at the first callback rather than at install." $host) -}}
+{{- end -}}
+{{- end -}}
+
+{{- if and .Values.langfuse.deploy.enabled (not .Values.langfuse.enabled) -}}
+{{- fail "langfuse.deploy.enabled requires langfuse.enabled. On its own it would deploy Langfuse and every store it depends on — PostgreSQL, ClickHouse, Valkey, object storage — and then send it nothing." -}}
 {{- end -}}
 
 {{- if and .Values.docs.enabled .Values.docs.path -}}

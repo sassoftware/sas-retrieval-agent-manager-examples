@@ -95,6 +95,10 @@ tests:
   # Structured output crashes the vLLM CPU engine without this variable, so the
   # default is load-bearing rather than cosmetic. Assert it by default, and
   # assert that overriding it is still possible.
+  #
+  # The identity and cache variables are rendered first so that an
+  # operator-supplied env entry with the same name wins, which is why they lead
+  # the expected list.
   - it: ships the vLLM CPU structured output workaround by default
     set:
       clusterServingRuntimes.openVINO.enabled: false
@@ -102,11 +106,27 @@ tests:
       - equal:
           path: spec.containers[0].env
           value:
+            - name: USER
+              value: vllm
+            - name: LOGNAME
+              value: vllm
+            - name: HOME
+              value: /home/vllm
+            - name: HF_HOME
+              value: /home/vllm/.cache/huggingface
+            - name: XDG_CACHE_HOME
+              value: /home/vllm/.cache
+            - name: VLLM_CACHE_ROOT
+              value: /home/vllm/.cache/vllm
             - name: VLLM_USE_V2_MODEL_RUNNER
               value: "0"
+  # Dropping cacheVolume also drops USER/LOGNAME, so the non-root
+  # securityContext has to go with it or the render is refused.
   - it: replaces the vllmCPU env when the operator sets it
     set:
       clusterServingRuntimes.openVINO.enabled: false
+      clusterServingRuntimes.vllmCPU.cacheVolume.enabled: false
+      clusterServingRuntimes.vllmCPU.securityContext: null
       clusterServingRuntimes.vllmCPU.env:
         - name: VLLM_LOGGING_LEVEL
           value: DEBUG
@@ -116,9 +136,11 @@ tests:
           value:
             - name: VLLM_LOGGING_LEVEL
               value: DEBUG
-  - it: omits the vllmCPU env block when the list is empty
+  - it: omits the vllmCPU env block when both lists are empty
     set:
       clusterServingRuntimes.openVINO.enabled: false
+      clusterServingRuntimes.vllmCPU.cacheVolume.enabled: false
+      clusterServingRuntimes.vllmCPU.securityContext: null
       clusterServingRuntimes.vllmCPU.env: []
     asserts:
       - notExists:

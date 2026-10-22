@@ -785,8 +785,16 @@ database:
 
 # ─── Redis ───────────────────────────────────────────────────────────────────
 # The proxy's coordination store: cross-pod tpm/rpm limits, spend tracking, and
-# the pod lock manager. Required for correct rate limiting above one replica.
-# This chart deploys no Redis; point it at one you already run.
+# the pod lock manager. Required for correct rate limiting above one replica,
+# and the backend the response cache below is wired to.
+#
+# Point this at a Redis or Valkey you already run. Leave `host` empty and set
+# `valkey.enabled` instead to have the chart deploy one for you — see the
+# Valkey block further down.
+#
+# `host` always wins. When it is set, the bundled Valkey is not consulted for
+# the address even if it is also deployed, so pointing this chart at an
+# external server is never something the subchart can silently override.
 redis:
   host: ""
   port: 6379
@@ -800,6 +808,172 @@ redis:
   # false to wire only the REDIS_* variables, e.g. for response caching alone.
   # A coordination_redis block you write in proxyConfig always wins.
   coordination: true
+
+# ─── Response cache ──────────────────────────────────────────────────────────
+# Cache completion responses in Redis, so an identical request is answered from
+# the cache instead of being billed and rate-limited by the provider again.
+#
+# The cache is shared by every replica, which is the point of putting it in
+# Redis: one pod's hit serves the next pod's request. It needs a Redis — either
+# one you name in `redis.host` or the bundled Valkey below — and the chart
+# fails the render rather than start a proxy whose cache silently does nothing.
+#
+# This block renders `litellm_settings.cache` and `litellm_settings.cache_params`
+# into config.yaml, and only where you have not written those keys yourself. A
+# `cache` or `cache_params` block in `proxyConfig` always wins — whole-key, not
+# merged — so any cache LiteLLM supports but this chart does not model (s3,
+# disk, qdrant-semantic, redis-semantic) is still reachable by writing
+# `cache_params` directly.
+#
+# Reference: https://docs.litellm.ai/docs/proxy/caching
+cache:
+  enabled: false
+
+  # Only `redis` is accepted. It is the one backend the chart can wire
+  # end-to-end — address, port, and password all come from the Redis settings
+  # above — and the one that behaves correctly with more than one replica.
+  # LiteLLM's in-memory cache is per worker process, so on a two-replica,
+  # four-worker deployment it would hold eight unrelated caches and hit on
+  # roughly one request in eight. Write `cache_params` yourself for anything
+  # else; the chart then renders none of this.
+  type: redis
+
+  # Seconds a cached response stays valid. Empty leaves LiteLLM's own default,
+  # which never expires entries and relies on Redis eviction instead.
+  ttl: ""
+
+  # Key prefix, so several releases can share one Redis without reading each
+  # other's entries. Empty leaves LiteLLM's default prefix.
+  namespace: ""
+
+  # Which call types are cached. Empty leaves LiteLLM's default, which is every
+  # type it knows. Narrow it when only some of them are worth caching:
+  #
+  #   supportedCallTypes: ["acompletion", "completion", "aembedding", "embedding"]
+  #
+  # Embeddings are the usual reason to turn caching on at all: the same
+  # document chunk is embedded identically every time it is re-indexed.
+  supportedCallTypes: []
+
+# ─── Bundled Valkey ──────────────────────────────────────────────────────────
+# Deploy a Valkey (the Redis fork, same wire protocol) alongside this release,
+# through the Valkey project's own chart, and point `redis.*` at it
+# automatically. Off by default: a cluster that already runs Redis should use
+# it, and this chart's long-standing position is that stateful infrastructure
+# belongs to whoever backs it up.
+#
+# Switching it on is appropriate for a response cache specifically, because
+# cache contents are reconstructible: losing the StatefulSet costs latency and
+# provider spend, never data. Do not put spend records behind it without
+# enabling persistence (`valkey.replica.persistence`, or a primary volume) and
+# treating it like any other database.
+#
+# When enabled and `redis.host` is empty the chart derives, from this subchart's
+# own values so the two can never drift:
+#   REDIS_HOST       the Valkey primary Service, fully qualified
+#   REDIS_PORT       valkey.service.port
+#   REDIS_PASSWORD   the Secret the subchart reads the `default` user's
+#                    password from, when valkey.auth.enabled is true
+# and renders `general_settings.coordination_redis` as well, unless
+# `redis.coordination` is false.
+#
+# Every other key under `valkey` is passed through to the subchart untouched;
+# see https://github.com/valkey-io/valkey-helm for its full values reference.
+# The chart's own schema accepts them without listing them, which is the one
+# place it is not strict about unknown keys — it cannot be, because the
+# subchart's value surface is not ours to enumerate.
+#
+# Authentication is off in the subchart's defaults, which means any pod that
+# can reach the Service can read the cache. Turn it on for a shared cluster:
+#
+#   valkey:
+#     enabled: true
+#     auth:
+#       enabled: true
+#       usersExistingSecret: litellm-valkey-acl   # key `default`
+#       aclUsers:
+#         default:
+#           permissions: "~* &* +@all"
+#
+# With `usersExistingSecret` the password is yours to create and rotate. With
+# an inline `aclUsers.default.password` the subchart writes it into its own
+# `<release>-valkey-auth` Secret — and into the Helm release secret, which
+# `helm get values` can read — and this chart reads `default-password` from
+# there. Either way the proxy gets the password from a Secret reference, never
+# an inline environment value.
+valkey:
+  enabled: false
+
+# ─── Langfuse tracing ────────────────────────────────────────────────────────
+# Send every request the proxy handles to Langfuse: prompt, response, model,
+# latency, token counts, and cost, grouped into traces.
+#
+# `enabled` only wires this release to a Langfuse. It appends `langfuse` to
+# `litellm_settings.success_callback` and `failure_callback` — appends, so a
+# callback list you already wrote in `proxyConfig` keeps every entry it has —
+# and sets LANGFUSE_HOST, LANGFUSE_PUBLIC_KEY, and LANGFUSE_SECRET_KEY on the
+# proxy.
+#
+# The keys are project keys (`pk-lf-...` / `sk-lf-...`), created in the Langfuse
+# UI under Settings → API keys, and they come from a Secret in both modes. This
+# chart accepts no inline Langfuse key, for the same reason it accepts no
+# inline database password.
+#
+#   kubectl -n litellm create secret generic litellm-langfuse \
+#     --from-literal=public-key=pk-lf-... \
+#     --from-literal=secret-key=sk-lf-...
+#
+# NOTE: callbacks are a hot path. A Langfuse that is unreachable costs every
+# request the callback's timeout, so point `host` at an address in the same
+# cluster or region where you can.
+langfuse:
+  enabled: false
+
+  # Base URL of the Langfuse server, including the scheme — the proxy posts to
+  # it from inside the pod, so a cluster-internal address is both allowed and
+  # preferred. Leave empty with `deploy.enabled` on to use the bundled
+  # instance's own Service.
+  host: ""
+
+  existingSecret:
+    name: ""
+    publicKeyKey: public-key
+    secretKeyKey: secret-key
+
+  # ─── Deploying Langfuse itself ─────────────────────────────────────────────
+  # Off by default, and the default is the recommendation.
+  #
+  # Langfuse is a platform, not a sidecar. Turning this on adds, in this one
+  # release: the Langfuse web and worker Deployments, PostgreSQL (its
+  # transactional store), a ClickHouse cluster (its analytics store),
+  # another Valkey (its queue), and SeaweedFS for S3-compatible blob storage.
+  # That is roughly ten workloads and several PersistentVolumeClaims next to a
+  # proxy that is itself stateless.
+  #
+  # It also has cluster-level prerequisites that this chart cannot install and
+  # does not check for you:
+  #   - the Altinity ClickHouse operator (clickhouse.com/v1alpha1), and
+  #   - cert-manager, which that operator requires.
+  # Without them the subchart fails its own render with a message naming the
+  # missing CRD. For an offline render — `helm template`, or a GitOps diff
+  # against a cluster whose CRDs are not visible — set
+  # `langfuse.clickhouse.crdCheck: false`.
+  #
+  # Use it for an evaluation cluster, or where Langfuse genuinely has no other
+  # home. For anything you intend to keep, run Langfuse as its own release with
+  # its own lifecycle and point `host` at it: an upgrade of this proxy should
+  # not be able to take the observability stack down with it.
+  #
+  # Project keys are not created by deploying the server. Sign in, create an
+  # organization and a project, issue a key pair, and put it in the Secret
+  # above. `existingSecret.name` is required either way.
+  #
+  # Every other key under `langfuse` is passed through to the subchart
+  # untouched (`langfuse.postgresql`, `langfuse.clickhouse`, `langfuse.s3`,
+  # `langfuse.langfuse`, and so on); see
+  # https://github.com/langfuse/langfuse-k8s for its values reference.
+  deploy:
+    enabled: false
 
 # ─── Migration Job (database flow) ───────────────────────────────────────────
 # Runs `prisma migrate deploy` once, ahead of the proxy, so N replicas do not

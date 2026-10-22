@@ -30,21 +30,15 @@ spec:
       env:
         {{- toYaml . | nindent 8 }}
       {{- end }}
-      startupProbe:
-        periodSeconds: 5
-        failureThreshold: 9999
-        httpGet:
-          path: /v2/health/ready
-          port: 8080
+      {{- with (include "model-serving.runtimeProbes" .Values.clusterServingRuntimes.openVINO | trim) }}
+      {{- . | nindent 6 }}
+      {{- end }}
       resources:
         {{- toYaml .Values.clusterServingRuntimes.openVINO.resources | nindent 8 }}
+      {{- with .Values.clusterServingRuntimes.openVINO.securityContext }}
       securityContext:
-        allowPrivilegeEscalation: false
-        capabilities:
-          drop: [ALL]
-        privileged: false
-        runAsNonRoot: true
-        runAsUser: 5000
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
   protocolVersions: [v1, v2, grpc-v2]
   supportedModelFormats:
     - {autoSelect: true, name: openvino, priority: 1, version: "10"}
@@ -54,6 +48,29 @@ spec:
 {{- end }}
 
 {{- if .Values.clusterServingRuntimes.vllmCPU.enabled }}
+{{- $vllm := .Values.clusterServingRuntimes.vllmCPU }}
+{{- $cache := $vllm.cacheVolume | default dict }}
+{{- $cacheEnv := list }}
+{{- if $cache.enabled }}{{- $cacheEnv = $cache.env | default list }}{{- end }}
+{{- $vllmEnv := concat $cacheEnv ($vllm.env | default list) }}
+{{/*
+A non-root uid is useless on this image without one of the getpass variables.
+The published vLLM CPU image has no /etc/passwd entry for uid 1000, so
+importing vllm reaches getpass.getuser(), falls through to pwd and raises
+"KeyError: 'getpwuid(): uid not found: 1000'" before the server ever starts.
+getpass.getuser() reads LOGNAME, USER, LNAME and USERNAME first, so any one of
+them avoids it. Refusing to render beats shipping a crash loop whose traceback
+blames torch and never mentions this chart.
+*/}}
+{{- $sc := $vllm.securityContext | default dict }}
+{{- if or (eq ($sc.runAsNonRoot | toString) "true") (ne (int ($sc.runAsUser | default 0)) 0) }}
+{{- $identity := list "LOGNAME" "USER" "LNAME" "USERNAME" }}
+{{- $hasIdentity := false }}
+{{- range $vllmEnv }}{{- if has .name $identity }}{{- $hasIdentity = true }}{{- end }}{{- end }}
+{{- if not $hasIdentity }}
+{{- fail (printf "model-serving: clusterServingRuntimes.vllmCPU forces a non-root user (runAsUser %v) but no %s environment variable is set, so \"import vllm\" will fail with KeyError: 'getpwuid(): uid not found: ...' before the server starts. Keep clusterServingRuntimes.vllmCPU.cacheVolume.enabled=true, or add one of those variables to clusterServingRuntimes.vllmCPU.env, or set clusterServingRuntimes.vllmCPU.securityContext to null." ($sc.runAsUser | default "unset") (join "/" $identity)) }}
+{{- end }}
+{{- end }}
 ---
 apiVersion: serving.kserve.io/v1alpha1
 kind: ClusterServingRuntime
@@ -81,16 +98,32 @@ spec:
         {{- with .Values.clusterServingRuntimes.vllmCPU.args }}
         {{- toYaml . | nindent 8 }}
         {{- end }}
-      {{- with .Values.clusterServingRuntimes.vllmCPU.env }}
+      {{- with $vllmEnv }}
       env:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with (include "model-serving.runtimeProbes" $vllm | trim) }}
+      {{- . | nindent 6 }}
+      {{- end }}
+      {{- with $vllm.securityContext }}
+      securityContext:
         {{- toYaml . | nindent 8 }}
       {{- end }}
       volumeMounts:
         - name: shm
           mountPath: /dev/shm
+        {{- if $cache.enabled }}
+        - name: runtime-cache
+          mountPath: {{ $cache.mountPath }}
+        {{- end }}
   volumes:
     - name: shm
       emptyDir:
         medium: Memory
-        sizeLimit: {{ .Values.clusterServingRuntimes.vllmCPU.shmSize }}
+        sizeLimit: {{ $vllm.shmSize }}
+    {{- if $cache.enabled }}
+    - name: runtime-cache
+      emptyDir:
+        sizeLimit: {{ $cache.sizeLimit }}
+    {{- end }}
 {{- end }}
