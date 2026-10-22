@@ -60,6 +60,7 @@ This section might supplement the Changelog file from the repository and only hi
 | [finance tools](/examples/code_mcp_servers/finance_tools/) | An MCP server example that has finance and quantitative analysis tools, including market data lookup, regression, summary statistics, and arithmetic helpers. |
 | [news search tools](/examples/code_mcp_servers/news_search_tools/) | An MCP server example that has web search tools for finding news from NYT, Reddit, DuckDuckGo, and Yahoo Finance. |
 | [simple calculator](/examples/code_mcp_servers/simple_calculator/) | A minimal single-tool MCP server example that adds two integers. |
+| [skills](/examples/code_mcp_servers/skills/) | A dynamic skill execution MCP server that loads markdown procedural skills on demand and exposes an `invoke_skill` tool. |
 | [web search](/examples/code_mcp_servers/web_search/) | A lightweight web search MCP server example built on DuckDuckGo search via the `ddgs` package. |
 
 #### Container MCP Servers
