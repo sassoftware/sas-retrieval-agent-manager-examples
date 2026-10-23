@@ -20,7 +20,129 @@ helm upgrade --install model-serving helm-charts/model-serving \
   --create-namespace
 ```
 
-The KServe controllers belong in the `kserve` release namespace because KServe `v0.20.0` contains namespace-sensitive webhook and cert-manager references. Generated model workloads default to the separate `models` namespace configured by `namespace`.
+### The first install on a cluster that has no KServe CRDs
+
+The command above works on a cluster that already has the KServe CRDs, and on
+every upgrade. It does **not** work on a cluster that has none, and the failure
+is a wall of lines like:
+
+```
+ensure CRDs are installed first, resource mapping not found for name:
+"kserve-vllm-cpu" ... no matches for kind "ClusterServingRuntime" in version
+"serving.kserve.io/v1alpha1"
+```
+
+This is a Helm limitation rather than a chart bug, and it is worth
+understanding before working around it. Helm installs the contents of a
+`crds/` directory first and waits for each definition to be established.
+Upstream KServe does not ship its definitions that way -- `kserve-crd` renders
+them from `templates/` -- so they are ordinary templated resources. Helm sorts
+them ahead of the custom resources that need them, but it does not wait for the
+API server to establish them, and `ClusterServingRuntime` is rejected while its
+definition is still being accepted.
+
+Create the workload namespace first. The chart renders the Hugging Face secret
+and service account into `namespace` (`models` by default) but does not create
+it, and `--create-namespace` applies to the release namespace only, so without
+this the install stops on `namespaces "models" not found`:
+
+```sh
+kubectl create namespace models
+```
+
+Then install in two phases. The component switches already exist for this, so
+no values file is needed:
+
+```sh
+# 1. Definitions only, waiting for them to be established.
+helm install model-serving helm-charts/model-serving \
+  --namespace kserve --create-namespace --wait \
+  --set components.kserve.enabled=false \
+  --set components.llmisvc.enabled=false \
+  --set components.localModel.enabled=false \
+  --set components.runtimeConfigs.enabled=false \
+  --set clusterServingRuntimes.openVINO.enabled=false \
+  --set clusterServingRuntimes.vllmCPU.enabled=false \
+  --set serviceAccount.enabled=false
+
+# 2. Everything, against definitions that now exist.
+#    --reset-values is NOT optional here: see below.
+helm upgrade model-serving helm-charts/model-serving \
+  --namespace kserve --reset-values --wait
+```
+
+Every later upgrade is the single command at the top of this section.
+
+Four things that cost time if they are not known in advance:
+
+- **Phase 2 needs `--reset-values`.** Helm carries the previous release's
+  user-supplied values into an upgrade, so without it every `enabled=false`
+  from phase 1 is still in effect: the upgrade reports `STATUS: deployed`,
+  and installs nothing. A release that claims success while the namespace
+  stays empty is this flag, not a broken chart. `helm get values model-serving
+  -n kserve` shows what the release is actually holding.
+- **A failed first install leaves the definitions behind.** Helm records the
+  release as failed, but resources already applied from `templates/` are not
+  rolled back, so a retry can stop on
+  `customresourcedefinitions.apiextensions.k8s.io "..." already exists`, and
+  reinstalling under the same name stops on `cannot re-use a name that is still
+  in use`. Either run phase 2 against the failed release, or uninstall and
+  remove the definitions before starting again.
+- **Removing the definitions spans four API groups, not one.** Filtering on
+  `kserve` alone leaves the LLMISVC and Gateway API Inference Extension
+  definitions behind, and the next install then fails on ownership metadata for
+  something like `inferencemodelrewrites.llm-d.ai`:
+
+  ```sh
+  kubectl get crd -o name \
+    | grep -E 'serving\.kserve\.io|llm-d\.ai|inference\.networking' \
+    | xargs -r kubectl delete
+  ```
+
+- **Argo CD does not hit the ordering problem**, because `Retry=true`
+  re-applies the rejected resources once the definitions are established. An
+  installation that works under Argo CD therefore says nothing about whether
+  `helm install` works, and this is exactly how the problem stayed hidden.
+
+The release namespace holds the KServe control plane; generated model workloads
+go to the separate namespace configured by `namespace`, which defaults to
+`models`. The split is deliberate, and the release namespace has to be `kserve`
+specifically.
+
+Most of the chart is namespace-portable: rendered into `models`, 46 of its 48
+namespaced resources follow the release namespace, and the webhook serving
+certificates follow it correctly too (`llmisvc-webhook-server-service.models
+.svc`). Two do not. The `llminferenceservices` and `llminferenceserviceconfigs`
+definitions declare a conversion webhook whose `clientConfig` is pinned to a
+literal namespace:
+
+```yaml
+conversion:
+  strategy: Webhook
+  webhook:
+    clientConfig:
+      service:
+        name: llmisvc-webhook-server-service
+        namespace: kserve          # literal, not .Release.Namespace
+```
+
+A definition is cluster-scoped, so that pin does not move with the release.
+Installing the control plane anywhere else leaves the API server calling a
+service that is not there, and because conversion runs on read as well as
+write, every `LLMInferenceService` becomes unreadable rather than merely
+uncreatable. Nothing surfaces at install time -- the chart reports success and
+the controllers come up healthy.
+
+So: install the control plane into `kserve`. Choose the workload namespace
+freely with `namespace`; that is the one the models land in, and it is the one
+to point per-team RBAC and quotas at. Running the controllers in that same
+namespace would also mean cluster-level permissions sitting next to tenant
+workloads, which is the arrangement the split exists to avoid.
+
+If the LLMISVC feature is not wanted at all (`components.llmisvc.enabled` and
+`components.llmisvcCrd.enabled` both false), the pinned references are never
+rendered and the control plane can live anywhere -- but that trades away
+`LLMInferenceService` entirely, so it is a narrower choice than it looks.
 
 From GHCR:
 
