@@ -35,6 +35,10 @@ tests:
             - --trust-remote-code
             - --max-model-len
             - "4096"
+            # Not a default anyone should drop: vLLM's own 0.92 reserves more
+            # memory than a busy node has free and the engine never starts.
+            - --gpu-memory-utilization
+            - "0.5"
         documentIndex: 1
   - it: appends vllmCPU args after the base args
     set:

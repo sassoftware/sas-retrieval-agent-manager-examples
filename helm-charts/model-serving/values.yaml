@@ -128,6 +128,27 @@ clusterServingRuntimes:
     args:
       - --max-model-len
       - "4096"
+      # On the CPU backend this flag does NOT mean what it says: it is the
+      # fraction of memory vLLM reserves for itself, and it is read against
+      # the NODE's total memory rather than the container's limit.
+      #
+      # vLLM's own default is 0.92, which fails to start on any node that is
+      # more than 8% busy:
+      #   ValueError: Available memory on node 0 (55.6/62.79 GiB) on startup
+      #   is less than desired CPU memory utilization (0.92, 57.77 GiB)
+      # The engine core then exits and the pod restarts, while the
+      # InferenceService sits at Ready=False with nothing pointing at the
+      # cause. Observed on a 64 GiB node running nothing else of consequence.
+      #
+      # 0.5 rather than something larger because the figure is a fraction of
+      # the node, so the headroom it leaves has to cover every other pod on
+      # that node as well. Raise it for a node dedicated to one large model;
+      # lower it when packing several models together. If the container also
+      # carries a memory limit, keep NODE_TOTAL * this fraction below that
+      # limit, or the kernel will kill a container that vLLM believes is
+      # within budget.
+      - --gpu-memory-utilization
+      - "0.5"
     # Environment variables for every model served by this runtime, in the
     # Kubernetes EnvVar form (name/value, or name/valueFrom).
     #

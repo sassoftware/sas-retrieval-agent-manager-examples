@@ -544,7 +544,24 @@ follow upstream releases.
 | Removed value | Replacement entry in `clusterServingRuntimes.vllmCPU.args` |
 | --- | --- |
 | `maxModelLen: 4096` | `- --max-model-len` then `- "4096"` |
-| `gpuMemoryUtilization: "0.7"` | `- --gpu-memory-utilization` then `- "0.7"` |
+| `gpuMemoryUtilization: "0.7"` | `- --gpu-memory-utilization` then `- "0.5"` |
+
+`--gpu-memory-utilization` does not mean what its name suggests on the CPU
+backend: it is the fraction of memory vLLM reserves for itself, measured
+against the **node's** total rather than the container's limit. vLLM's own
+default is 0.92, which fails to start on any node more than 8% busy, with the
+engine core exiting and the pod restarting while the InferenceService sits at
+`Ready=False`:
+
+```
+ValueError: Available memory on node 0 (55.6/62.79 GiB) on startup is less
+than desired CPU memory utilization (0.92, 57.77 GiB)
+```
+
+The chart therefore ships 0.5. Raise it for a node dedicated to one large
+model, lower it when packing several models together, and when the container
+carries a memory limit keep `NODE_TOTAL * fraction` below that limit — the
+kernel will otherwise kill a container that vLLM believes is within budget.
 
 The removed keys are rejected by the values schema, so a values file that still
 sets them fails `helm lint` and `helm install` instead of being ignored.
