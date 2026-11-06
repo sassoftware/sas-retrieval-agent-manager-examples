@@ -40,6 +40,105 @@ livenessProbe:
 {{- end }}
 
 {{/*
+One vLLM ClusterServingRuntime, CPU or GPU.
+
+Takes a dict of root (the chart context), runtime (one of the
+clusterServingRuntimes entries) and key (that entry's name in values, used only
+in error messages).
+
+Shared rather than written twice because the two runtimes differ ONLY in their
+values: same server, same CLI, same fixed arguments, same /health endpoint on
+the same port. Two copies of this would drift, and the half that drifted would
+be the one nobody was testing, which on this chart is whichever of CPU and
+GPU the cluster in front of you does not have.
+*/}}
+{{- define "model-serving.vllmRuntime" -}}
+{{- $root := .root -}}
+{{- $vllm := .runtime -}}
+{{- $key := .key -}}
+{{- $cache := $vllm.cacheVolume | default dict -}}
+{{- $cacheEnv := list -}}
+{{- if $cache.enabled }}{{- $cacheEnv = $cache.env | default list }}{{- end -}}
+{{- $vllmEnv := concat $cacheEnv ($vllm.env | default list) -}}
+{{/*
+A non-root uid is useless on a vLLM image without one of the getpass
+variables. The published CPU image has no /etc/passwd entry for uid 1000, so
+importing vllm reaches getpass.getuser(), falls through to pwd and raises
+"KeyError: 'getpwuid(): uid not found: 1000'" before the server ever starts.
+getpass.getuser() reads LOGNAME, USER, LNAME and USERNAME first, so any one of
+them avoids it. Refusing to render beats shipping a crash loop whose traceback
+blames torch and never mentions this chart.
+*/}}
+{{- $sc := $vllm.securityContext | default dict -}}
+{{- if or (eq ($sc.runAsNonRoot | toString) "true") (ne (int ($sc.runAsUser | default 0)) 0) -}}
+{{- $identity := list "LOGNAME" "USER" "LNAME" "USERNAME" -}}
+{{- $hasIdentity := false -}}
+{{- range $vllmEnv }}{{- if has .name $identity }}{{- $hasIdentity = true }}{{- end }}{{- end -}}
+{{- if not $hasIdentity -}}
+{{- fail (printf "model-serving: clusterServingRuntimes.%s forces a non-root user (runAsUser %v) but no %s environment variable is set, so \"import vllm\" will fail with KeyError: 'getpwuid(): uid not found: ...' before the server starts. Keep clusterServingRuntimes.%s.cacheVolume.enabled=true, or add one of those variables to clusterServingRuntimes.%s.env, or set clusterServingRuntimes.%s.securityContext to null." $key ($sc.runAsUser | default "unset") (join "/" $identity) $key $key $key) -}}
+{{- end -}}
+{{- end -}}
+apiVersion: serving.kserve.io/v1alpha1
+kind: ClusterServingRuntime
+metadata:
+  name: {{ $vllm.name }}
+  labels:
+    {{- include "model-serving.labels" $root | nindent 4 }}
+  {{- with $root.Values.commonAnnotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  supportedModelFormats:
+    - name: huggingface
+      autoSelect: {{ $vllm.autoSelect }}
+  containers:
+    - name: kserve-container
+      image: {{ $vllm.image }}
+      imagePullPolicy: {{ $vllm.imagePullPolicy }}
+      args:
+        - /mnt/models
+        - --host=0.0.0.0
+        - --port=8080
+        - --trust-remote-code
+        {{- with $vllm.args }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      {{- with $vllmEnv }}
+      env:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with (include "model-serving.runtimeProbes" $vllm | trim) }}
+      {{- . | nindent 6 }}
+      {{- end }}
+      {{- with $vllm.resources }}
+      resources:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with $vllm.securityContext }}
+      securityContext:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      volumeMounts:
+        - name: shm
+          mountPath: /dev/shm
+        {{- if $cache.enabled }}
+        - name: runtime-cache
+          mountPath: {{ $cache.mountPath }}
+        {{- end }}
+  volumes:
+    - name: shm
+      emptyDir:
+        medium: Memory
+        sizeLimit: {{ $vllm.shmSize }}
+    {{- if $cache.enabled }}
+    - name: runtime-cache
+      emptyDir:
+        sizeLimit: {{ $cache.sizeLimit }}
+    {{- end }}
+{{- end }}
+
+{{/*
 Resolve the placement profile named by a workload entry.
 
 Takes a dict of root (the chart context), entry (the model or LLM service),

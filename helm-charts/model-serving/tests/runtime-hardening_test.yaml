@@ -1,6 +1,11 @@
 suite: custom serving runtime hardening
 templates:
   - templates/clusterservingruntimes.yaml
+# As in custom-runtimes_test.yaml: these tests assert against a single
+# remaining document, so the GPU runtime is off suite-wide. Its own hardening
+# is asserted in vllm-gpu-runtime_test.yaml.
+set:
+  clusterServingRuntimes.vllmGPU.enabled: false
 tests:
   # Before 0.4.0 the vLLM runtime had no probes at all, so KServe reported the
   # InferenceService Ready as soon as the process existed, long before the

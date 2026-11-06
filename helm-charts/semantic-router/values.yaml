@@ -234,6 +234,32 @@ envoy:
       contentType: application/json
       body: '{"error":{"message":"This path is not published through the semantic router. Call LiteLLM directly for anything other than chat completions.","type":"invalid_request_error","code":"path_not_routed"}}'
 
+  # Vendor fields removed from the upstream answer before the router reads it.
+  #
+  # The router decodes responses strictly and refuses anything outside the
+  # canonical OpenAI shape — `invalid_upstream_json: upstream response JSON
+  # contains a non-canonical field`. LiteLLM adds several, so without this
+  # EVERY routed answer fails with a 502 after the model has already produced
+  # it and been billed for it.
+  #
+  # The default list was established by decoding a real LiteLLM answer and
+  # comparing it with the canonical shape, not by removing fields one error at
+  # a time:
+  #
+  #   top level  routing, prompt_filter_results
+  #   choice     provider_specific_fields
+  #   message    provider_specific_fields
+  #   usage      latency_checkpoint
+  #
+  # Turn it off only against a proxy that already returns canonical JSON.
+  sanitizeResponse:
+    enabled: true
+    fields:
+      - provider_specific_fields
+      - latency_checkpoint
+      - prompt_filter_results
+      - routing
+
   # Raw cluster definitions appended to the generated ones, for a route added
   # through `routes.extraRoutes`.
   extraClusters: []

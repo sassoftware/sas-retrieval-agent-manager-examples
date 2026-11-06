@@ -8,7 +8,12 @@ description: >
   itself comes from the upstream vllm-project chart; this chart seeds its
   config, locks down its management API, and wires it to LiteLLM.
 type: application
-version: 0.1.0
+# 0.1.1 reconciles the Envoy data plane with router v0.4.0's actual behaviour:
+# it publishes the post-rewrite path the router itself produces, and strips the
+# proxy's vendor fields from the response before the router decodes it. Without
+# both, no routed completion can succeed. See values.yaml,
+# `envoy.sanitizeResponse`, and the second generated route in _helpers.tpl.
+version: 0.1.1
 # The upstream Semantic Router release this chart targets. It matches the
 # `appVersion` of the pinned subchart below, and is the version every statement
 # in README.md and every config key in values.yaml was verified against.

@@ -147,6 +147,17 @@
             }
           }
         },
+        "sanitizeResponse": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "enabled": { "type": "boolean" },
+            "fields": {
+              "type": "array",
+              "items": { "type": "string", "pattern": "^[A-Za-z0-9_]+$" }
+            }
+          }
+        },
         "extraClusters": { "$ref": "#/definitions/objectArray" }
       }
     },

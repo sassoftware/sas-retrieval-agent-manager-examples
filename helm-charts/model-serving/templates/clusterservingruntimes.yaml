@@ -47,83 +47,17 @@ spec:
     - {autoSelect: true, name: huggingface}
 {{- end }}
 
-{{- if .Values.clusterServingRuntimes.vllmCPU.enabled }}
-{{- $vllm := .Values.clusterServingRuntimes.vllmCPU }}
-{{- $cache := $vllm.cacheVolume | default dict }}
-{{- $cacheEnv := list }}
-{{- if $cache.enabled }}{{- $cacheEnv = $cache.env | default list }}{{- end }}
-{{- $vllmEnv := concat $cacheEnv ($vllm.env | default list) }}
 {{/*
-A non-root uid is useless on this image without one of the getpass variables.
-The published vLLM CPU image has no /etc/passwd entry for uid 1000, so
-importing vllm reaches getpass.getuser(), falls through to pwd and raises
-"KeyError: 'getpwuid(): uid not found: 1000'" before the server ever starts.
-getpass.getuser() reads LOGNAME, USER, LNAME and USERNAME first, so any one of
-them avoids it. Refusing to render beats shipping a crash loop whose traceback
-blames torch and never mentions this chart.
+The two vLLM runtimes. Same server and the same arguments; they differ only in
+the image and in what the values below ask of it, so both render from one
+helper. See "model-serving.vllmRuntime" in _helpers.tpl.
 */}}
-{{- $sc := $vllm.securityContext | default dict }}
-{{- if or (eq ($sc.runAsNonRoot | toString) "true") (ne (int ($sc.runAsUser | default 0)) 0) }}
-{{- $identity := list "LOGNAME" "USER" "LNAME" "USERNAME" }}
-{{- $hasIdentity := false }}
-{{- range $vllmEnv }}{{- if has .name $identity }}{{- $hasIdentity = true }}{{- end }}{{- end }}
-{{- if not $hasIdentity }}
-{{- fail (printf "model-serving: clusterServingRuntimes.vllmCPU forces a non-root user (runAsUser %v) but no %s environment variable is set, so \"import vllm\" will fail with KeyError: 'getpwuid(): uid not found: ...' before the server starts. Keep clusterServingRuntimes.vllmCPU.cacheVolume.enabled=true, or add one of those variables to clusterServingRuntimes.vllmCPU.env, or set clusterServingRuntimes.vllmCPU.securityContext to null." ($sc.runAsUser | default "unset") (join "/" $identity)) }}
-{{- end }}
-{{- end }}
+{{- if .Values.clusterServingRuntimes.vllmCPU.enabled }}
 ---
-apiVersion: serving.kserve.io/v1alpha1
-kind: ClusterServingRuntime
-metadata:
-  name: {{ .Values.clusterServingRuntimes.vllmCPU.name }}
-  labels:
-    {{- include "model-serving.labels" . | nindent 4 }}
-  {{- with .Values.commonAnnotations }}
-  annotations:
-    {{- toYaml . | nindent 4 }}
-  {{- end }}
-spec:
-  supportedModelFormats:
-    - name: huggingface
-      autoSelect: true
-  containers:
-    - name: kserve-container
-      image: {{ .Values.clusterServingRuntimes.vllmCPU.image }}
-      imagePullPolicy: {{ .Values.clusterServingRuntimes.vllmCPU.imagePullPolicy }}
-      args:
-        - /mnt/models
-        - --host=0.0.0.0
-        - --port=8080
-        - --trust-remote-code
-        {{- with .Values.clusterServingRuntimes.vllmCPU.args }}
-        {{- toYaml . | nindent 8 }}
-        {{- end }}
-      {{- with $vllmEnv }}
-      env:
-        {{- toYaml . | nindent 8 }}
-      {{- end }}
-      {{- with (include "model-serving.runtimeProbes" $vllm | trim) }}
-      {{- . | nindent 6 }}
-      {{- end }}
-      {{- with $vllm.securityContext }}
-      securityContext:
-        {{- toYaml . | nindent 8 }}
-      {{- end }}
-      volumeMounts:
-        - name: shm
-          mountPath: /dev/shm
-        {{- if $cache.enabled }}
-        - name: runtime-cache
-          mountPath: {{ $cache.mountPath }}
-        {{- end }}
-  volumes:
-    - name: shm
-      emptyDir:
-        medium: Memory
-        sizeLimit: {{ $vllm.shmSize }}
-    {{- if $cache.enabled }}
-    - name: runtime-cache
-      emptyDir:
-        sizeLimit: {{ $cache.sizeLimit }}
-    {{- end }}
+{{ include "model-serving.vllmRuntime" (dict "root" . "runtime" .Values.clusterServingRuntimes.vllmCPU "key" "vllmCPU") }}
+{{- end }}
+
+{{- if .Values.clusterServingRuntimes.vllmGPU.enabled }}
+---
+{{ include "model-serving.vllmRuntime" (dict "root" . "runtime" .Values.clusterServingRuntimes.vllmGPU "key" "vllmGPU") }}
 {{- end }}

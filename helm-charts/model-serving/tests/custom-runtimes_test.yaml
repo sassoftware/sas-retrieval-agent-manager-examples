@@ -1,6 +1,11 @@
 suite: custom serving runtimes
 templates:
   - templates/clusterservingruntimes.yaml
+# Every test below isolates one runtime by disabling the others and asserting
+# against the document that is left, so the GPU runtime is off for the whole
+# suite rather than in each `set` block. vllmGPU has its own suite.
+set:
+  clusterServingRuntimes.vllmGPU.enabled: false
 tests:
   - it: renders both custom CPU runtimes
     asserts:

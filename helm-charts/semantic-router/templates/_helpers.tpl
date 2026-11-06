@@ -609,6 +609,35 @@ static_resources:
                           request_id: "%REQ(X-REQUEST-ID)%"
                           requested_model: "%REQ(X-REQUESTED-MODEL)%"
                           selected_model: "%REQ(X-SELECTED-MODEL)%"
+                          {{- /* Why the router chose what it chose.
+                                 
+                                 RESP, not REQ: the router reports its decision
+                                 on the way back, and these are the only place
+                                 it is reported at all, v0.4.0's management
+                                 API has no per-query history, and the caller
+                                 is RAM rather than anything this release can
+                                 instrument. Logging them here is what makes a
+                                 routed answer explainable after the fact.
+                                 
+                                 `response_path` is the one to read first: it
+                                 says `upstream` when a model produced the
+                                 answer, so a value that is ever anything else
+                                 means something answered without calling a
+                                 model. */}}
+                          decision: "%RESP(X-VSR-SELECTED-DECISION)%"
+                          decision_algorithm: "%RESP(X-VSR-SELECTED-ALGORITHM)%"
+                          decision_confidence: "%RESP(X-VSR-SELECTED-CONFIDENCE)%"
+                          answered_by: "%RESP(X-VSR-SELECTED-MODEL)%"
+                          response_path: "%RESP(X-VSR-RESPONSE-PATH)%"
+                          routing_latency_ms: "%RESP(X-VSR-ROUTING-LATENCY-MS)%"
+                          {{- /* The money and the wait, from the proxy that
+                                 actually knows both. Cost is per request and
+                                 split input/output; duration excludes this
+                                 router's own overhead, which is logged
+                                 separately above. */}}
+                          cost_input: "%RESP(X-LITELLM-RESPONSE-COST-INPUT)%"
+                          cost_output: "%RESP(X-LITELLM-RESPONSE-COST-OUTPUT)%"
+                          model_latency_ms: "%RESP(X-LITELLM-RESPONSE-DURATION-MS)%"
                 {{- end }}
                 route_config:
                   name: semantic_router
@@ -627,6 +656,7 @@ static_resources:
                             timeout: {{ $e.timeouts.route }}
                         {{- end }}
                         {{- range $match := $e.routes.allowedPaths }}
+                        {{- $rewritten := printf "%s%s" $basePath (((($match.path) | default $match.prefix) | trimPrefix "/v1")) }}
                         - match:
                             {{- if $match.path }}
                             path: {{ $match.path | quote }}
@@ -639,8 +669,31 @@ static_resources:
                             {{- if ne $basePath "/v1" }}
                             # LiteLLM serves the OpenAI API under
                             # {{ $basePath }}; the client sent /v1/…
-                            prefix_rewrite: {{ (printf "%s%s" $basePath (((($match.path) | default $match.prefix) | trimPrefix "/v1"))) | quote }}
+                            prefix_rewrite: {{ $rewritten | quote }}
                             {{- end }}
+                        {{- if ne $basePath "/v1" }}
+                        # The SAME request after the router has handled it.
+                        #
+                        # The router rewrites the path onto its backend's
+                        # `base_url`, which already carries {{ $basePath }},
+                        # so a classified request re-enters routing as
+                        # {{ $rewritten }} and no longer matches the route
+                        # above. Without this it falls through to the
+                        # catch-all: the router picks a model and Envoy then
+                        # refuses its own result with `path_not_routed`.
+                        #
+                        # No rewrite here, because the path is already the
+                        # upstream's.
+                        - match:
+                            {{- if $match.path }}
+                            path: {{ $rewritten | quote }}
+                            {{- else }}
+                            prefix: {{ $rewritten | quote }}
+                            {{- end }}
+                          route:
+                            cluster: litellm
+                            timeout: {{ $e.timeouts.route }}
+                        {{- end }}
                         {{- end }}
                         {{- with $e.routes.extraRoutes }}
                         {{- toYaml . | nindent 24 }}
@@ -677,6 +730,85 @@ static_resources:
                         response_body_mode: {{ $e.extProc.responseBodyMode }}
                         request_trailer_mode: SKIP
                         response_trailer_mode: SKIP
+                  {{- with $e.sanitizeResponse }}
+                  {{- if and .enabled .fields }}
+                  # Removes the proxy's vendor extensions before the router
+                  # decodes the answer.
+                  #
+                  # The router decodes responses strictly and refuses any field
+                  # outside the canonical OpenAI shape:
+                  #
+                  #   invalid_upstream_json: upstream response JSON contains a
+                  #   non-canonical field
+                  #
+                  # LiteLLM adds several. Every routed answer therefore became
+                  # a 502 AFTER the model had produced it and been billed for
+                  # it. Neither side has a setting, since the router offers no
+                                    # leniency and the proxy no suppression, so the mismatch is
+                  # reconciled here.
+                  #
+                  # Placed AFTER ext_proc in the chain and therefore BEFORE it
+                  # on the response path, which runs filters in reverse.
+                  - name: envoy.filters.http.lua
+                    typed_config:
+                      "@type": type.googleapis.com/envoy.extensions.filters.http.lua.v3.Lua
+                      default_source_code:
+                        inline_string: |
+                          -- Named explicitly rather than stripped by shape: a
+                          -- rule broad enough to catch "anything unexpected"
+                          -- would eventually delete part of an answer.
+                          local VENDOR_FIELDS = {
+                            {{- range .fields }}
+                            {{ . | quote }},
+                            {{- end }}
+                          }
+
+                          local function removeField(text, name)
+                            local key = '"' .. name .. '"%s*:%s*'
+                            -- %b matches a balanced pair, so a nested object
+                            -- or array is removed whole rather than cut in
+                            -- half and left as broken JSON.
+                            text = text:gsub(key .. '%b{},?', '')
+                            text = text:gsub(key .. '%b[],?', '')
+                            -- Numbers, true, false, null.
+                            text = text:gsub(key .. '[%-%d%.eE%+]+,?', '')
+                            text = text:gsub(key .. '%a+,?', '')
+                            return text
+                          end
+
+                          local function strip(body)
+                            local cleaned = body
+                            for _, name in ipairs(VENDOR_FIELDS) do
+                              cleaned = removeField(cleaned, name)
+                            end
+                            -- A removed field may have been last in its object
+                            -- or array, leaving the comma before it.
+                            cleaned = cleaned:gsub(',%s*}', '}')
+                            cleaned = cleaned:gsub(',%s*%]', ']')
+                            return cleaned
+                          end
+
+                          function envoy_on_response(handle)
+                            local kind = handle:headers():get("content-type")
+                            if kind == nil or not string.find(kind, "json", 1, true) then
+                              return
+                            end
+                            local body = handle:body()
+                            if body == nil or body:length() == 0 then
+                              return
+                            end
+                            local text = tostring(body:getBytes(0, body:length()))
+                            local touched = false
+                            for _, name in ipairs(VENDOR_FIELDS) do
+                              if string.find(text, name, 1, true) then touched = true end
+                            end
+                            if not touched then
+                              return
+                            end
+                            body:setBytes(strip(text))
+                          end
+                  {{- end }}
+                  {{- end }}
                   - name: envoy.filters.http.router
                     typed_config:
                       "@type": type.googleapis.com/envoy.extensions.filters.http.router.v3.Router

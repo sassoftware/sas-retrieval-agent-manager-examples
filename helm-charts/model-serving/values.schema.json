@@ -1,303 +1,772 @@
 {
-  "$schema": "http://json-schema.org/draft-07/schema#",
-  "type": "object",
-  "additionalProperties": false,
-  "properties": {
-    "components": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": ["kserveCrd", "llmisvcCrd", "localModelCrd", "kserve", "llmisvc", "localModel", "runtimeConfigs"],
-      "properties": {
-        "kserveCrd": { "$ref": "#/definitions/component" },
-        "llmisvcCrd": { "$ref": "#/definitions/component" },
-        "localModelCrd": { "$ref": "#/definitions/component" },
-        "kserve": { "$ref": "#/definitions/component" },
-        "llmisvc": { "$ref": "#/definitions/component" },
-        "localModel": { "$ref": "#/definitions/component" },
-        "runtimeConfigs": { "$ref": "#/definitions/component" }
-      }
+ "$schema": "http://json-schema.org/draft-07/schema#",
+ "type": "object",
+ "additionalProperties": false,
+ "properties": {
+  "components": {
+   "type": "object",
+   "additionalProperties": false,
+   "required": [
+    "kserveCrd",
+    "llmisvcCrd",
+    "localModelCrd",
+    "kserve",
+    "llmisvc",
+    "localModel",
+    "runtimeConfigs"
+   ],
+   "properties": {
+    "kserveCrd": {
+     "$ref": "#/definitions/component"
     },
-    "commonLabels": { "type": "object", "additionalProperties": { "type": "string" } },
-    "commonAnnotations": { "type": "object", "additionalProperties": { "type": "string" } },
-    "namespace": { "type": "string", "minLength": 1 },
-    "hfSecret": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": ["enabled", "managed", "name", "token"],
-      "properties": {
-        "enabled": { "type": "boolean" },
-        "managed": { "type": "boolean" },
-        "name": { "type": "string", "minLength": 1 },
-        "token": { "type": "string" }
-      }
+    "llmisvcCrd": {
+     "$ref": "#/definitions/component"
     },
-    "serviceAccount": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": ["enabled", "name"],
-      "properties": {
-        "enabled": { "type": "boolean" },
-        "name": { "type": "string", "minLength": 1 }
-      }
+    "localModelCrd": {
+     "$ref": "#/definitions/component"
     },
-    "clusterServingRuntimes": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": ["openVINO", "vllmCPU"],
-      "properties": {
-        "openVINO": { "$ref": "#/definitions/runtime" },
-        "vllmCPU": {
-          "type": "object",
-          "additionalProperties": false,
-          "required": ["enabled", "name", "image", "imagePullPolicy", "shmSize"],
-          "properties": {
-            "enabled": { "type": "boolean" },
-            "name": { "type": "string", "minLength": 1 },
-            "image": { "type": "string", "minLength": 1 },
-            "imagePullPolicy": { "enum": ["Always", "IfNotPresent", "Never"] },
-            "securityContext": { "$ref": "#/definitions/securityContext" },
-            "probes": { "$ref": "#/definitions/probes" },
-            "cacheVolume": {
-              "description": "Identity and cache environment for the non-root container, plus the emptyDir the cache paths point at. USER and LOGNAME are mandatory with a non-root securityContext: the published vLLM CPU image has no /etc/passwd entry for uid 1000, so getpass.getuser() raises \"KeyError: 'getpwuid(): uid not found: 1000'\" while vllm is still being imported. The cache paths matter afterwards, because vLLM writes its compile, Hugging Face and engine caches under $HOME. These env entries are rendered before the env list, so an entry in env with the same name wins. Disabling this while the securityContext forces a non-root uid fails the render.",
-              "type": "object",
-              "additionalProperties": false,
-              "required": ["enabled"],
-              "properties": {
-                "enabled": { "type": "boolean" },
-                "mountPath": { "type": "string", "minLength": 1 },
-                "sizeLimit": { "type": "string", "minLength": 1 },
-                "env": { "type": "array", "items": { "type": "object" } }
-              }
-            },
-            "args": {
-              "description": "Extra arguments appended after the fixed base args (/mnt/models, --host, --port, --trust-remote-code). WARNING: Helm replaces lists rather than merging them, so setting this discards the chart defaults ['--max-model-len', '4096']; copy forward any you still need. Every entry must be a string; quote numeric values. Flag and value are separate entries, for example ['--max-model-len', '4096'].",
-              "type": "array",
-              "items": { "type": "string" }
-            },
-            "env": {
-              "description": "Environment variables for every model served by this runtime, in the Kubernetes EnvVar form. WARNING: Helm replaces lists rather than merging them, so setting this discards the chart default VLLM_USE_V2_MODEL_RUNNER=0, which keeps structured output from crashing the engine on the CPU backend; copy forward any you still need.",
-              "type": "array",
-              "items": { "type": "object" }
-            },
-            "shmSize": { "type": "string", "minLength": 1 }
-          }
-        }
-      }
+    "kserve": {
+     "$ref": "#/definitions/component"
     },
-    "placementProfiles": {
-      "description": "Named bundles of nodeSelector, tolerations and affinity, referenced by a model or LLM service through placementProfile. Naming a profile that is not defined here fails the render.",
-      "type": "object",
-      "additionalProperties": {
-        "type": "object",
-        "additionalProperties": false,
-        "properties": {
-          "nodeSelector": { "type": "object", "additionalProperties": { "type": "string" } },
-          "tolerations": { "type": "array", "items": { "type": "object" } },
-          "affinity": { "type": "object", "additionalProperties": true }
-        }
-      }
+    "llmisvc": {
+     "$ref": "#/definitions/component"
     },
-    "localModelCache": {
-      "description": "KServe LocalModel cache. Off by default. Requires node-local storage and the KServe local model controller, which has its own switch under kserve-localmodel-resources.kserve.localmodel.enabled.",
-      "type": "object",
-      "additionalProperties": false,
-      "required": ["enabled"],
-      "properties": {
-        "enabled": { "type": "boolean" },
-        "requireController": { "type": "boolean" },
-        "defaultSize": { "type": "string", "minLength": 1 },
-        "nodeGroups": {
-          "type": "array",
-          "items": {
-            "type": "object",
-            "additionalProperties": false,
-            "required": ["name"],
-            "properties": {
-              "name": { "type": "string", "minLength": 1 },
-              "size": { "type": "string", "minLength": 1 },
-              "storageLimit": { "type": "string", "minLength": 1 },
-              "storageClassName": { "type": "string" },
-              "hostPath": { "type": "string" },
-              "persistentVolumeReclaimPolicy": { "enum": ["Delete", "Retain", "Recycle"] },
-              "nodeAffinity": { "type": "object", "additionalProperties": true },
-              "persistentVolumeSpec": {
-                "description": "Full PersistentVolumeSpec. Replaces the generated one; the chart does not merge the two.",
-                "type": "object",
-                "additionalProperties": true
-              },
-              "persistentVolumeClaimSpec": {
-                "description": "Full PersistentVolumeClaimSpec. Replaces the generated one; the chart does not merge the two.",
-                "type": "object",
-                "additionalProperties": true
-              }
-            }
-          }
-        }
-      }
+    "localModel": {
+     "$ref": "#/definitions/component"
     },
-    "modelDefaults": { "$ref": "#/definitions/modelSettings" },
-    "models": {
-      "type": "array",
-      "items": {
-        "allOf": [
-          { "$ref": "#/definitions/modelSettings" },
-          {
-            "type": "object",
-            "required": ["name", "storageUri"],
-            "properties": {
-              "name": { "type": "string", "minLength": 1 },
-              "storageUri": { "type": "string", "minLength": 1 },
-              "injectHfToken": { "type": "boolean" },
-              "namespace": { "type": "string" },
-              "serviceAccountName": { "type": "string" }
-            }
-          }
-        ]
-      }
-    },
-    "llmDefaults": { "$ref": "#/definitions/llmSettings" },
-    "llmInferenceServices": {
-      "type": "array",
-      "items": {
-        "allOf": [
-          { "$ref": "#/definitions/llmSettings" },
-          {
-            "type": "object",
-            "required": ["name", "model"],
-            "properties": {
-              "name": { "type": "string", "minLength": 1 },
-              "model": {
-                "type": "object",
-                "required": ["uri"],
-                "properties": {
-                  "uri": { "type": "string", "minLength": 1 },
-                  "name": { "type": "string" }
-                },
-                "additionalProperties": true
-              },
-              "parallelism": { "type": "object", "additionalProperties": true },
-              "worker": { "type": "object", "additionalProperties": true },
-              "prefill": { "type": "object", "additionalProperties": true },
-              "scaling": { "type": "object", "additionalProperties": true },
-              "baseRefs": { "type": "array", "items": { "type": "string" } },
-              "injectHfToken": { "type": "boolean" },
-              "namespace": { "type": "string" }
-            }
-          }
-        ]
-      }
-    },
-    "kserve": { "type": "object", "additionalProperties": true },
-    "kserve-crd": { "type": "object", "additionalProperties": true },
-    "kserve-llmisvc-crd": { "type": "object", "additionalProperties": true },
-    "kserve-localmodel-crd": { "type": "object", "additionalProperties": true },
-    "kserve-resources": { "type": "object", "additionalProperties": true },
-    "kserve-llmisvc-resources": { "type": "object", "additionalProperties": true },
-    "kserve-localmodel-resources": { "type": "object", "additionalProperties": true },
-    "kserve-runtime-configs": { "type": "object", "additionalProperties": true },
-    "nameOverride": { "type": "string" },
-    "fullnameOverride": { "type": "string" },
-    "global": { "type": "object", "additionalProperties": true }
+    "runtimeConfigs": {
+     "$ref": "#/definitions/component"
+    }
+   }
   },
-  "required": ["components", "namespace", "hfSecret", "serviceAccount", "clusterServingRuntimes", "placementProfiles", "localModelCache", "modelDefaults", "models", "llmDefaults", "llmInferenceServices"],
-  "definitions": {
-    "component": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": ["enabled"],
-      "properties": { "enabled": { "type": "boolean" } }
+  "commonLabels": {
+   "type": "object",
+   "additionalProperties": {
+    "type": "string"
+   }
+  },
+  "commonAnnotations": {
+   "type": "object",
+   "additionalProperties": {
+    "type": "string"
+   }
+  },
+  "namespace": {
+   "type": "string",
+   "minLength": 1
+  },
+  "hfSecret": {
+   "type": "object",
+   "additionalProperties": false,
+   "required": [
+    "enabled",
+    "managed",
+    "name",
+    "token"
+   ],
+   "properties": {
+    "enabled": {
+     "type": "boolean"
     },
-    "resources": { "type": "object", "additionalProperties": true },
-    "securityContext": {
-      "description": "Container securityContext passed through verbatim. Helm merges maps, so set the whole key to null (not to {}) to render no securityContext at all.",
-      "type": "object",
-      "additionalProperties": true
+    "managed": {
+     "type": "boolean"
     },
-    "probes": {
-      "description": "Container probes. Each entry is a verbatim Kubernetes Probe; an empty or null entry renders no probe. Helm merges maps, so removing a probe the chart defines means setting that entry to null.",
-      "type": "object",
-      "additionalProperties": false,
-      "properties": {
-        "startup": { "type": "object", "additionalProperties": true },
-        "readiness": { "type": "object", "additionalProperties": true },
-        "liveness": { "type": "object", "additionalProperties": true }
-      }
+    "name": {
+     "type": "string",
+     "minLength": 1
     },
-    "placement": {
-      "type": "object",
-      "properties": {
-        "placementProfile": { "type": "string" },
-        "nodeSelector": { "type": "object", "additionalProperties": { "type": "string" } },
-        "tolerations": { "type": "array", "items": { "type": "object" } },
-        "affinity": { "type": "object", "additionalProperties": true }
-      }
+    "token": {
+     "type": "string"
+    }
+   }
+  },
+  "serviceAccount": {
+   "type": "object",
+   "additionalProperties": false,
+   "required": [
+    "enabled",
+    "name"
+   ],
+   "properties": {
+    "enabled": {
+     "type": "boolean"
     },
-    "runtime": {
-      "type": "object",
-      "additionalProperties": true,
-      "required": ["enabled", "name", "image", "imagePullPolicy", "resources"],
-      "properties": {
-        "enabled": { "type": "boolean" },
-        "name": { "type": "string", "minLength": 1 },
-        "image": { "type": "string", "minLength": 1 },
-        "imagePullPolicy": { "enum": ["Always", "IfNotPresent", "Never"] },
-        "args": {
-          "description": "Extra arguments appended after the fixed base args (--model_name, --model_path, --port, --rest_port). WARNING: Helm replaces lists rather than merging them, so setting this discards the chart defaults ['--file_system_poll_wait_seconds=0']; copy forward any you still need. Every entry must be a string. OpenVINO Model Server uses --flag=value, so each entry is a single token.",
-          "type": "array",
-          "items": { "type": "string" }
+    "name": {
+     "type": "string",
+     "minLength": 1
+    }
+   }
+  },
+  "clusterServingRuntimes": {
+   "type": "object",
+   "additionalProperties": false,
+   "required": [
+    "openVINO",
+    "vllmCPU",
+    "vllmGPU"
+   ],
+   "properties": {
+    "openVINO": {
+     "$ref": "#/definitions/runtime"
+    },
+    "vllmCPU": {
+     "type": "object",
+     "additionalProperties": false,
+     "required": [
+      "autoSelect",
+      "enabled",
+      "image",
+      "imagePullPolicy",
+      "name",
+      "shmSize"
+     ],
+     "properties": {
+      "enabled": {
+       "type": "boolean"
+      },
+      "name": {
+       "type": "string",
+       "minLength": 1
+      },
+      "image": {
+       "type": "string",
+       "minLength": 1
+      },
+      "imagePullPolicy": {
+       "enum": [
+        "Always",
+        "IfNotPresent",
+        "Never"
+       ]
+      },
+      "securityContext": {
+       "$ref": "#/definitions/securityContext"
+      },
+      "probes": {
+       "$ref": "#/definitions/probes"
+      },
+      "cacheVolume": {
+       "description": "Identity and cache environment for the non-root container, plus the emptyDir the cache paths point at. USER and LOGNAME are mandatory with a non-root securityContext: the published vLLM CPU image has no /etc/passwd entry for uid 1000, so getpass.getuser() raises \"KeyError: 'getpwuid(): uid not found: 1000'\" while vllm is still being imported. The cache paths matter afterwards, because vLLM writes its compile, Hugging Face and engine caches under $HOME. These env entries are rendered before the env list, so an entry in env with the same name wins. Disabling this while the securityContext forces a non-root uid fails the render.",
+       "type": "object",
+       "additionalProperties": false,
+       "required": [
+        "enabled"
+       ],
+       "properties": {
+        "enabled": {
+         "type": "boolean"
+        },
+        "mountPath": {
+         "type": "string",
+         "minLength": 1
+        },
+        "sizeLimit": {
+         "type": "string",
+         "minLength": 1
         },
         "env": {
-          "description": "Environment variables for every model served by this runtime, in the Kubernetes EnvVar form. WARNING: Helm replaces lists rather than merging them, so setting this discards the chart default; copy forward any you still need.",
-          "type": "array",
-          "items": { "type": "object" }
-        },
-        "resources": { "$ref": "#/definitions/resources" },
-        "securityContext": { "$ref": "#/definitions/securityContext" },
-        "probes": { "$ref": "#/definitions/probes" }
-      }
-    },
-    "modelSettings": {
-      "type": "object",
-      "additionalProperties": true,
-      "allOf": [{ "$ref": "#/definitions/placement" }],
-      "properties": {
-        "runtime": { "type": "string" },
-        "modelFormat": { "type": "string" },
-        "args": { "type": "array", "items": { "type": "string" } },
-        "env": { "type": "array", "items": { "type": "object" } },
-        "resources": { "$ref": "#/definitions/resources" },
-        "replicas": {
-          "description": "Renders as both predictor.minReplicas and predictor.maxReplicas. Leaving it unset renders neither, which is not the same as 1: it lets the KServe defaults and any autoscaler configuration apply.",
-          "type": "integer",
-          "minimum": 0
-        },
-        "localCache": {
-          "description": "Opt in to the KServe LocalModel cache for this model. Requires localModelCache.enabled and at least one node group.",
-          "type": "object",
-          "additionalProperties": false,
-          "required": ["enabled"],
-          "properties": {
-            "enabled": { "type": "boolean" },
-            "name": { "type": "string", "minLength": 1 },
-            "size": { "type": "string", "minLength": 1 },
-            "nodeGroups": { "type": "array", "items": { "type": "string" } },
-            "serviceAccountName": { "type": "string" },
-            "storage": { "type": "object", "additionalProperties": true }
-          }
+         "type": "array",
+         "items": {
+          "type": "object"
+         }
         }
+       }
+      },
+      "args": {
+       "description": "Extra arguments appended after the fixed base args (/mnt/models, --host, --port, --trust-remote-code). WARNING: Helm replaces lists rather than merging them, so setting this discards the chart defaults ['--max-model-len', '4096']; copy forward any you still need. Every entry must be a string; quote numeric values. Flag and value are separate entries, for example ['--max-model-len', '4096'].",
+       "type": "array",
+       "items": {
+        "type": "string"
+       }
+      },
+      "env": {
+       "description": "Environment variables for every model served by this runtime, in the Kubernetes EnvVar form. WARNING: Helm replaces lists rather than merging them, so setting this discards the chart default VLLM_USE_V2_MODEL_RUNNER=0, which keeps structured output from crashing the engine on the CPU backend; copy forward any you still need.",
+       "type": "array",
+       "items": {
+        "type": "object"
+       }
+      },
+      "shmSize": {
+       "type": "string",
+       "minLength": 1
+      },
+      "autoSelect": {
+       "description": "Whether KServe may pick this runtime for a huggingface model that does not name one. True on vllmCPU and false on vllmGPU: an InferenceService with no runtime has had no thought given to hardware, and the accelerated runtime on a cluster with no GPU node produces a pod that stays Pending with no error to read.",
+       "type": "boolean"
       }
+     }
     },
-    "llmSettings": {
-      "type": "object",
-      "additionalProperties": true,
-      "allOf": [{ "$ref": "#/definitions/placement" }],
-      "properties": {
-        "replicas": { "type": "integer", "minimum": 1 },
-        "image": { "type": "string" },
-        "args": { "type": "array", "items": { "type": "string" } },
-        "resources": { "$ref": "#/definitions/resources" },
-        "router": { "type": "object", "additionalProperties": true }
+    "vllmGPU": {
+     "type": "object",
+     "additionalProperties": false,
+     "required": [
+      "autoSelect",
+      "enabled",
+      "image",
+      "imagePullPolicy",
+      "name",
+      "shmSize"
+     ],
+     "properties": {
+      "enabled": {
+       "type": "boolean"
+      },
+      "name": {
+       "type": "string",
+       "minLength": 1
+      },
+      "image": {
+       "type": "string",
+       "minLength": 1
+      },
+      "imagePullPolicy": {
+       "enum": [
+        "Always",
+        "IfNotPresent",
+        "Never"
+       ]
+      },
+      "securityContext": {
+       "$ref": "#/definitions/securityContext"
+      },
+      "probes": {
+       "$ref": "#/definitions/probes"
+      },
+      "cacheVolume": {
+       "description": "Identity and cache environment for the non-root container, plus the emptyDir the cache paths point at. USER and LOGNAME are mandatory with a non-root securityContext: the vLLM images have no /etc/passwd entry for uid 1000, so getpass.getuser() raises \"KeyError: 'getpwuid(): uid not found: 1000'\" while vllm is still being imported. The cache paths matter afterwards, because vLLM writes its compile, Hugging Face and engine caches under $HOME.",
+       "type": "object",
+       "additionalProperties": false,
+       "required": [
+        "enabled"
+       ],
+       "properties": {
+        "enabled": {
+         "type": "boolean"
+        },
+        "mountPath": {
+         "type": "string",
+         "minLength": 1
+        },
+        "sizeLimit": {
+         "type": "string",
+         "minLength": 1
+        },
+        "env": {
+         "type": "array",
+         "items": {
+          "type": "object"
+         }
+        }
+       }
+      },
+      "args": {
+       "description": "Extra arguments appended after the fixed base args (/mnt/models, --host, --port, --trust-remote-code). WARNING: Helm replaces lists rather than merging them. Empty by default, unlike vllmCPU: vLLM's defaults are measured against the device on a GPU and are correct for a card with room, so a chart-wide cap would shrink every model on hardware that did not need it. A small vGPU slice does need caps and they belong on the model entry.",
+       "type": "array",
+       "items": {
+        "type": "string"
+       }
+      },
+      "env": {
+       "description": "Environment variables for every model served by this runtime, in the Kubernetes EnvVar form. WARNING: Helm replaces lists rather than merging them, so setting this discards the chart default VLLM_USE_V2_MODEL_RUNNER=0, which keeps structured output from crashing the engine on the CPU backend; copy forward any you still need.",
+       "type": "array",
+       "items": {
+        "type": "object"
+       }
+      },
+      "shmSize": {
+       "type": "string",
+       "minLength": 1
+      },
+      "autoSelect": {
+       "description": "Whether KServe may pick this runtime for a huggingface model that does not name one. True on vllmCPU and false on vllmGPU: an InferenceService with no runtime has had no thought given to hardware, and the accelerated runtime on a cluster with no GPU node produces a pod that stays Pending with no error to read.",
+       "type": "boolean"
       }
+     }
     }
+   }
+  },
+  "placementProfiles": {
+   "description": "Named bundles of nodeSelector, tolerations and affinity, referenced by a model or LLM service through placementProfile. Naming a profile that is not defined here fails the render.",
+   "type": "object",
+   "additionalProperties": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+     "nodeSelector": {
+      "type": "object",
+      "additionalProperties": {
+       "type": "string"
+      }
+     },
+     "tolerations": {
+      "type": "array",
+      "items": {
+       "type": "object"
+      }
+     },
+     "affinity": {
+      "type": "object",
+      "additionalProperties": true
+     }
+    }
+   }
+  },
+  "localModelCache": {
+   "description": "KServe LocalModel cache. Off by default. Requires node-local storage and the KServe local model controller, which has its own switch under kserve-localmodel-resources.kserve.localmodel.enabled.",
+   "type": "object",
+   "additionalProperties": false,
+   "required": [
+    "enabled"
+   ],
+   "properties": {
+    "enabled": {
+     "type": "boolean"
+    },
+    "requireController": {
+     "type": "boolean"
+    },
+    "defaultSize": {
+     "type": "string",
+     "minLength": 1
+    },
+    "nodeGroups": {
+     "type": "array",
+     "items": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+       "name"
+      ],
+      "properties": {
+       "name": {
+        "type": "string",
+        "minLength": 1
+       },
+       "size": {
+        "type": "string",
+        "minLength": 1
+       },
+       "storageLimit": {
+        "type": "string",
+        "minLength": 1
+       },
+       "storageClassName": {
+        "type": "string"
+       },
+       "hostPath": {
+        "type": "string"
+       },
+       "persistentVolumeReclaimPolicy": {
+        "enum": [
+         "Delete",
+         "Retain",
+         "Recycle"
+        ]
+       },
+       "nodeAffinity": {
+        "type": "object",
+        "additionalProperties": true
+       },
+       "persistentVolumeSpec": {
+        "description": "Full PersistentVolumeSpec. Replaces the generated one; the chart does not merge the two.",
+        "type": "object",
+        "additionalProperties": true
+       },
+       "persistentVolumeClaimSpec": {
+        "description": "Full PersistentVolumeClaimSpec. Replaces the generated one; the chart does not merge the two.",
+        "type": "object",
+        "additionalProperties": true
+       }
+      }
+     }
+    }
+   }
+  },
+  "modelDefaults": {
+   "$ref": "#/definitions/modelSettings"
+  },
+  "models": {
+   "type": "array",
+   "items": {
+    "allOf": [
+     {
+      "$ref": "#/definitions/modelSettings"
+     },
+     {
+      "type": "object",
+      "required": [
+       "name",
+       "storageUri"
+      ],
+      "properties": {
+       "name": {
+        "type": "string",
+        "minLength": 1
+       },
+       "storageUri": {
+        "type": "string",
+        "minLength": 1
+       },
+       "injectHfToken": {
+        "type": "boolean"
+       },
+       "namespace": {
+        "type": "string"
+       },
+       "serviceAccountName": {
+        "type": "string"
+       }
+      }
+     }
+    ]
+   }
+  },
+  "llmDefaults": {
+   "$ref": "#/definitions/llmSettings"
+  },
+  "llmInferenceServices": {
+   "type": "array",
+   "items": {
+    "allOf": [
+     {
+      "$ref": "#/definitions/llmSettings"
+     },
+     {
+      "type": "object",
+      "required": [
+       "name",
+       "model"
+      ],
+      "properties": {
+       "name": {
+        "type": "string",
+        "minLength": 1
+       },
+       "model": {
+        "type": "object",
+        "required": [
+         "uri"
+        ],
+        "properties": {
+         "uri": {
+          "type": "string",
+          "minLength": 1
+         },
+         "name": {
+          "type": "string"
+         }
+        },
+        "additionalProperties": true
+       },
+       "parallelism": {
+        "type": "object",
+        "additionalProperties": true
+       },
+       "worker": {
+        "type": "object",
+        "additionalProperties": true
+       },
+       "prefill": {
+        "type": "object",
+        "additionalProperties": true
+       },
+       "scaling": {
+        "type": "object",
+        "additionalProperties": true
+       },
+       "baseRefs": {
+        "type": "array",
+        "items": {
+         "type": "string"
+        }
+       },
+       "injectHfToken": {
+        "type": "boolean"
+       },
+       "namespace": {
+        "type": "string"
+       }
+      }
+     }
+    ]
+   }
+  },
+  "kserve": {
+   "type": "object",
+   "additionalProperties": true
+  },
+  "kserve-crd": {
+   "type": "object",
+   "additionalProperties": true
+  },
+  "kserve-llmisvc-crd": {
+   "type": "object",
+   "additionalProperties": true
+  },
+  "kserve-localmodel-crd": {
+   "type": "object",
+   "additionalProperties": true
+  },
+  "kserve-resources": {
+   "type": "object",
+   "additionalProperties": true
+  },
+  "kserve-llmisvc-resources": {
+   "type": "object",
+   "additionalProperties": true
+  },
+  "kserve-localmodel-resources": {
+   "type": "object",
+   "additionalProperties": true
+  },
+  "kserve-runtime-configs": {
+   "type": "object",
+   "additionalProperties": true
+  },
+  "nameOverride": {
+   "type": "string"
+  },
+  "fullnameOverride": {
+   "type": "string"
+  },
+  "global": {
+   "type": "object",
+   "additionalProperties": true
   }
+ },
+ "required": [
+  "components",
+  "namespace",
+  "hfSecret",
+  "serviceAccount",
+  "clusterServingRuntimes",
+  "placementProfiles",
+  "localModelCache",
+  "modelDefaults",
+  "models",
+  "llmDefaults",
+  "llmInferenceServices"
+ ],
+ "definitions": {
+  "component": {
+   "type": "object",
+   "additionalProperties": false,
+   "required": [
+    "enabled"
+   ],
+   "properties": {
+    "enabled": {
+     "type": "boolean"
+    }
+   }
+  },
+  "resources": {
+   "type": "object",
+   "additionalProperties": true
+  },
+  "securityContext": {
+   "description": "Container securityContext passed through verbatim. Helm merges maps, so set the whole key to null (not to {}) to render no securityContext at all.",
+   "type": "object",
+   "additionalProperties": true
+  },
+  "probes": {
+   "description": "Container probes. Each entry is a verbatim Kubernetes Probe; an empty or null entry renders no probe. Helm merges maps, so removing a probe the chart defines means setting that entry to null.",
+   "type": "object",
+   "additionalProperties": false,
+   "properties": {
+    "startup": {
+     "type": "object",
+     "additionalProperties": true
+    },
+    "readiness": {
+     "type": "object",
+     "additionalProperties": true
+    },
+    "liveness": {
+     "type": "object",
+     "additionalProperties": true
+    }
+   }
+  },
+  "placement": {
+   "type": "object",
+   "properties": {
+    "placementProfile": {
+     "type": "string"
+    },
+    "nodeSelector": {
+     "type": "object",
+     "additionalProperties": {
+      "type": "string"
+     }
+    },
+    "tolerations": {
+     "type": "array",
+     "items": {
+      "type": "object"
+     }
+    },
+    "affinity": {
+     "type": "object",
+     "additionalProperties": true
+    }
+   }
+  },
+  "runtime": {
+   "type": "object",
+   "additionalProperties": true,
+   "required": [
+    "enabled",
+    "name",
+    "image",
+    "imagePullPolicy",
+    "resources"
+   ],
+   "properties": {
+    "enabled": {
+     "type": "boolean"
+    },
+    "name": {
+     "type": "string",
+     "minLength": 1
+    },
+    "image": {
+     "type": "string",
+     "minLength": 1
+    },
+    "imagePullPolicy": {
+     "enum": [
+      "Always",
+      "IfNotPresent",
+      "Never"
+     ]
+    },
+    "args": {
+     "description": "Extra arguments appended after the fixed base args (--model_name, --model_path, --port, --rest_port). WARNING: Helm replaces lists rather than merging them, so setting this discards the chart defaults ['--file_system_poll_wait_seconds=0']; copy forward any you still need. Every entry must be a string. OpenVINO Model Server uses --flag=value, so each entry is a single token.",
+     "type": "array",
+     "items": {
+      "type": "string"
+     }
+    },
+    "env": {
+     "description": "Environment variables for every model served by this runtime, in the Kubernetes EnvVar form. WARNING: Helm replaces lists rather than merging them, so setting this discards the chart default; copy forward any you still need.",
+     "type": "array",
+     "items": {
+      "type": "object"
+     }
+    },
+    "resources": {
+     "$ref": "#/definitions/resources"
+    },
+    "securityContext": {
+     "$ref": "#/definitions/securityContext"
+    },
+    "probes": {
+     "$ref": "#/definitions/probes"
+    }
+   }
+  },
+  "modelSettings": {
+   "type": "object",
+   "additionalProperties": true,
+   "allOf": [
+    {
+     "$ref": "#/definitions/placement"
+    }
+   ],
+   "properties": {
+    "runtime": {
+     "type": "string"
+    },
+    "modelFormat": {
+     "type": "string"
+    },
+    "args": {
+     "type": "array",
+     "items": {
+      "type": "string"
+     }
+    },
+    "env": {
+     "type": "array",
+     "items": {
+      "type": "object"
+     }
+    },
+    "resources": {
+     "$ref": "#/definitions/resources"
+    },
+    "replicas": {
+     "description": "Renders as both predictor.minReplicas and predictor.maxReplicas. Leaving it unset renders neither, which is not the same as 1: it lets the KServe defaults and any autoscaler configuration apply.",
+     "type": "integer",
+     "minimum": 0
+    },
+    "localCache": {
+     "description": "Opt in to the KServe LocalModel cache for this model. Requires localModelCache.enabled and at least one node group.",
+     "type": "object",
+     "additionalProperties": false,
+     "required": [
+      "enabled"
+     ],
+     "properties": {
+      "enabled": {
+       "type": "boolean"
+      },
+      "name": {
+       "type": "string",
+       "minLength": 1
+      },
+      "size": {
+       "type": "string",
+       "minLength": 1
+      },
+      "nodeGroups": {
+       "type": "array",
+       "items": {
+        "type": "string"
+       }
+      },
+      "serviceAccountName": {
+       "type": "string"
+      },
+      "storage": {
+       "type": "object",
+       "additionalProperties": true
+      }
+     }
+    }
+   }
+  },
+  "llmSettings": {
+   "type": "object",
+   "additionalProperties": true,
+   "allOf": [
+    {
+     "$ref": "#/definitions/placement"
+    }
+   ],
+   "properties": {
+    "replicas": {
+     "type": "integer",
+     "minimum": 1
+    },
+    "image": {
+     "type": "string"
+    },
+    "args": {
+     "type": "array",
+     "items": {
+      "type": "string"
+     }
+    },
+    "resources": {
+     "$ref": "#/definitions/resources"
+    },
+    "router": {
+     "type": "object",
+     "additionalProperties": true
+    }
+   }
+  }
+ }
 }

@@ -112,9 +112,42 @@ clusterServingRuntimes:
   vllmCPU:
     enabled: true
     name: kserve-vllm-cpu
-    image: public.ecr.aws/q9t5s3a7/vllm-cpu-release-repo:v0.26.0
+    # vLLM's own CPU build, held at the SAME engine version as vllmGPU below.
+    #
+    # ─── Why both halves of this line are deliberate ─────────────────────
+    # The repository changed in 0.5.0 -> 0.6.0. It used to be
+    # public.ecr.aws/q9t5s3a7/vllm-cpu-release-repo, a staging mirror rather
+    # than vLLM's published CPU image, and it was stuck at 0.26.0 while the
+    # GPU side moved to 0.33.0. A CPU/GPU comparison across two different
+    # engine versions measures the versions, not the hardware.
+    #
+    # The digest is appended because a tag is a MOVING pointer: "pinned to
+    # v0.33.0" stays true only until someone repushes that tag, and this
+    # chart's own pullPolicy note explains how a cached layer then serves an
+    # arbitrary build invisibly. With the digest present a repush fails the
+    # pull loudly instead.
+    #
+    # This is the INDEX digest, not a per-architecture one. The digest shown
+    # on a Docker Hub tag page is usually the amd64 manifest inside the index
+    # (for v0.33.0 that is sha256:4154467a...), and pinning that would tie the
+    # chart to one architecture. Verified multi-arch: linux/amd64, linux/arm64.
+    #
+    # To move version: change the tag AND re-resolve the digest together --
+    #   docker buildx imagetools inspect vllm/vllm-openai-cpu:<tag>
+    # A stale digest beside a new tag pulls the old image without complaint.
+    image: vllm/vllm-openai-cpu:v0.33.0@sha256:87167cf0ec6e1e9607bb1cf9bf618a67d04963236a34bd955ac75b7d31a6edf5
     imagePullPolicy: IfNotPresent
     shmSize: 1Gi
+    # Whether KServe may pick this runtime for a `huggingface` model that does
+    # not name one.
+    #
+    # True here and false on vllmGPU, deliberately: an InferenceService that
+    # does not name a runtime is almost always one that nobody thought about
+    # hardware for, and on a cluster with no GPU node the accelerated runtime
+    # produces a pod that stays Pending forever with no error anywhere. The
+    # CPU runtime runs wherever it lands, so it is the safe default; a GPU
+    # model is an explicit decision and names its runtime.
+    autoSelect: true
     # Extra arguments appended after the fixed base args
     # (/mnt/models, --host, --port, --trust-remote-code).
     #
@@ -174,8 +207,24 @@ clusterServingRuntimes:
       # pinned-memory flag, which is False on CPU, and that has an explicit CPU
       # branch for applying the grammar bitmask.
       #
-      # Remove once the runtime image carries the upstream fix, which replaces
-      # the hardcoded pin_memory=True with the platform PIN_MEMORY flag.
+      # ─── Still set on 0.33.0, and NOT yet proven unnecessary ──────────────
+      # Checked against the 0.33.0 image rather than its release notes:
+      # VLLM_USE_V2_MODEL_RUNNER is still a recognised setting (default None),
+      # and pin_memory=True is still hardcoded under vllm/v1/worker/gpu/ --
+      # including buffer_utils.py, which the structured-output path uses.
+      # Whether the CPU platform still reaches it was not established, and the
+      # failure only appears on the first schema-constrained request, long
+      # after the model reports healthy. So this stays until someone sends
+      # that request and watches it succeed:
+      #
+      #   curl -s $PREDICTOR/v1/chat/completions -H 'Content-Type: application/json' \
+      #     -d '{"model":"<served-name>","messages":[{"role":"user","content":"hi"}],
+      #          "response_format":{"type":"json_schema","json_schema":
+      #            {"name":"r","schema":{"type":"object",
+      #             "properties":{"a":{"type":"string"}},"required":["a"]}}}}'
+      #
+      # Remove this entry, restart, and repeat. A 200 with valid JSON means
+      # the workaround can go; a 500 plus a pod restart means it cannot.
       - name: VLLM_USE_V2_MODEL_RUNNER
         value: "0"
     # Container securityContext for every model served by this runtime.
@@ -187,8 +236,16 @@ clusterServingRuntimes:
     # was an oversight rather than a decision, and a root inference container is
     # the single easiest finding in any cluster audit.
     #
-    # Forcing a uid on this image is NOT free, and the reason is not file
-    # permissions. The published image
+    # ─── The import-time crash below is FIXED in the 0.33.0 image ──────────
+    # Verified by running it: `--user 1000:1000` with no identity variables
+    # imports vllm 0.33.0 cleanly, even though `getent passwd 1000` still
+    # returns nothing. The guard and the USER/LOGNAME variables are kept
+    # anyway, since they cost nothing, cacheVolume supplies them regardless, and
+    # they still protect anyone who pins an older CPU image, where the crash
+    # is real. The history below is why they exist.
+    #
+    # Forcing a uid was NOT free on the old image, and the reason was not file
+    # permissions. The previous image
     # (public.ecr.aws/q9t5s3a7/vllm-cpu-release-repo:v0.26.0) declares no USER
     # and has no /etc/passwd entry for uid 1000 ("getent passwd 1000" returns
     # nothing). Importing vllm runs vllm/env_override.py, which calls
@@ -312,6 +369,159 @@ clusterServingRuntimes:
       enabled: true
       mountPath: /home/vllm
       sizeLimit: 2Gi
+      env:
+        - name: USER
+          value: vllm
+        - name: LOGNAME
+          value: vllm
+        - name: HOME
+          value: /home/vllm
+        - name: HF_HOME
+          value: /home/vllm/.cache/huggingface
+        - name: XDG_CACHE_HOME
+          value: /home/vllm/.cache
+        - name: VLLM_CACHE_ROOT
+          value: /home/vllm/.cache/vllm
+
+  # The same vLLM server on an accelerator. Identical CLI, identical /health
+  # endpoint, identical OpenAI routes under /v1, so a model moves between
+  # this and vllmCPU by changing the runtime name and nothing else, which is
+  # what makes a GPU-vs-CPU comparison of one model meaningful.
+  #
+  # ─── Why this exists rather than using kserve-vllmserver ──────────────────
+  # KServe publishes its own `kserve-vllmserver`, and it CANNOT serve the
+  # models this chart deploys: it declares `supportedModelFormats: [vLLM]`
+  # while every model here is `huggingface`, so KServe refuses the pairing at
+  # reconcile with
+  #
+  #   specified runtime kserve-vllmserver does not support specified
+  #   framework/version
+  #
+  # and never creates a pod. The other published option,
+  # `kserve-huggingfaceserver`, does accept `huggingface` and does use a GPU,
+  # but it WRAPS vLLM and mounts the OpenAI routes under /openai/v1 instead of
+  # /v1, so every client configured for the CPU runtime 404s against it.
+  # Neither is a drop-in partner for vllmCPU; this is.
+  vllmGPU:
+    enabled: true
+    name: kserve-vllm-gpu
+    # vLLM's own CUDA image, at the SAME engine version as vllmCPU above --
+    # which is what makes a CPU-vs-GPU measurement of one model mean anything.
+    #
+    # Pinned by tag AND index digest, for the reasons on vllmCPU. `latest` is
+    # what KServe's own kserve-vllmserver uses, and it means a node holding a
+    # cached layer serves an arbitrary older build indefinitely and silently.
+    #
+    # Index digest, not the amd64 one Docker Hub's tag page shows
+    # (sha256:91ee972a...). Verified multi-arch: linux/amd64, linux/arm64.
+    image: vllm/vllm-openai:v0.33.0@sha256:d825baf9ce4b1b6bfc5ecc7b79880c7e6748c65a72d697ce3d47607aafa84c6e
+    imagePullPolicy: IfNotPresent
+    shmSize: 1Gi
+    # False on purpose. See the note on vllmCPU.autoSelect: a model that does
+    # not name a runtime has had no thought given to hardware, and sending it
+    # here on a cluster with no GPU node produces a pod that stays Pending
+    # with no error to read. It also keeps the two runtimes from both
+    # advertising `huggingface` as auto-selectable, which is ambiguous.
+    autoSelect: false
+    # Extra arguments appended after the fixed base args
+    # (/mnt/models, --host, --port, --trust-remote-code).
+    #
+    # WARNING: Helm REPLACES lists, it does not merge them. Setting args in
+    # your own values file discards every default below, so copy forward any
+    # default you still want.
+    #
+    # Empty by default, unlike vllmCPU. The CPU runtime has to cap
+    # --max-model-len and --gpu-memory-utilization because its defaults are
+    # measured against the NODE and fail to start on a busy one. On a GPU the
+    # defaults are measured against the device and are correct for a card with
+    # room, so a chart-wide cap here would silently shrink every model on
+    # hardware that did not need it.
+    #
+    # A SMALL card does need caps, and they belong on the model rather than
+    # here. On a 4 GiB vGPU slice (Azure NV6ads_A10_v5, profile A10-4Q) a
+    # 0.6B model needs:
+    #     --gpu-memory-utilization=0.55   fraction of TOTAL, checked against
+    #                                     free; the CUDA context sits outside
+    #                                     it, so 0.9 passes the check and then
+    #                                     OOMs during profiling
+    #     --max-model-len=4096            or vLLM demands enough KV cache for
+    #                                     the model's native context and
+    #                                     refuses to start
+    #
+    # Do NOT reach for --enforce-eager on a small card. It looks like the
+    # obvious way to save memory and it is a bad trade, measured rather than
+    # assumed: on that slice CUDA graph capture took 0.04 GiB, not the
+    # hundreds of MiB the folklore suggests, while disabling it cost 4-11%
+    # of decode speed (time per output token 24.1 -> 25.0 ms on a short
+    # prompt, 26.0 -> 29.1 ms on a 1.5k-token one). Graphs remove per-kernel
+    # launch overhead, which is a FIXED cost per token, so they matter most
+    # for exactly the small models a small card is used for.
+    args: []
+    # Environment variables for every model served by this runtime.
+    #
+    # WARNING: Helm REPLACES lists, it does not merge them.
+    #
+    # Deliberately NOT carrying vllmCPU's VLLM_USE_V2_MODEL_RUNNER=0. That
+    # variable works around a structured-output path that is GPU-only and
+    # crashes on CPU; forcing the v1 runner on a GPU would give up the newer
+    # runner for a bug that cannot occur here.
+    env: []
+    # Same hardening as vllmCPU, and the same load-bearing identity variables
+    # in cacheVolume below. The template refuses to render a non-root user
+    # without one of them, because the failure mode is an import-time
+    # KeyError from getpass that names torch and never mentions this chart.
+    #
+    # Helm merges maps, so overriding one field keeps the rest. Set the whole
+    # key to null (NOT {}) to let the image choose its own user.
+    securityContext:
+      allowPrivilegeEscalation: false
+      capabilities:
+        drop: [ALL]
+      privileged: false
+      runAsNonRoot: true
+      runAsUser: 1000
+      seccompProfile:
+        type: RuntimeDefault
+    # vLLM answers GET /health on its serving port once the engine is up, so
+    # one path serves all three probes.
+    #
+    # The startup probe's failureThreshold is high for a reason that bites
+    # harder on GPU than on CPU: the first start downloads the weights AND
+    # lets Triton JIT-compile its kernels, which on a cold node takes minutes
+    # and emits nothing but compiler warnings. A tighter budget restarts the
+    # pod mid-compile, forever.
+    probes:
+      startup:
+        periodSeconds: 10
+        failureThreshold: 9999
+        httpGet:
+          path: /health
+          port: 8080
+      readiness:
+        periodSeconds: 10
+        timeoutSeconds: 5
+        failureThreshold: 3
+        httpGet:
+          path: /health
+          port: 8080
+      liveness:
+        periodSeconds: 10
+        timeoutSeconds: 5
+        failureThreshold: 3
+        httpGet:
+          path: /health
+          port: 8080
+    # Identity and writable caches for the non-root container, exactly as on
+    # vllmCPU. USER and LOGNAME satisfy getpass.getuser(); the cache paths
+    # move vLLM's compile, Hugging Face and engine caches off the image's
+    # root-owned $HOME.
+    #
+    # sizeLimit is larger than the CPU runtime's because the Triton kernel
+    # cache a GPU build writes is bigger than anything the CPU backend emits.
+    cacheVolume:
+      enabled: true
+      mountPath: /home/vllm
+      sizeLimit: 4Gi
       env:
         - name: USER
           value: vllm
@@ -543,6 +753,45 @@ llmInferenceServices: []
 kserve-resources:
   kserve:
     createSharedResources: true
+    storage:
+      # The init container that downloads model weights, as rendered onto
+      # ClusterStorageContainer/default.
+      #
+      # ─── Why the upstream default is wrong for this chart ────────────────
+      # KServe ships limits.memory 1Gi here, which is sized for the small
+      # sklearn/xgboost artefacts its own examples use. Every model THIS
+      # chart serves is a language model pulled from Hugging Face, and the
+      # downloader holds a buffer per shard while fetching them in parallel,
+      # so peak RSS tracks the download concurrency rather than any one file.
+      # Measured: a 2.88 GiB repo is killed at 1Gi.
+      #
+      # The failure is unusually hard to read, which is the real reason this
+      # is set rather than left to the operator. The pod reports
+      #
+      #     Init:OOMKilled
+      #
+      # against a container named `storage-initializer` that appears in no
+      # values file and in no InferenceService, because it is injected by
+      # KServe's pod mutator, while the model's OWN memory limit, the one someone
+      # actually chose, is reported as fine. Nothing names the download.
+      #
+      # 8Gi is headroom rather than a measurement: the init container exits
+      # as soon as the weights are on disk, so the limit costs nothing while
+      # nothing is downloading, and the requests below are what the scheduler
+      # actually reserves.
+      #
+      # Note for anyone chasing this at runtime: the `storageInitializer`
+      # block in the `inferenceservice-config` ConfigMap has these same keys
+      # and is INERT in KServe 0.20, so editing it changes nothing. Verified by
+      # setting a different image there and watching the pod come up with the
+      # original one. ClusterStorageContainer is the live object.
+      resources:
+        requests:
+          memory: 1Gi
+          cpu: 100m
+        limits:
+          memory: 8Gi
+          cpu: "2"
 
 kserve-llmisvc-resources:
   kserve:

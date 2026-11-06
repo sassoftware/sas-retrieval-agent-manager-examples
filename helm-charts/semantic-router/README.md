@@ -253,6 +253,16 @@ Envoy is stateless: no routing decision, no learning state, no cache. Scale it f
 
 Requests arrive as `/v1/chat/completions` and are rewritten onto LiteLLM's mount prefix (`prefix_rewrite: /litellm/v1/chat/completions`). With `serverRootPath: ""` no rewrite is rendered at all.
 
+Each allowed path is therefore published **twice**: once as the client sends it, and once as the router leaves it. The router does its own rewrite, onto the `base_url` of its LiteLLM backend — which already carries the mount prefix — so a classified request re-enters routing as `/litellm/v1/chat/completions`. Matched against the client-facing route alone it matches nothing and falls through to the catch-all, and the router's own answer is refused with `path_not_routed` after a model has already been chosen. The second route exists to catch it, and rewrites nothing, because by then the path is already the upstream's.
+
+### Vendor fields in the response
+
+The router decodes upstream responses strictly: any field outside the canonical OpenAI shape is rejected with `invalid_upstream_json: upstream response JSON contains a non-canonical field`, turning an answer the model has already produced — and been billed for — into a `502`.
+
+LiteLLM adds several such fields (`routing`, `prompt_filter_results`, `provider_specific_fields` on both the choice and the message, and `latency_checkpoint` in `usage`). The router offers no leniency setting and LiteLLM no suppression, so the chart reconciles the two with a small Lua filter that removes exactly those fields on the way back — see `envoy.sanitizeResponse`. It sits after `ext_proc` in the filter chain and therefore *before* it on the response path, which runs filters in reverse.
+
+Add to `envoy.sanitizeResponse.fields` if a different proxy or provider introduces its own extensions; the list names fields explicitly rather than matching by shape, because a rule broad enough to catch "anything unexpected" would eventually delete part of an answer.
+
 ### Embeddings and pinned models
 
 Only the paths in `envoy.routes.allowedPaths` go through the router. Embeddings, `/v1/completions` and anything else keep calling LiteLLM directly — which is also how a client pins a concrete model: a request naming a real LiteLLM model, rather than `vllm-sr/auto`, is passed through unclassified.
@@ -451,6 +461,8 @@ The bundled Jaeger dependency stays disabled: upstream pins `jaeger.allInOne.ima
 | `envoy.routes.modelsFromRouter` / `.modelsPath` | Serve `/v1/models` from the router. | `false` / `/v1/models` |
 | `envoy.routes.extraRoutes` | Appended before the catch-all deny. | `[]` |
 | `envoy.routes.deny.status` / `.contentType` / `.body` | The catch-all. | `403` / JSON |
+| `envoy.sanitizeResponse.enabled` | Strip the proxy's vendor fields before the router decodes the response. Off only against a proxy that already returns canonical JSON. | `true` |
+| `envoy.sanitizeResponse.fields` | The fields removed. | `provider_specific_fields`, `latency_checkpoint`, `prompt_filter_results`, `routing` |
 | `envoy.extraClusters` | For a route added through `extraRoutes`. | `[]` |
 | `service.type` / `.port` / `.annotations` | The release entrypoint. | `ClusterIP` / `8080` |
 | `service.loadBalancerClass` / `.loadBalancerSourceRanges` | LoadBalancer only. | `""` / `[]` |
@@ -555,6 +567,8 @@ The render also fails, by design, on value combinations that would produce a rel
 | Symptom | Likely cause |
 | --- | --- |
 | Every request returns `403` with `path_not_routed` | The path is not in `envoy.routes.allowedPaths`. Only chat completions are published through the router. |
+| An *unrouted* request succeeds but a routed one returns `403` with `path_not_routed` | The post-rewrite route is missing. Envoy's access log is decisive: log `%REQ(X-ENVOY-ORIGINAL-PATH?:PATH)%` and the selected model, and you will see the path arrive as `/v1/chat/completions` on the way in and as the rewritten path on the way back. The chart publishes both; a hand-written `allowedPaths` entry in an older release may not. |
+| Every routed answer returns `502` with `invalid_upstream_json` in the router log | The proxy added a field outside the canonical OpenAI shape. The log line names it. Add it to `envoy.sanitizeResponse.fields`. |
 | Every request fails with `ext_proc` errors in the Envoy log | The router is not ready yet (first start downloads models), or the NetworkPolicy does not match the Envoy pods. With fail-closed ext_proc the request is rejected rather than forwarded. |
 | `404` from LiteLLM, with the right model name | The base URL lost its `/v1`, or `serverRootPath` here does not match the litellm release's. |
 | `401` from LiteLLM | The caller's key, not the router's: there is no router credential. Check the virtual key's model permissions. |
