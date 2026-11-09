@@ -1,0 +1,51 @@
+suite: response cache validation
+release:
+  name: rel
+  namespace: litellm
+# Suite level, because helm-unittest resolves `failedTemplate` only against
+# templates named here, and only reliably against one. With a per-test
+# `templates:` it reports a misleading "No failed document" instead.
+templates:
+  - templates/deployment.yaml
+# cache.type is an enum in values.schema.json, so a bad value is rejected
+# before any template renders and cannot be asserted here. The matching `fail`
+# guard in _helpers.tpl stays as a backstop for callers that render with
+# --skip-schema-validation.
+tests:
+  - it: rejects a cache with no Redis at all
+    set:
+      cache.enabled: true
+    asserts:
+      - failedTemplate:
+          errorPattern: cache\.enabled needs a Redis to cache into
+
+  - it: rejects Sentinel in front of the bundled Valkey
+    set:
+      valkey.enabled: true
+      redis.sentinel.enabled: true
+    asserts:
+      - failedTemplate:
+          errorPattern: redis\.sentinel\.enabled cannot be combined with the bundled Valkey
+
+  # The subchart accepts an ACL file it writes verbatim, which this chart
+  # cannot read a password out of. Caught here rather than at the first NOAUTH.
+  - it: rejects an authenticated Valkey whose password reaches no one
+    set:
+      valkey.enabled: true
+      valkey.auth.enabled: true
+      valkey.auth.aclConfig: "user default on >somepassword ~* &* +@all"
+    asserts:
+      - failedTemplate:
+          errorPattern: valkey\.auth\.enabled is true but no password reaches the proxy
+
+  # An external server with its own Secret satisfies the same rule, because the
+  # proxy then has a password to send regardless of how the subchart stores it.
+  - it: accepts an authenticated Valkey whose password is named in redis.existingSecret
+    set:
+      valkey.enabled: true
+      valkey.auth.enabled: true
+      valkey.auth.aclConfig: "user default on >somepassword ~* &* +@all"
+      redis.existingSecret.name: valkey-acl
+    asserts:
+      - isKind:
+          of: Deployment

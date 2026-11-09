@@ -1,0 +1,98 @@
+{{- if and .Values.networkPolicy.enabled (index .Values "semantic-router").enabled }}
+{{- $np := .Values.networkPolicy }}
+{{/*
+The router exposes two ports with very different audiences, and a stock
+Kubernetes namespace lets any pod reach both:
+
+  :50051  the ext_proc data path. Only Envoy belongs here.
+  :8080   the management API. It can rewrite routing policy — which model a
+          prompt is sent to, and therefore which LiteLLM key boundary it
+          crosses. Two clients belong here, and they are not equivalent: the
+          model controller WRITES the config (`PATCH /api/v1/config`), and the
+          RAM extension's API only READS it — config, validate, status and
+          routing preview — to drive the policy editor. They are rendered as
+          separate rules so the asymmetry is visible in the policy and either
+          half can be revoked on its own.
+
+Bearer auth on :8080 is the primary control; this policy is the second one, so
+that a leaked token is not on its own enough.
+
+policyTypes lists Ingress ONLY. The router downloads its classifier
+checkpoints from Hugging Face on first start — an egress policy that forgot
+that would turn a one-hour first boot into a CrashLoopBackOff with no
+explanation. Add egress rules deliberately, after the models are on the
+volume.
+*/}}
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "srouter.fullname" . }}-router
+  labels:
+    {{- include "srouter.labels" . | nindent 4 }}
+  {{- with .Values.commonAnnotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: semantic-router
+      app.kubernetes.io/instance: {{ .Release.Name }}
+      app.kubernetes.io/component: router
+  policyTypes:
+    - Ingress
+  ingress:
+    # The data path.
+    - from:
+        - podSelector:
+            matchLabels:
+              {{- include "srouter.selectorLabels" . | nindent 14 }}
+      ports:
+        - port: {{ include "srouter.router.grpcPort" . }}
+          protocol: TCP
+    {{- /*
+      The management API's two clients, one rule each. `srouter.apiClients`
+      returns them in a fixed order — writer first, reader second — so the
+      rendered policy, the unit tests and the README all agree on which rule
+      is which.
+    */}}
+    {{- range $client := include "srouter.apiClients" . | fromYamlArray }}
+    # {{ $client.description }}
+    - from:
+        - podSelector:{{ if $client.podSelector }}{{ toYaml $client.podSelector | nindent 12 }}{{ else }} {}{{ end }}
+          {{- with $client.namespaceSelector }}
+          namespaceSelector:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+      ports:
+        - port: {{ include "srouter.router.apiPort" $ }}
+          protocol: TCP
+    {{- end }}
+    {{- if $np.allowEnvoyToManagementApi }}
+    # envoy.routes.modelsFromRouter publishes /v1/models from the management
+    # port, which makes Envoy a client of it as well.
+    - from:
+        - podSelector:
+            matchLabels:
+              {{- include "srouter.selectorLabels" . | nindent 14 }}
+      ports:
+        - port: {{ include "srouter.router.apiPort" . }}
+          protocol: TCP
+    {{- end }}
+    {{- if $np.metricsScrape.enabled }}
+    # Metrics. Empty selectors mean "any pod in this namespace", which is what
+    # a Prometheus running alongside needs.
+    - from:
+        - podSelector:{{ if $np.metricsScrape.podSelector }}{{ toYaml $np.metricsScrape.podSelector | nindent 12 }}{{ else }} {}{{ end }}
+          {{- with $np.metricsScrape.namespaceSelector }}
+          namespaceSelector:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+      ports:
+        - port: {{ include "srouter.router.metricsPort" . }}
+          protocol: TCP
+    {{- end }}
+    {{- with $np.extraIngress }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+{{- end }}

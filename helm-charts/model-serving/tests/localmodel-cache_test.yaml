@@ -1,0 +1,192 @@
+suite: local model cache
+templates:
+  - templates/localmodelcache.yaml
+tests:
+  # The feature is opt-in and the controller that reconciles it is off by
+  # default, so a release that does not ask for it renders nothing.
+  - it: renders nothing by default
+    asserts:
+      - hasDocuments:
+          count: 0
+  # Helm cannot set a subchart value from a parent value, so the two switches
+  # have to agree. Creating objects nothing reconciles is worse than failing:
+  # the InferenceService waits for a cache that never fills.
+  - it: refuses to render without the local model controller
+    set:
+      localModelCache.enabled: true
+    asserts:
+      - failedTemplate:
+          errorMessage: 'model-serving: localModelCache.enabled is true but the KServe local model controller is off, so nothing would reconcile the LocalModelNodeGroup and LocalModelCache objects. Set components.localModel.enabled=true and kserve-localmodel-resources.kserve.localmodel.enabled=true, or set localModelCache.requireController=false when another release owns the controller.'
+  - it: renders when the controller check is waived
+    set:
+      localModelCache.enabled: true
+      localModelCache.requireController: false
+      localModelCache.nodeGroups:
+        - name: cache
+          size: 100Gi
+    asserts:
+      - hasDocuments:
+          count: 1
+      - isKind:
+          of: LocalModelNodeGroup
+  - it: generates the node group volume specs from the convenience keys
+    set:
+      components.localModel.enabled: true
+      kserve-localmodel-resources.kserve.localmodel.enabled: true
+      localModelCache.enabled: true
+      localModelCache.nodeGroups:
+        - name: inference-cache
+          size: 200Gi
+          storageClassName: local-storage
+          hostPath: /mnt/models
+          nodeAffinity:
+            required:
+              nodeSelectorTerms:
+                - matchExpressions:
+                    - key: kserve/localmodel
+                      operator: In
+                      values: ["worker"]
+    asserts:
+      - isKind:
+          of: LocalModelNodeGroup
+      - equal:
+          path: metadata.name
+          value: inference-cache
+      - equal:
+          path: spec.storageLimit
+          value: 200Gi
+      - equal:
+          path: spec.persistentVolumeSpec.capacity.storage
+          value: 200Gi
+      - equal:
+          path: spec.persistentVolumeSpec.local.path
+          value: /mnt/models
+      - equal:
+          path: spec.persistentVolumeSpec.storageClassName
+          value: local-storage
+      # The PersistentVolume's own node affinity is what pins the cache, and
+      # every pod that uses it, to the node group.
+      - equal:
+          path: spec.persistentVolumeSpec.nodeAffinity.required.nodeSelectorTerms[0].matchExpressions[0].key
+          value: kserve/localmodel
+      - equal:
+          path: spec.persistentVolumeClaimSpec.resources.requests.storage
+          value: 200Gi
+  - it: uses an explicit volume spec verbatim instead of the generated one
+    set:
+      components.localModel.enabled: true
+      kserve-localmodel-resources.kserve.localmodel.enabled: true
+      localModelCache.enabled: true
+      localModelCache.nodeGroups:
+        - name: custom
+          size: 10Gi
+          persistentVolumeSpec:
+            accessModes: [ReadWriteMany]
+            capacity:
+              storage: 1Ti
+            nfs:
+              server: nfs.example.com
+              path: /models
+    asserts:
+      - equal:
+          path: spec.persistentVolumeSpec.capacity.storage
+          value: 1Ti
+      - notExists:
+          path: spec.persistentVolumeSpec.local
+  - it: fails a node group with no size
+    set:
+      components.localModel.enabled: true
+      kserve-localmodel-resources.kserve.localmodel.enabled: true
+      localModelCache.enabled: true
+      localModelCache.nodeGroups:
+        - name: sizeless
+    asserts:
+      - failedTemplate:
+          errorMessage: 'model-serving: localModelCache node group "sizeless" needs a size (or storageLimit) so the generated PersistentVolume has a capacity'
+  # sourceModelUri is immutable in the CRD and is what KServe matches an
+  # InferenceService against, so it has to come from the model's storageUri.
+  - it: renders a LocalModelCache for an opted-in model
+    set:
+      components.localModel.enabled: true
+      kserve-localmodel-resources.kserve.localmodel.enabled: true
+      localModelCache.enabled: true
+      localModelCache.nodeGroups:
+        - name: inference-cache
+          size: 200Gi
+      models:
+        - name: cached-model
+          storageUri: hf://org/model
+          localCache:
+            enabled: true
+            size: 20Gi
+            nodeGroups: [inference-cache]
+    documentIndex: 1
+    asserts:
+      - isKind:
+          of: LocalModelCache
+      - equal:
+          path: metadata.name
+          value: cached-model
+      - equal:
+          path: spec.sourceModelUri
+          value: hf://org/model
+      - equal:
+          path: spec.modelSize
+          value: 20Gi
+      - equal:
+          path: spec.nodeGroups
+          value: [inference-cache]
+  # The CRD requires at least one node group, and its own error does not
+  # mention this chart, so default to every group the release defines.
+  - it: defaults a cache to every defined node group
+    set:
+      components.localModel.enabled: true
+      kserve-localmodel-resources.kserve.localmodel.enabled: true
+      localModelCache.enabled: true
+      localModelCache.nodeGroups:
+        - name: group-a
+          size: 100Gi
+        - name: group-b
+          size: 100Gi
+      models:
+        - name: cached-model
+          storageUri: hf://org/model
+          localCache:
+            enabled: true
+    documentIndex: 2
+    asserts:
+      - equal:
+          path: spec.nodeGroups
+          value: [group-a, group-b]
+      - equal:
+          path: spec.modelSize
+          value: 10Gi
+  - it: fails when a model opts in with no node group anywhere
+    set:
+      components.localModel.enabled: true
+      kserve-localmodel-resources.kserve.localmodel.enabled: true
+      localModelCache.enabled: true
+      models:
+        - name: cached-model
+          storageUri: hf://org/model
+          localCache:
+            enabled: true
+    asserts:
+      - failedTemplate:
+          errorMessage: 'model-serving: model "cached-model" enables localCache but no node groups are available; set localModelCache.nodeGroups or the model''s localCache.nodeGroups'
+  - it: skips models that do not opt in
+    set:
+      components.localModel.enabled: true
+      kserve-localmodel-resources.kserve.localmodel.enabled: true
+      localModelCache.enabled: true
+      localModelCache.nodeGroups:
+        - name: inference-cache
+          size: 200Gi
+      models:
+        - name: uncached
+          storageUri: hf://org/model
+    asserts:
+      - hasDocuments:
+          count: 1
+      - isKind:
+          of: LocalModelNodeGroup

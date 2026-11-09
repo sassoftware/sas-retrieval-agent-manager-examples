@@ -30,21 +30,15 @@ spec:
       env:
         {{- toYaml . | nindent 8 }}
       {{- end }}
-      startupProbe:
-        periodSeconds: 5
-        failureThreshold: 9999
-        httpGet:
-          path: /v2/health/ready
-          port: 8080
+      {{- with (include "model-serving.runtimeProbes" .Values.clusterServingRuntimes.openVINO | trim) }}
+      {{- . | nindent 6 }}
+      {{- end }}
       resources:
         {{- toYaml .Values.clusterServingRuntimes.openVINO.resources | nindent 8 }}
+      {{- with .Values.clusterServingRuntimes.openVINO.securityContext }}
       securityContext:
-        allowPrivilegeEscalation: false
-        capabilities:
-          drop: [ALL]
-        privileged: false
-        runAsNonRoot: true
-        runAsUser: 5000
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
   protocolVersions: [v1, v2, grpc-v2]
   supportedModelFormats:
     - {autoSelect: true, name: openvino, priority: 1, version: "10"}
@@ -53,44 +47,17 @@ spec:
     - {autoSelect: true, name: huggingface}
 {{- end }}
 
+{{/*
+The two vLLM runtimes. Same server and the same arguments; they differ only in
+the image and in what the values below ask of it, so both render from one
+helper. See "model-serving.vllmRuntime" in _helpers.tpl.
+*/}}
 {{- if .Values.clusterServingRuntimes.vllmCPU.enabled }}
 ---
-apiVersion: serving.kserve.io/v1alpha1
-kind: ClusterServingRuntime
-metadata:
-  name: {{ .Values.clusterServingRuntimes.vllmCPU.name }}
-  labels:
-    {{- include "model-serving.labels" . | nindent 4 }}
-  {{- with .Values.commonAnnotations }}
-  annotations:
-    {{- toYaml . | nindent 4 }}
-  {{- end }}
-spec:
-  supportedModelFormats:
-    - name: huggingface
-      autoSelect: true
-  containers:
-    - name: kserve-container
-      image: {{ .Values.clusterServingRuntimes.vllmCPU.image }}
-      imagePullPolicy: {{ .Values.clusterServingRuntimes.vllmCPU.imagePullPolicy }}
-      args:
-        - /mnt/models
-        - --host=0.0.0.0
-        - --port=8080
-        - --trust-remote-code
-        {{- with .Values.clusterServingRuntimes.vllmCPU.args }}
-        {{- toYaml . | nindent 8 }}
-        {{- end }}
-      {{- with .Values.clusterServingRuntimes.vllmCPU.env }}
-      env:
-        {{- toYaml . | nindent 8 }}
-      {{- end }}
-      volumeMounts:
-        - name: shm
-          mountPath: /dev/shm
-  volumes:
-    - name: shm
-      emptyDir:
-        medium: Memory
-        sizeLimit: {{ .Values.clusterServingRuntimes.vllmCPU.shmSize }}
+{{ include "model-serving.vllmRuntime" (dict "root" . "runtime" .Values.clusterServingRuntimes.vllmCPU "key" "vllmCPU") }}
+{{- end }}
+
+{{- if .Values.clusterServingRuntimes.vllmGPU.enabled }}
+---
+{{ include "model-serving.vllmRuntime" (dict "root" . "runtime" .Values.clusterServingRuntimes.vllmGPU "key" "vllmGPU") }}
 {{- end }}

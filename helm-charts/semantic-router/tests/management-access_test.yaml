@@ -1,0 +1,235 @@
+suite: management API access
+release:
+  name: sr
+  namespace: sr
+tests:
+  - it: generates an admin token under the name the subchart was told to mount
+    templates:
+      - templates/secret-management-token.yaml
+    asserts:
+      - isKind:
+          of: Secret
+      # A plain literal, not <release>-…: the subchart reads the name from its
+      # own envFromSecrets value and Helm cannot template values.
+      - equal:
+          path: metadata.name
+          value: semantic-router-management-token
+      # The key is the environment variable name, because envFromSecrets
+      # projects every key as a variable of the same name.
+      - exists:
+          path: data.VSR_MGMT_TOKEN
+
+  - it: uses a token supplied by the operator
+    templates:
+      - templates/secret-management-token.yaml
+    set:
+      global.semanticRouter.managementApi.token.value: supplied-token
+    asserts:
+      - equal:
+          path: data.VSR_MGMT_TOKEN
+          value: c3VwcGxpZWQtdG9rZW4=
+
+  - it: renders no Secret when one already exists
+    templates:
+      - templates/secret-management-token.yaml
+    set:
+      global.semanticRouter.managementApi.token.create: false
+      global.semanticRouter.managementApi.token.existingSecret.name: router-admin
+      # Renamed in both places, because Helm cannot template the subchart's
+      # value from this one — the chart checks that the two agree.
+      semantic-router.envFromSecrets: [router-admin]
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: renders no Secret when auth is turned off
+    templates:
+      - templates/secret-management-token.yaml
+    set:
+      global.semanticRouter.managementApi.auth.mode: disabled
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  # Bearer auth is the primary control on a port that can rewrite routing
+  # policy; the policy is the second one, so a leaked token is not enough.
+  - it: lets only Envoy reach the ext_proc port
+    templates:
+      - templates/networkpolicy.yaml
+    asserts:
+      - isKind:
+          of: NetworkPolicy
+      - equal:
+          path: spec.podSelector.matchLabels["app.kubernetes.io/component"]
+          value: router
+      - equal:
+          path: spec.ingress[0].from[0].podSelector.matchLabels["app.kubernetes.io/component"]
+          value: envoy
+      - equal:
+          path: spec.ingress[0].ports[0].port
+          value: 50051
+      # The management API's clients must not acquire the data path as a side
+      # effect of being admitted to :8080: their rules carry one port each.
+      - notExists:
+          path: spec.ingress[1].ports[1]
+      - equal:
+          path: spec.ingress[1].ports[0].port
+          value: 8080
+      - notExists:
+          path: spec.ingress[2].ports[1]
+      - equal:
+          path: spec.ingress[2].ports[0].port
+          value: 8080
+      # Ingress only. The router downloads its classifier checkpoints on first
+      # start, and an egress policy that forgot that turns a slow first boot
+      # into an unexplained CrashLoopBackOff.
+      - equal:
+          path: spec.policyTypes
+          value: [Ingress]
+
+  # Two clients, deliberately asymmetric: the controller WRITES the config, the
+  # extension API only reads, validates and previews. They are separate rules
+  # so either can be revoked without the other.
+  - it: admits both management API clients, and nothing else
+    templates:
+      - templates/networkpolicy.yaml
+    asserts:
+      - equal:
+          path: spec.ingress[1].from[0].podSelector.matchLabels["app.kubernetes.io/component"]
+          value: model-controller
+      # The ram-extension API Deployment carries no component label — its own
+      # Service selects on name and instance alone — so the name is what
+      # identifies it.
+      - equal:
+          path: spec.ingress[2].from[0].podSelector.matchLabels["app.kubernetes.io/name"]
+          value: ram-extension
+      # The whole rule set, so a pod matching neither selector has no rule to
+      # match: four rules, and no empty selector on :8080.
+      - equal:
+          path: spec.ingress
+          value:
+            - from:
+                - podSelector:
+                    matchLabels:
+                      app.kubernetes.io/name: semantic-router
+                      app.kubernetes.io/instance: sr
+                      app.kubernetes.io/component: envoy
+              ports:
+                - port: 50051
+                  protocol: TCP
+            - from:
+                - podSelector:
+                    matchLabels:
+                      app.kubernetes.io/component: model-controller
+              ports:
+                - port: 8080
+                  protocol: TCP
+            - from:
+                - podSelector:
+                    matchLabels:
+                      app.kubernetes.io/name: ram-extension
+              ports:
+                - port: 8080
+                  protocol: TCP
+            - from:
+                - podSelector: {}
+              ports:
+                - port: 9190
+                  protocol: TCP
+
+  - it: takes a different label for either client
+    templates:
+      - templates/networkpolicy.yaml
+    set:
+      networkPolicy.modelController.podSelector:
+        matchLabels:
+          app.kubernetes.io/component: reconciler
+      networkPolicy.extensionApi.podSelector:
+        matchLabels:
+          app.kubernetes.io/name: ram-extension-prod
+          app.kubernetes.io/instance: prod
+    asserts:
+      - equal:
+          path: spec.ingress[1].from[0].podSelector.matchLabels["app.kubernetes.io/component"]
+          value: reconciler
+      - equal:
+          path: spec.ingress[2].from[0].podSelector.matchLabels["app.kubernetes.io/instance"]
+          value: prod
+
+  # Revoking the reader must leave the writer alone, and vice versa — which is
+  # the point of rendering them as two rules.
+  - it: drops only the reader when the extension API is disabled
+    templates:
+      - templates/networkpolicy.yaml
+    set:
+      networkPolicy.extensionApi.enabled: false
+    asserts:
+      - equal:
+          path: spec.ingress[1].from[0].podSelector.matchLabels["app.kubernetes.io/component"]
+          value: model-controller
+      # The next rule is the metrics one: no second :8080 rule survives.
+      - equal:
+          path: spec.ingress[2].ports[0].port
+          value: 9190
+
+  - it: drops only the writer when the model controller is disabled
+    templates:
+      - templates/networkpolicy.yaml
+    set:
+      networkPolicy.modelController.enabled: false
+    asserts:
+      - equal:
+          path: spec.ingress[1].from[0].podSelector.matchLabels["app.kubernetes.io/name"]
+          value: ram-extension
+      - equal:
+          path: spec.ingress[2].ports[0].port
+          value: 9190
+
+  - it: opens the management port to Envoy only when Envoy serves the model list
+    templates:
+      - templates/networkpolicy.yaml
+    set:
+      envoy.routes.modelsFromRouter: true
+      networkPolicy.allowEnvoyToManagementApi: true
+    asserts:
+      - equal:
+          path: spec.ingress[3].ports[0].port
+          value: 8080
+      - equal:
+          path: spec.ingress[3].from[0].podSelector.matchLabels["app.kubernetes.io/component"]
+          value: envoy
+
+  - it: reaches clients in another namespace
+    templates:
+      - templates/networkpolicy.yaml
+    set:
+      networkPolicy.modelController.namespaceSelector:
+        matchLabels:
+          kubernetes.io/metadata.name: ram
+      networkPolicy.extensionApi.namespaceSelector:
+        matchLabels:
+          kubernetes.io/metadata.name: ram
+    asserts:
+      - equal:
+          path: spec.ingress[1].from[0].namespaceSelector.matchLabels["kubernetes.io/metadata.name"]
+          value: ram
+      - equal:
+          path: spec.ingress[2].from[0].namespaceSelector.matchLabels["kubernetes.io/metadata.name"]
+          value: ram
+
+  - it: scrapes the router's own metrics port
+    templates:
+      - templates/servicemonitor.yaml
+    set:
+      serviceMonitor.enabled: true
+    asserts:
+      - hasDocuments:
+          count: 2
+      - equal:
+          path: spec.endpoints[0].path
+          value: /stats/prometheus
+        documentIndex: 0
+      - equal:
+          path: spec.selector.matchLabels.service
+          value: metrics
+        documentIndex: 1

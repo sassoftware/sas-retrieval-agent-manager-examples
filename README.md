@@ -61,6 +61,7 @@ This section might supplement the Changelog file from the repository and only hi
 | [news search tools](/examples/code_mcp_servers/news_search_tools/) | An MCP server example that has web search tools for finding news from NYT, Reddit, DuckDuckGo, and Yahoo Finance. |
 | [simple calculator](/examples/code_mcp_servers/simple_calculator/) | A minimal single-tool MCP server example that adds two integers. |
 | [street view](/examples/code_mcp_servers/street_view/) | Google Street View imagery and road or path route distance tools, with a reusable Code Agent runner for tool-driven image analysis and follow-up questions. |
+| [skills](/examples/code_mcp_servers/skills/) | A dynamic skill execution MCP server that loads markdown procedural skills on demand and exposes an `invoke_skill` tool. |
 | [web search](/examples/code_mcp_servers/web_search/) | A lightweight web search MCP server example built on DuckDuckGo search via the `ddgs` package. |
 
 #### Container MCP Servers

@@ -1,0 +1,9 @@
+dependencies:
+- name: valkey
+  repository: https://valkey-io.github.io/valkey-helm
+  version: 0.12.0
+- name: langfuse
+  repository: https://langfuse.github.io/langfuse-k8s
+  version: 2.1.6
+digest: sha256:2ca71df70b82dfd55f624e131c0dca1d5b2c3763476febd9b406380b477fe7d4
+generated: "2026-10-22T14:55:46.561643+02:00"

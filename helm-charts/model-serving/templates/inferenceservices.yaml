@@ -3,6 +3,8 @@
 {{- $inject := true }}
 {{- if hasKey . "injectHfToken" }}{{- $inject = .injectHfToken }}{{- end }}
 {{- $env := .env | default $defaults.env }}
+{{- $replicas := .replicas | default $defaults.replicas }}
+{{- $placement := include "model-serving.placement" (dict "root" $ "entry" . "defaults" $defaults "kind" "InferenceService") }}
 ---
 apiVersion: serving.kserve.io/v1beta1
 kind: InferenceService
@@ -14,6 +16,13 @@ metadata:
 spec:
   predictor:
     serviceAccountName: {{ .serviceAccountName | default $.Values.serviceAccount.name }}
+    {{- if $replicas }}
+    minReplicas: {{ $replicas }}
+    maxReplicas: {{ $replicas }}
+    {{- end }}
+    {{- with trim $placement }}
+    {{- . | nindent 4 }}
+    {{- end }}
     model:
       runtime: {{ .runtime | default $defaults.runtime }}
       modelFormat:

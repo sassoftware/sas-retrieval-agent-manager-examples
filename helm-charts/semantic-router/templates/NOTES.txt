@@ -1,0 +1,76 @@
+{{- $k := include "srouter.knobs" . | fromYaml -}}
+{{- $sub := index .Values "semantic-router" -}}
+{{- $guards := $k.guards | default dict -}}
+{{- $cache := $k.semanticCache | default dict -}}
+{{ include "srouter.fullname" . }} — vLLM Semantic Router in front of LiteLLM
+
+Entrypoint (Envoy)
+  Service:  {{ include "srouter.envoy.fullname" . }}:{{ .Values.service.port }}
+  Backend:  {{ include "srouter.litellm.baseUrl" . }}
+  Published paths:
+{{- range .Values.envoy.routes.allowedPaths }}
+    {{ .path | default .prefix }}
+{{- end }}
+{{- if .Values.envoy.routes.modelsFromRouter }}
+    {{ .Values.envoy.routes.modelsPath }}  (from the router, not LiteLLM)
+{{- end }}
+  Everything else is answered with {{ .Values.envoy.routes.deny.status }} by an explicit deny route.
+
+Ask for a routed answer by naming one of the virtual models:
+{{- range $k.autoModelNames }}
+    {{ . }}
+{{- end }}
+
+  kubectl -n {{ .Release.Namespace }} port-forward svc/{{ include "srouter.envoy.fullname" . }} {{ .Values.service.port }}:{{ .Values.service.port }}
+  curl http://localhost:{{ .Values.service.port }}/v1/chat/completions \
+    -H "Authorization: Bearer <your LiteLLM virtual key>" \
+    -H 'Content-Type: application/json' \
+    -d '{"model":"{{ first ($k.autoModelNames | default (list "vllm-sr/auto")) }}","messages":[{"role":"user","content":"hello"}]}'
+
+  The key is YOUR key: the router passes the Authorization header through
+  untouched, and LiteLLM applies the budgets and permissions that belong to it.
+
+{{ if $sub.enabled -}}
+Router
+  Replicas:   {{ $sub.replicaCount }}{{ if gt (int $sub.replicaCount) 1 }}  (check the shared-state requirements in README.md){{ end }}
+  Volume:     {{ if $sub.persistence.enabled }}{{ $sub.persistence.size }}{{ else }}none — models are re-downloaded on every restart{{ end }}
+  First start downloads the classifier checkpoints and can take up to an hour
+  ({{ $sub.startupProbe.failureThreshold }} × {{ $sub.startupProbe.periodSeconds }}s of startup probe). Watch it with:
+
+    kubectl -n {{ .Release.Namespace }} logs -f deploy/{{ include "srouter.router.fullname" . }}
+
+Management API (:{{ include "srouter.router.apiPort" . }})
+{{- $mode := (($k.managementApi | default dict).auth | default dict).mode | default "bearer" }}
+{{- if eq $mode "bearer" }}
+  Bearer auth is ON. The token is in Secret {{ include "srouter.managementToken.secretName" . }} (key {{ include "srouter.managementToken.secretKey" . }}):
+
+    kubectl -n {{ .Release.Namespace }} get secret {{ include "srouter.managementToken.secretName" . }} \
+      -o jsonpath='{.data.{{ include "srouter.managementToken.secretKey" . }}}' | base64 -d
+
+  Config edits need the current ETag:  GET /api/v1/config  →  PATCH with If-Match.
+{{- else }}
+  ** AUTH IS DISABLED. ** Any pod allowed through the NetworkPolicy can rewrite
+  routing policy, which decides which LiteLLM key boundary a prompt crosses.
+  Set global.semanticRouter.managementApi.auth.mode: bearer before this release
+  carries real traffic.
+{{- end }}
+{{- if not .Values.networkPolicy.enabled }}
+  ** networkPolicy.enabled is false. ** Nothing stops an unrelated pod in this
+  namespace from reaching :{{ include "srouter.router.apiPort" . }} or the ext_proc port.
+{{- end }}
+{{- end }}
+
+Guards
+  jailbreak: {{ if ($guards.jailbreak | default dict).enabled }}ON  (threshold {{ $guards.jailbreak.threshold }}, on_error {{ $guards.jailbreak.onError }}){{ else }}off{{ end }}
+  PII:       {{ if ($guards.pii | default dict).enabled }}ON  (threshold {{ $guards.pii.threshold }}, on_error {{ $guards.pii.onError }}){{ else }}off{{ end }}
+  Semantic cache: {{ if $cache.enabled }}ON  ({{ $cache.backend }}, similarity {{ $cache.similarityThreshold }}){{ else }}off{{ end }}
+
+{{ if not .Values.routing.ingress.enabled }}{{ if not .Values.routing.httpRoute.enabled }}{{ if not .Values.routing.httpProxy.enabled }}{{ if not .Values.routing.route.enabled }}
+Nothing is published outside the cluster. Enable one of routing.ingress,
+routing.httpRoute, routing.httpProxy or routing.route when clients live
+elsewhere.
+{{ end }}{{ end }}{{ end }}{{ end }}
+Policy applied by the model controller through the management API survives
+`helm upgrade` as long as semantic-router.configMap.applyValuesRevision is
+unchanged. Bumping it re-seeds the config from values.yaml and discards what
+the controller wrote.

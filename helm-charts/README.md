@@ -2,8 +2,9 @@
 
 | Chart | Description |
 | --- | --- |
-| [litellm](litellm/) | Deploys the LiteLLM proxy with pluggable routing (Ingress, Gateway API, Contour, OpenShift) and a choice of config-file or database-backed model management. |
-| [model-serving](model-serving/) | Installs KServe from locked upstream dependencies and declares model-serving workloads through Helm values. |
+| [litellm](litellm/) | Deploys the LiteLLM proxy with pluggable routing (Ingress, Gateway API, Contour, OpenShift), a choice of config-file or database-backed model management, an optional Valkey-backed response cache, and optional Langfuse tracing. |
+| [model-serving](model-serving/) | Installs KServe from locked upstream dependencies and declares model-serving workloads through Helm values, including per-model replicas, named placement profiles, and an opt-in node-local model cache. |
+| [semantic-router](semantic-router/) | Runs the vLLM Semantic Router behind Envoy as an `ext_proc` filter, classifying prompts and selecting a model before the request reaches LiteLLM, with optional jailbreak and PII guards. |
 
 Each chart is published to GHCR under
 `oci://ghcr.io/sassoftware/sas-retrieval-agent-manager-examples/charts/<chart>`

@@ -1,0 +1,76 @@
+suite: vLLM image pins
+templates:
+  - templates/clusterservingruntimes.yaml
+set:
+  clusterServingRuntimes.openVINO.enabled: false
+tests:
+  # Version parity is the whole reason these two runtimes are a matched pair.
+  # Before 0.6.0 the CPU side sat on a staging mirror at 0.26.0 while the GPU
+  # side was on 0.33.0, so any CPU-vs-GPU measurement was really measuring
+  # seven minor versions of vLLM. Nothing caught that, hence this suite.
+  - it: holds both runtimes at the same engine version
+    set:
+      clusterServingRuntimes.vllmGPU.enabled: false
+    asserts:
+      - matchRegex:
+          path: spec.containers[0].image
+          pattern: '^vllm/vllm-openai-cpu:v0\.33\.0@sha256:[0-9a-f]{64}$'
+
+  - it: holds the GPU runtime at the same engine version
+    set:
+      clusterServingRuntimes.vllmCPU.enabled: false
+    asserts:
+      - matchRegex:
+          path: spec.containers[0].image
+          pattern: '^vllm/vllm-openai:v0\.33\.0@sha256:[0-9a-f]{64}$'
+
+  # A tag alone is a moving pointer: a repush silently changes what runs, and
+  # with pullPolicy IfNotPresent a node holding a cached layer never notices.
+  # The digest makes a repush fail the pull instead.
+  - it: pins both images by digest, not by tag alone
+    asserts:
+      - matchRegex:
+          path: spec.containers[0].image
+          pattern: '@sha256:[0-9a-f]{64}$'
+        documentIndex: 0
+      - matchRegex:
+          path: spec.containers[0].image
+          pattern: '@sha256:[0-9a-f]{64}$'
+        documentIndex: 1
+
+  # The CPU image moved from public.ecr.aws/q9t5s3a7/vllm-cpu-release-repo,
+  # which is a staging mirror rather than vLLM's published CPU build.
+  - it: uses vLLM's own published CPU image
+    set:
+      clusterServingRuntimes.vllmGPU.enabled: false
+    asserts:
+      - matchRegex:
+          path: spec.containers[0].image
+          pattern: '^vllm/'
+      - notMatchRegex:
+          path: spec.containers[0].image
+          pattern: 'public\.ecr\.aws'
+
+  # The digests must be the multi-arch INDEX digests. Docker Hub's tag page
+  # shows the amd64 manifest from inside the index, and pinning that ties the
+  # chart to one architecture -- a failure that names neither the chart nor
+  # the pin. These are the two index digests for v0.33.0.
+  - it: pins the multi-arch index digest rather than an amd64 manifest
+    asserts:
+      - equal:
+          path: spec.containers[0].image
+          value: vllm/vllm-openai-cpu:v0.33.0@sha256:87167cf0ec6e1e9607bb1cf9bf618a67d04963236a34bd955ac75b7d31a6edf5
+        documentIndex: 0
+      - equal:
+          path: spec.containers[0].image
+          value: vllm/vllm-openai:v0.33.0@sha256:d825baf9ce4b1b6bfc5ecc7b79880c7e6748c65a72d697ce3d47607aafa84c6e
+        documentIndex: 1
+      # The known amd64-only digests, which must never appear here.
+      - notMatchRegex:
+          path: spec.containers[0].image
+          pattern: '4154467a886f8b7ffa9dbab32f873f5ca4528409d042a6ec866e8888223263d3'
+        documentIndex: 0
+      - notMatchRegex:
+          path: spec.containers[0].image
+          pattern: '91ee972ab751fb7180bc71c175865e36b091686600dca783d52b2511399810b3'
+        documentIndex: 1
