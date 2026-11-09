@@ -1,0 +1,275 @@
+suite: response cache and the bundled Valkey
+release:
+  name: rel
+  namespace: litellm
+templates:
+  - templates/deployment.yaml
+  - templates/configmap-proxy.yaml
+tests:
+  - it: renders no cache settings and no Redis variables by default
+    asserts:
+      - notMatchRegex:
+          path: data["config.yaml"]
+          pattern: "cache"
+        template: templates/configmap-proxy.yaml
+      - notContains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: REDIS_HOST
+          any: true
+        template: templates/deployment.yaml
+
+  - it: wires the cache to an external Redis
+    set:
+      cache.enabled: true
+      redis.host: redis.example.com
+      redis.existingSecret.name: litellm-redis
+    asserts:
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: "cache: true"
+        template: templates/configmap-proxy.yaml
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: "type: redis"
+        template: templates/configmap-proxy.yaml
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: REDIS_HOST
+            value: "redis.example.com"
+        template: templates/deployment.yaml
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: REDIS_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: litellm-redis
+                key: password
+        template: templates/deployment.yaml
+
+  # The point of the bundled Valkey: the operator sets one flag and the
+  # address, port, and coordination block all follow from the subchart.
+  - it: derives the Redis address from the bundled Valkey
+    set:
+      cache.enabled: true
+      valkey.enabled: true
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: REDIS_HOST
+            value: "rel-valkey.litellm.svc.cluster.local"
+        template: templates/deployment.yaml
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: REDIS_PORT
+            value: "6379"
+        template: templates/deployment.yaml
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: "coordination_redis"
+        template: templates/configmap-proxy.yaml
+
+  - it: follows the subchart's naming overrides rather than guessing the Service name
+    set:
+      cache.enabled: true
+      valkey.enabled: true
+      valkey.fullnameOverride: shared-cache
+      valkey.service.port: 6380
+      valkey.clusterDomain: cluster.internal
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: REDIS_HOST
+            value: "shared-cache.litellm.svc.cluster.internal"
+        template: templates/deployment.yaml
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: REDIS_PORT
+            value: "6380"
+        template: templates/deployment.yaml
+
+  # An address the operator typed is never overridden by a subchart default,
+  # even when the subchart is also deployed.
+  - it: prefers an explicit redis.host over the bundled Valkey
+    set:
+      cache.enabled: true
+      valkey.enabled: true
+      redis.host: redis.example.com
+      redis.port: 6381
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: REDIS_HOST
+            value: "redis.example.com"
+        template: templates/deployment.yaml
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: REDIS_PORT
+            value: "6381"
+        template: templates/deployment.yaml
+
+  - it: reads the bundled Valkey's password from the Secret the subchart was given
+    set:
+      cache.enabled: true
+      valkey.enabled: true
+      valkey.auth.enabled: true
+      valkey.auth.usersExistingSecret: "valkey-acl-{{ .Release.Name }}"
+      valkey.auth.aclUsers.default.permissions: "~* &* +@all"
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: REDIS_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: valkey-acl-rel
+                key: default
+        template: templates/deployment.yaml
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: "password: os.environ/REDIS_PASSWORD"
+        template: templates/configmap-proxy.yaml
+
+  # The other shape the subchart supports: an inline password, which it writes
+  # into its own <fullname>-auth Secret under <user>-password.
+  - it: reads an inline Valkey password from the Secret the subchart writes
+    set:
+      cache.enabled: true
+      valkey.enabled: true
+      valkey.auth.enabled: true
+      valkey.auth.aclUsers.default.permissions: "~* &* +@all"
+      valkey.auth.aclUsers.default.password: s3cret
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: REDIS_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: rel-valkey-auth
+                key: default-password
+        template: templates/deployment.yaml
+
+  - it: sends no password to an unauthenticated Valkey
+    set:
+      cache.enabled: true
+      valkey.enabled: true
+    asserts:
+      - notContains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: REDIS_PASSWORD
+          any: true
+        template: templates/deployment.yaml
+      - notMatchRegex:
+          path: data["config.yaml"]
+          pattern: "REDIS_PASSWORD"
+        template: templates/configmap-proxy.yaml
+
+  - it: passes the cache tuning through to cache_params
+    set:
+      cache.enabled: true
+      redis.host: redis.example.com
+      cache.ttl: 3600
+      cache.namespace: litellm-prod
+      cache.supportedCallTypes: [acompletion, aembedding]
+    asserts:
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: "ttl: 3600"
+        template: templates/configmap-proxy.yaml
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: "namespace: litellm-prod"
+        template: templates/configmap-proxy.yaml
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: "- aembedding"
+        template: templates/configmap-proxy.yaml
+
+  # Whole-key precedence: a cache_params block written by hand is left exactly
+  # as it is, rather than merged into something that is neither.
+  - it: leaves a hand-written cache_params block untouched
+    set:
+      cache.enabled: true
+      redis.host: redis.example.com
+      cache.ttl: 3600
+      proxyConfig.litellm_settings.cache_params.type: s3
+      proxyConfig.litellm_settings.cache_params.s3_bucket_name: my-bucket
+    asserts:
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: "s3_bucket_name: my-bucket"
+        template: templates/configmap-proxy.yaml
+      - notMatchRegex:
+          path: data["config.yaml"]
+          pattern: "ttl: 3600"
+        template: templates/configmap-proxy.yaml
+
+  - it: leaves a hand-written cache switch untouched
+    set:
+      cache.enabled: true
+      redis.host: redis.example.com
+      proxyConfig.litellm_settings.cache: false
+    asserts:
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: "cache: false"
+        template: templates/configmap-proxy.yaml
+
+  # Redis stays available to the coordination store on its own, exactly as it
+  # was before the cache existed.
+  - it: wires the bundled Valkey for coordination without the cache
+    set:
+      valkey.enabled: true
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: REDIS_HOST
+            value: "rel-valkey.litellm.svc.cluster.local"
+        template: templates/deployment.yaml
+      - notMatchRegex:
+          path: data["config.yaml"]
+          pattern: "cache_params"
+        template: templates/configmap-proxy.yaml
+
+  - it: honours redis.coordination false against the bundled Valkey
+    set:
+      cache.enabled: true
+      valkey.enabled: true
+      redis.coordination: false
+    asserts:
+      - notMatchRegex:
+          path: data["config.yaml"]
+          pattern: "coordination_redis"
+        template: templates/configmap-proxy.yaml
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: "cache_params"
+        template: templates/configmap-proxy.yaml
+
+  # Sentinel against an external server is unaffected by any of the above.
+  - it: still renders Sentinel coordination for an external server
+    set:
+      redis.host: sentinel.example.com
+      redis.port: 26379
+      redis.sentinel.enabled: true
+      redis.sentinel.masterSet: litellm
+    asserts:
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: "service_name: litellm"
+        template: templates/configmap-proxy.yaml
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: "sentinel.example.com"
+        template: templates/configmap-proxy.yaml

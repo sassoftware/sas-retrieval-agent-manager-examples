@@ -596,6 +596,66 @@
       }
     },
 
+    "cache": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["enabled"],
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "type": {
+          "enum": ["redis"],
+          "description": "Only redis is wired by the chart. Write litellm_settings.cache_params in proxyConfig for any other backend."
+        },
+        "ttl": {
+          "oneOf": [
+            { "type": "integer", "minimum": 1 },
+            { "type": "string", "pattern": "^([1-9][0-9]*)?$" }
+          ],
+          "description": "Seconds, as a number. A duration string such as \"1h\" is rejected here rather than silently rendering ttl: 0."
+        },
+        "namespace": { "type": "string" },
+        "supportedCallTypes": { "type": "array", "items": { "type": "string", "minLength": 1 } }
+      }
+    },
+
+    "valkey": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["enabled"],
+      "properties": {
+        "enabled": { "type": "boolean" }
+      },
+      "description": "Bundled Valkey. `enabled` is this chart's switch; every other key is passed through to the valkey subchart, whose value surface this schema deliberately does not enumerate, so additionalProperties stays open here."
+    },
+
+    "langfuse": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["enabled"],
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "host": { "type": "string" },
+        "existingSecret": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "name": { "type": "string" },
+            "publicKeyKey": { "type": "string" },
+            "secretKeyKey": { "type": "string" }
+          }
+        },
+        "deploy": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["enabled"],
+          "properties": {
+            "enabled": { "type": "boolean" }
+          }
+        }
+      },
+      "description": "Langfuse tracing. enabled/host/existingSecret/deploy belong to this chart; every other key is passed through to the langfuse subchart (langfuse.postgresql, langfuse.clickhouse, langfuse.s3, langfuse.langfuse), which is why additionalProperties stays open here."
+    },
+
     "migrationJob": {
       "type": "object",
       "additionalProperties": false,

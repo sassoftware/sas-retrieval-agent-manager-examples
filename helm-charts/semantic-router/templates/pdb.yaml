@@ -1,0 +1,32 @@
+{{- if .Values.pdb.enabled }}
+{{/*
+Covers the Envoy pods only. The router's own availability is a different
+problem — it is a single replica by design while learning state is replica
+local (see semantic-router.replicaCount), and a PDB over one replica would
+block every node drain rather than protect anything.
+*/}}
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ include "srouter.envoy.fullname" . }}
+  labels:
+    {{- include "srouter.labels" . | nindent 4 }}
+    {{- with .Values.pdb.labels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+  {{- $annotations := merge (dict) (default dict .Values.pdb.annotations) (default dict .Values.commonAnnotations) }}
+  {{- with $annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  selector:
+    matchLabels:
+      {{- include "srouter.selectorLabels" . | nindent 6 }}
+  {{- with .Values.pdb.minAvailable }}
+  minAvailable: {{ . }}
+  {{- end }}
+  {{- with .Values.pdb.maxUnavailable }}
+  maxUnavailable: {{ . }}
+  {{- end }}
+{{- end }}

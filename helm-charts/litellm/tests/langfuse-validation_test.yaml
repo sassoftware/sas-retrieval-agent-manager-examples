@@ -1,0 +1,47 @@
+suite: Langfuse validation
+release:
+  name: rel
+  namespace: litellm
+# Suite level, because helm-unittest resolves `failedTemplate` only against
+# templates named here, and only reliably against one. With a per-test
+# `templates:` it reports a misleading "No failed document" instead.
+templates:
+  - templates/deployment.yaml
+tests:
+  - it: requires a Secret for the project keys
+    set:
+      langfuse.enabled: true
+      langfuse.host: http://langfuse:3000
+    asserts:
+      - failedTemplate:
+          errorPattern: langfuse\.existingSecret\.name is required
+
+  - it: requires somewhere to send traces
+    set:
+      langfuse.enabled: true
+      langfuse.existingSecret.name: litellm-langfuse
+    asserts:
+      - failedTemplate:
+          errorPattern: langfuse\.enabled needs somewhere to send traces
+
+  # The SDK uses the value as a base URL verbatim, so a schemeless host fails
+  # at the first callback rather than at install.
+  - it: rejects a host with no scheme
+    set:
+      langfuse.enabled: true
+      langfuse.host: langfuse.observability.svc.cluster.local:3000
+      langfuse.existingSecret.name: litellm-langfuse
+    asserts:
+      - failedTemplate:
+          errorPattern: langfuse\.host must include the scheme
+
+  # Deploying the platform and sending it nothing is never what was meant, and
+  # the platform is expensive enough to be worth catching.
+  - it: rejects deploying Langfuse without wiring the proxy to it
+    set:
+      langfuse.deploy.enabled: true
+      langfuse.existingSecret.name: litellm-langfuse
+      langfuse.clickhouse.crdCheck: false
+    asserts:
+      - failedTemplate:
+          errorPattern: langfuse\.deploy\.enabled requires langfuse\.enabled

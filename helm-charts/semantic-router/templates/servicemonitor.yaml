@@ -1,0 +1,81 @@
+{{- if .Values.serviceMonitor.enabled }}
+{{/*
+Two ServiceMonitors, because the two interesting metric sets live in different
+pods:
+
+  * Envoy's /stats/prometheus — request rates, upstream failures, and the
+    ext_proc filter's own counters, which is where a router that is timing out
+    or being skipped shows up first.
+  * The router's :9190 — classification, decision and guard counters. Upstream
+    renders the metrics Service but no ServiceMonitor, so this chart adds one.
+*/}}
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: {{ include "srouter.envoy.fullname" . }}
+  labels:
+    {{- include "srouter.labels" . | nindent 4 }}
+    {{- with .Values.serviceMonitor.labels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+  {{- $annotations := merge (dict) (default dict .Values.serviceMonitor.annotations) (default dict .Values.commonAnnotations) }}
+  {{- with $annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  selector:
+    matchLabels:
+      {{- include "srouter.selectorLabels" . | nindent 6 }}
+  {{- with .Values.serviceMonitor.namespaceSelector.matchNames }}
+  namespaceSelector:
+    matchNames:
+      {{- toYaml . | nindent 6 }}
+  {{- end }}
+  endpoints:
+    - port: stats
+      path: /stats/prometheus
+      interval: {{ .Values.serviceMonitor.interval }}
+      scrapeTimeout: {{ .Values.serviceMonitor.scrapeTimeout }}
+      {{- with .Values.serviceMonitor.relabelings }}
+      relabelings:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+{{- if and .Values.serviceMonitor.router.enabled (index .Values "semantic-router").enabled }}
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: {{ include "srouter.fullname" . }}-router
+  labels:
+    {{- include "srouter.labels" . | nindent 4 }}
+    {{- with .Values.serviceMonitor.labels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+  {{- $annotations := merge (dict) (default dict .Values.serviceMonitor.annotations) (default dict .Values.commonAnnotations) }}
+  {{- with $annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  {{/*
+    Selects the subchart's metrics Service by the labels IT sets, not by this
+    chart's: `service: metrics` is upstream's own marker, and the component
+    label distinguishes its pods from the Envoy ones.
+  */}}
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: semantic-router
+      app.kubernetes.io/instance: {{ .Release.Name }}
+      service: metrics
+  endpoints:
+    - port: metrics
+      path: {{ .Values.serviceMonitor.router.path }}
+      interval: {{ .Values.serviceMonitor.interval }}
+      scrapeTimeout: {{ .Values.serviceMonitor.scrapeTimeout }}
+      {{- with .Values.serviceMonitor.relabelings }}
+      relabelings:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+{{- end }}
+{{- end }}
