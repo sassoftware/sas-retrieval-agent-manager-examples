@@ -26,7 +26,7 @@ The command above works on a cluster that already has the KServe CRDs, and on
 every upgrade. It does **not** work on a cluster that has none, and the failure
 is a wall of lines like:
 
-```
+```text
 ensure CRDs are installed first, resource mapping not found for name:
 "kserve-vllm-cpu" ... no matches for kind "ClusterServingRuntime" in version
 "serving.kserve.io/v1alpha1"
@@ -425,9 +425,9 @@ different fixes.
 get wrong, because the failure is not a permissions failure. The published image
 (`public.ecr.aws/q9t5s3a7/vllm-cpu-release-repo:v0.26.0`) declares no `USER` and
 has no `/etc/passwd` entry for uid 1000, so `importing vllm` runs
-`vllm/env_override.py` → `torch._dynamo.package.cache_dir()` →
-`torch._inductor.runtime.cache_dir_utils.default_cache_dir()` →
-`getpass.getuser()` → `pwd.getpwuid(os.getuid())`, which raises:
+`vllm/env_override.py` â†’ `torch._dynamo.package.cache_dir()` â†’
+`torch._inductor.runtime.cache_dir_utils.default_cache_dir()` â†’
+`getpass.getuser()` â†’ `pwd.getpwuid(os.getuid())`, which raises:
 
 ```text
 KeyError: 'getpwuid(): uid not found: 1000'
@@ -453,7 +453,7 @@ compile/inductor cache, the Hugging Face hub cache that `--trust-remote-code`
 model code pulls from, and its own cache root under `$HOME`, which in this image
 belongs to root. The chart mounts an `emptyDir` and points `HOME`, `HF_HOME`,
 `XDG_CACHE_HOME` and `VLLM_CACHE_ROOT` at it. The kubelet creates `emptyDir`
-world-writable (0777), so this needs no `fsGroup` — which is just as well,
+world-writable (0777), so this needs no `fsGroup` â€” which is just as well,
 because `ClusterServingRuntime` has no pod-level `securityContext` field to put
 one in. That ownership behaviour belongs to the kubelet, not to this chart, and
 is the one part of the arrangement the chart cannot assert.
@@ -553,14 +553,14 @@ default is 0.92, which fails to start on any node more than 8% busy, with the
 engine core exiting and the pod restarting while the InferenceService sits at
 `Ready=False`:
 
-```
+```text
 ValueError: Available memory on node 0 (55.6/62.79 GiB) on startup is less
 than desired CPU memory utilization (0.92, 57.77 GiB)
 ```
 
 The chart therefore ships 0.5. Raise it for a node dedicated to one large
 model, lower it when packing several models together, and when the container
-carries a memory limit keep `NODE_TOTAL * fraction` below that limit — the
+carries a memory limit keep `NODE_TOTAL * fraction` below that limit â€” the
 kernel will otherwise kill a container that vLLM believes is within budget.
 
 The removed keys are rejected by the values schema, so a values file that still

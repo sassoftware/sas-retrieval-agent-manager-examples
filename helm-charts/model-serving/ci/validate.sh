@@ -89,19 +89,32 @@ if helm template model-serving "$CHART_PATH" --namespace kserve \
 fi
 
 # Overriding the hardening has to stay possible, including removing it.
-helm template model-serving "$CHART_PATH" --namespace kserve \
-  --kube-version "$KUBE_VERSION" \
-  --set clusterServingRuntimes.openVINO.enabled=false \
-  --set clusterServingRuntimes.vllmCPU.securityContext=null \
-  --set clusterServingRuntimes.vllmCPU.cacheVolume.enabled=false \
-  --set clusterServingRuntimes.vllmCPU.probes.liveness=null \
-  --show-only templates/clusterservingruntimes.yaml >"$out/relaxed.yaml"
+#
+# One runtime at a time, with the other two switched off. The assertion greps
+# the whole rendered document, so a runtime left enabled supplies the very
+# strings the relaxed one is meant to have dropped and the check passes or
+# fails on the wrong object.
+for runtime in vllmCPU vllmGPU; do
+  case "$runtime" in
+  vllmCPU) others='clusterServingRuntimes.vllmGPU.enabled=false' ;;
+  vllmGPU) others='clusterServingRuntimes.vllmCPU.enabled=false' ;;
+  esac
 
-for unexpected in runAsNonRoot livenessProbe VLLM_CACHE_ROOT 'name: LOGNAME'; do
-  if grep -q "${unexpected}" "$out/relaxed.yaml"; then
-    echo "The relaxed render still contains ${unexpected}." >&2
-    exit 1
-  fi
+  helm template model-serving "$CHART_PATH" --namespace kserve \
+    --kube-version "$KUBE_VERSION" \
+    --set clusterServingRuntimes.openVINO.enabled=false \
+    --set "$others" \
+    --set "clusterServingRuntimes.${runtime}.securityContext=null" \
+    --set "clusterServingRuntimes.${runtime}.cacheVolume.enabled=false" \
+    --set "clusterServingRuntimes.${runtime}.probes.liveness=null" \
+    --show-only templates/clusterservingruntimes.yaml >"$out/relaxed.yaml"
+
+  for unexpected in runAsNonRoot livenessProbe VLLM_CACHE_ROOT 'name: LOGNAME'; do
+    if grep -q "${unexpected}" "$out/relaxed.yaml"; then
+      echo "The relaxed ${runtime} render still contains ${unexpected}." >&2
+      exit 1
+    fi
+  done
 done
 
 rm -rf "$out"

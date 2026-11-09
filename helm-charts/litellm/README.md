@@ -460,8 +460,7 @@ Set `path: /` to restore upstream's behaviour, or `enabled: false` to drop the d
 
 > [!NOTE]
 > With the docs moved, the mount root itself returns LiteLLM's plain `"LiteLLM: RUNNING"` health string. The proxy has no route that redirects its root to the Admin UI, so link people to `/litellm/ui` directly.
-
-> [!NOTE]
+>
 > The health endpoints keep answering at the **root** as well, which is why the probes in this chart are not prefixed. Verified against the image: with `SERVER_ROOT_PATH` set, `/health/readiness` and `/litellm/health/readiness` both return 200 while `/ui` returns 404 and `/litellm/ui` returns 200. The UI's own asset URLs are rewritten by the image at runtime.
 
 The chart fails the render if `routing.path` does not match the prefix, because publishing `/` anyway would defeat the point, and publishing a *different* prefix would serve 404s.
@@ -670,7 +669,7 @@ Against the maintenance database named by `admin.database` (`postgres` by defaul
 1. `CREATE ROLE` for the service user, or `ALTER ROLE` to reset its password to match the Secret.
 2. `CREATE DATABASE` owned by that role.
 
-Then, connected to the new database:
+   Then, connected to the new database:
 
 3. `GRANT ALL PRIVILEGES ON DATABASE` to the role.
 4. `CREATE SCHEMA ... AUTHORIZATION` the role, and `GRANT ALL ON SCHEMA`.
