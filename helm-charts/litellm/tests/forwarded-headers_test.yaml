@@ -1,0 +1,59 @@
+suite: forwarded headers
+release:
+  name: rel
+  namespace: litellm
+templates:
+  - templates/deployment.yaml
+tests:
+  # TLS terminates at the ingress, so without this the pod sees plaintext and
+  # emits http:// redirects — a protocol downgrade on a release the chart
+  # itself published over HTTPS.
+  - it: trusts forwarded headers by default
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: FORWARDED_ALLOW_IPS
+            value: "*"
+
+  - it: narrows the trusted senders to the given CIDRs
+    set:
+      trustedProxies:
+        - 10.244.0.0/16
+        - 10.96.0.0/12
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: FORWARDED_ALLOW_IPS
+            value: 10.244.0.0/16,10.96.0.0/12
+
+  - it: leaves the variable unset when the list is empty
+    set:
+      trustedProxies: []
+    asserts:
+      # uvicorn then applies its own 127.0.0.1 default, which is the behaviour
+      # an operator opts into by clearing the list.
+      - notContains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: FORWARDED_ALLOW_IPS
+            value: "*"
+
+  # Rendered ahead of envVars, but a duplicate entry would still be confusing
+  # to read in `kubectl describe`, so the chart yields entirely.
+  - it: yields to an explicit envVars entry
+    set:
+      envVars:
+        FORWARDED_ALLOW_IPS: 10.0.0.1
+    asserts:
+      - notContains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: FORWARDED_ALLOW_IPS
+            value: "*"
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: FORWARDED_ALLOW_IPS
+            value: 10.0.0.1

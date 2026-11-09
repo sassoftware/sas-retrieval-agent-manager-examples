@@ -35,13 +35,32 @@ tests:
           path: spec.rules[0].http.paths[0].pathType
           value: Prefix
       - equal:
+          path: spec.rules[0].http.paths[0].path
+          value: /litellm
+      - equal:
           path: spec.rules[0].http.paths[0].backend.service.port.number
           value: 4000
 
+  - it: publishes the domain root when the prefix is cleared
+    templates:
+      - templates/routing-ingress.yaml
+    set:
+      serverRootPath: ""
+      routing.path: /
+      routing.hosts: [litellm.example.com]
+      routing.ingress.enabled: true
+    asserts:
+      - equal:
+          path: spec.rules[0].http.paths[0].path
+          value: /
+
+  # serverRootPath moves with routing.path: the two must agree, so a dotted
+  # prefix is exercised as the whole deployment being mounted under it.
   - it: downgrades a dotted path to ImplementationSpecific on ingress-nginx
     templates:
       - templates/routing-ingress.yaml
     set:
+      serverRootPath: /v1.0
       routing.hosts: [litellm.example.com]
       routing.path: /v1.0
       routing.ingress.enabled: true
@@ -55,6 +74,7 @@ tests:
     templates:
       - templates/routing-ingress.yaml
     set:
+      serverRootPath: /v1.0
       routing.hosts: [litellm.example.com]
       routing.path: /v1.0
       routing.ingress.enabled: true
@@ -91,6 +111,9 @@ tests:
           path: spec.rules[0].matches[0].path.type
           value: PathPrefix
       - equal:
+          path: spec.rules[0].matches[0].path.value
+          value: /litellm
+      - equal:
           path: spec.rules[0].timeouts.backendRequest
           value: 0s
       - equal:
@@ -119,7 +142,7 @@ tests:
           value: litellm-tls
       - equal:
           path: spec.routes[0].conditions[0].prefix
-          value: /
+          value: /litellm
       - equal:
           path: spec.routes[0].timeoutPolicy.response
           value: infinity
@@ -139,7 +162,7 @@ tests:
           value: litellm.example.com
       - equal:
           path: spec.path
-          value: /
+          value: /litellm
       - equal:
           path: spec.tls.termination
           value: edge

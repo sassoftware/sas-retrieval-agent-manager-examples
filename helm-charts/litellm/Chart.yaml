@@ -7,7 +7,7 @@ description: >
   OpenShift Route. Models are managed either from config.yaml or from
   PostgreSQL.
 type: application
-version: 0.1.0
+version: 0.2.0
 # The upstream LiteLLM release this chart targets. It is the default container
 # tag: `image.tag` is empty by default and falls back to this value, so one edit
 # here moves the proxy and the migration Job together and can never leave them
@@ -23,6 +23,47 @@ keywords:
   - proxy
   - gateway
   - openai
+
+# Both dependencies are conditional and both conditions default to false, so a
+# stock install renders exactly what it did before they were added: Helm skips
+# a dependency whose condition is false entirely, templates and all.
+#
+# They are still vendored into charts/ by `helm dependency build` whether or
+# not they are switched on — Helm refuses to render a chart whose declared
+# dependencies are missing from the directory, regardless of condition. That is
+# why CI builds dependencies before it lints, tests, or renders.
+#
+# Versions are pinned exactly rather than given as ranges. This chart pins its
+# container tags for the same reason: a release should render the same bytes in
+# six months as it does today, and `helm dependency update` is a deliberate act
+# that moves the pin and rewrites Chart.lock in the same commit.
+dependencies:
+  # Response cache backend. The Valkey project's own chart, not the Bitnami
+  # one: Bitnami withdrew its versioned image tags, so bitnami/valkey now
+  # resolves to a floating `latest` unless the deployment is repointed at
+  # `bitnamilegacy` or carries a subscription. valkey/valkey is versioned,
+  # Apache-2.0, and published by the same organisation that develops Valkey.
+  #
+  # Deploys one Deployment and one ClusterIP Service at its defaults — no
+  # replicas, no Sentinel, no persistence — which is the right shape for a
+  # response cache whose contents are reconstructible by definition. Enabling
+  # its replicas moves it to a StatefulSet with a volume per pod.
+  - name: valkey
+    version: "0.12.0"
+    repository: https://valkey-io.github.io/valkey-helm
+    condition: valkey.enabled
+  # Langfuse itself, for a cluster that has no tracing backend yet.
+  #
+  # This is a platform, not a sidecar: the chart brings PostgreSQL, ClickHouse,
+  # Valkey, and S3-compatible object storage, and the ClickHouse part needs the
+  # Altinity ClickHouse operator (and its cert-manager prerequisite) installed
+  # in the cluster first. `langfuse.enabled` on its own only points the proxy at
+  # a Langfuse you already run, which is the far more common case.
+  - name: langfuse
+    version: "2.1.6"
+    repository: https://langfuse.github.io/langfuse-k8s
+    condition: langfuse.deploy.enabled
+
 annotations:
   org.opencontainers.image.source: "https://github.com/BerriAI/litellm"
   org.opencontainers.image.url: "https://docs.litellm.ai/"

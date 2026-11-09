@@ -1,0 +1,64 @@
+{{- if and (include "litellm.dbInit.cleanupEnabled" .) .Values.database.init.serviceAccount.create }}
+{{/*
+RBAC for the cleanup container.
+
+Scoped by resourceNames to the single Secret this chart created, with only the
+two verbs the patch needs. `delete` is deliberately absent: the container
+removes the two data keys and leaves the object, so a Role that could delete
+Secrets in this namespace is never created.
+
+All three objects are hooks at a lower weight than the Job, because a hook pod
+referencing a ServiceAccount that does not exist yet is rejected outright.
+*/}}
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ include "litellm.dbInit.serviceAccountName" . }}
+  labels:
+    {{- include "litellm.dbInit.labels" . | nindent 4 }}
+  annotations:
+    {{- include "litellm.dbInit.hookAnnotations" (dict "root" . "weight" "-10") | nindent 4 }}
+    {{- with .Values.database.init.serviceAccount.annotations }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+    {{- with .Values.commonAnnotations }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ include "litellm.dbInit.fullname" . }}
+  labels:
+    {{- include "litellm.dbInit.labels" . | nindent 4 }}
+  annotations:
+    {{- include "litellm.dbInit.hookAnnotations" (dict "root" . "weight" "-10") | nindent 4 }}
+    {{- with .Values.commonAnnotations }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+rules:
+  - apiGroups: [""]
+    resources: ["secrets"]
+    resourceNames: ["{{ include "litellm.dbInit.adminSecretName" . }}"]
+    verbs: ["get", "patch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ include "litellm.dbInit.fullname" . }}
+  labels:
+    {{- include "litellm.dbInit.labels" . | nindent 4 }}
+  annotations:
+    {{- include "litellm.dbInit.hookAnnotations" (dict "root" . "weight" "-10") | nindent 4 }}
+    {{- with .Values.commonAnnotations }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+subjects:
+  - kind: ServiceAccount
+    name: {{ include "litellm.dbInit.serviceAccountName" . }}
+    namespace: {{ .Release.Namespace }}
+roleRef:
+  kind: Role
+  name: {{ include "litellm.dbInit.fullname" . }}
+  apiGroup: rbac.authorization.k8s.io
+{{- end }}

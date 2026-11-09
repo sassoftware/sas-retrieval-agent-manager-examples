@@ -1,0 +1,107 @@
+suite: single sign-on
+release:
+  name: rel
+  namespace: litellm
+set:
+  routing.hosts: [llm.example.com]
+  routing.tls.enabled: true
+  routing.tls.secretName: tls
+  sso.enabled: true
+  sso.authorizationEndpoint: https://kc.example.com/realms/r/protocol/openid-connect/auth
+  sso.tokenEndpoint: http://kc.internal:8080/realms/r/protocol/openid-connect/token
+  sso.userinfoEndpoint: http://kc.internal:8080/realms/r/protocol/openid-connect/userinfo
+tests:
+  - it: renders no SSO objects when it is off
+    templates:
+      - templates/sso-secret.yaml
+      - templates/job-keycloak-bootstrap.yaml
+      - templates/keycloak-bootstrap-scripts.yaml
+    set:
+      sso.enabled: false
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: wires the generic OIDC provider into the proxy
+    templates:
+      - templates/deployment.yaml
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: GENERIC_CLIENT_ID
+            value: litellm
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: GENERIC_CLIENT_SECRET
+            valueFrom:
+              secretKeyRef:
+                name: rel-litellm-sso
+                key: client-secret
+
+  - it: derives the browser-facing base URL from the routing block
+    templates:
+      - templates/deployment.yaml
+    set:
+      serverRootPath: ""
+      routing.path: /
+    asserts:
+      # Derived rather than restated, so the redirect URI cannot drift out of
+      # step with the Ingress after someone edits one and not the other.
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: PROXY_BASE_URL
+            value: https://llm.example.com
+
+  # The chart's default prefix, not an override: a redirect URI that dropped
+  # it would be rejected by the provider on a stock install.
+  - it: includes the root path in the derived base URL
+    templates:
+      - templates/deployment.yaml
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: PROXY_BASE_URL
+            value: https://llm.example.com/litellm
+
+  - it: lets an explicit base URL override the derived one
+    templates:
+      - templates/deployment.yaml
+    set:
+      sso.proxyBaseUrl: https://gateway.example.com/llm
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: PROXY_BASE_URL
+            value: https://gateway.example.com/llm
+
+  - it: keeps the browser and server endpoints separate
+    templates:
+      - templates/deployment.yaml
+    asserts:
+      # A provider published through a cloud load balancer is often
+      # unreachable from inside the same cluster, so these are not
+      # interchangeable.
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: GENERIC_AUTHORIZATION_ENDPOINT
+            value: https://kc.example.com/realms/r/protocol/openid-connect/auth
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: GENERIC_TOKEN_ENDPOINT
+            value: http://kc.internal:8080/realms/r/protocol/openid-connect/token
+
+  - it: uses a Secret the operator supplies and renders none of its own
+    templates:
+      - templates/sso-secret.yaml
+    set:
+      sso.clientSecret.existingSecret.name: my-oidc
+    asserts:
+      - hasDocuments:
+          count: 0

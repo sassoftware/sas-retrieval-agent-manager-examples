@@ -2,7 +2,7 @@
 
 This folder contains examples of Remote MCP Servers configured with SAS Retrieval Agent Manager (RAM). A Remote MCP Server is a built-in RAM catalog template that connects directly to an existing, externally hosted MCP server over Streamable HTTP or Server-sent events. No custom code or container image is required — you just provide the server's URL and select a transport (for example, Streamable HTTP).
 
-### Creating the MCP Tool Server in RAM
+## Creating the MCP Tool Server in RAM
 
 1. In RAM, navigate to **MCP Tools** in the left-hand sidebar.
 2. In the top-right corner, click **New**.

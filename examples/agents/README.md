@@ -44,4 +44,3 @@ you to configure multiple sets of LLMs, collections, or tools that your agent ca
 
 The `init(client)` function in [run.py](run.py) is intended for scheduled RAM automation.
 When triggered, it executes the code in the `init` function of your code template.
-

@@ -1,0 +1,10 @@
+{{/*
+Rendered verbatim, one document each, with `tpl` so an entry may refer to the
+release. For the objects that belong with this release but are not part of it:
+a Gateway, a ReferenceGrant for a cross-namespace HTTPRoute, an
+AuthorizationPolicy.
+*/}}
+{{- range .Values.extraResources }}
+---
+{{ tpl (toYaml .) $ }}
+{{- end }}

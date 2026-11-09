@@ -1,0 +1,85 @@
+{{- if .Values.localModelCache.enabled }}
+{{- $localModel := dig "kserve" "localmodel" "enabled" false (index .Values "kserve-localmodel-resources" | default dict) }}
+{{- if and .Values.localModelCache.requireController (not (and .Values.components.localModel.enabled $localModel)) }}
+{{- fail "model-serving: localModelCache.enabled is true but the KServe local model controller is off, so nothing would reconcile the LocalModelNodeGroup and LocalModelCache objects. Set components.localModel.enabled=true and kserve-localmodel-resources.kserve.localmodel.enabled=true, or set localModelCache.requireController=false when another release owns the controller." }}
+{{- end }}
+{{- range .Values.localModelCache.nodeGroups }}
+{{- $size := .size | default .storageLimit }}
+{{- if not $size }}
+{{- fail (printf "model-serving: localModelCache node group %q needs a size (or storageLimit) so the generated PersistentVolume has a capacity" (.name | toString)) }}
+{{- end }}
+---
+apiVersion: serving.kserve.io/v1alpha1
+kind: LocalModelNodeGroup
+metadata:
+  name: {{ .name }}
+  labels:
+    {{- include "model-serving.labels" $ | nindent 4 }}
+  {{- with $.Values.commonAnnotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  storageLimit: {{ .storageLimit | default $size }}
+  persistentVolumeSpec:
+    {{- if .persistentVolumeSpec }}
+    {{- toYaml .persistentVolumeSpec | nindent 4 }}
+    {{- else }}
+    accessModes: [ReadWriteOnce]
+    volumeMode: Filesystem
+    capacity:
+      storage: {{ $size }}
+    {{- with .storageClassName }}
+    storageClassName: {{ . }}
+    {{- end }}
+    persistentVolumeReclaimPolicy: {{ .persistentVolumeReclaimPolicy | default "Delete" }}
+    local:
+      path: {{ .hostPath | default "/mnt/models" }}
+    {{- with .nodeAffinity }}
+    nodeAffinity:
+      {{- toYaml . | nindent 6 }}
+    {{- end }}
+    {{- end }}
+  persistentVolumeClaimSpec:
+    {{- if .persistentVolumeClaimSpec }}
+    {{- toYaml .persistentVolumeClaimSpec | nindent 4 }}
+    {{- else }}
+    accessModes: [ReadWriteOnce]
+    volumeMode: Filesystem
+    resources:
+      requests:
+        storage: {{ $size }}
+    {{- with .storageClassName }}
+    storageClassName: {{ . }}
+    {{- end }}
+    {{- end }}
+{{- end }}
+{{- range .Values.models }}
+{{- $cache := .localCache | default dict }}
+{{- if $cache.enabled }}
+---
+apiVersion: serving.kserve.io/v1alpha1
+kind: LocalModelCache
+metadata:
+  name: {{ $cache.name | default .name }}
+  labels:
+    {{- include "model-serving.labels" $ | nindent 4 }}
+  {{- with $.Values.commonAnnotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  sourceModelUri: {{ .storageUri }}
+  modelSize: {{ $cache.size | default $.Values.localModelCache.defaultSize }}
+  nodeGroups:
+    {{- include "model-serving.localCacheNodeGroups" (dict "root" $ "entry" .) | nindent 4 }}
+  {{- with $cache.serviceAccountName }}
+  serviceAccountName: {{ . }}
+  {{- end }}
+  {{- with $cache.storage }}
+  storage:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+{{- end }}
+{{- end }}
+{{- end }}

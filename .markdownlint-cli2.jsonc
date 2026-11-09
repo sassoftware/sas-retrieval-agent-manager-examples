@@ -1,0 +1,34 @@
+{
+  // Markdown style rules for the docs in this repository.
+  // Run locally with:  npx markdownlint-cli2
+  // Auto-fix with:     npx markdownlint-cli2 --fix
+  "config": {
+    "default": true,
+
+    // Prose is wrapped for readability, not to a fixed column.
+    "MD013": false,
+
+    // Hard tabs inside fenced code blocks are part of the sample commands.
+    "MD010": { "code_blocks": false },
+
+    // Repeating a heading under a different parent is fine (for example, a
+    // "Database" section for each chart).
+    "MD024": { "siblings_only": true },
+
+    // Inline <img> is used to size icons inline with the surrounding text.
+    "MD033": { "allowed_elements": ["img"] },
+
+    // The Jekyll layout renders page content only, so the H1 must come from
+    // the Markdown itself even when front matter also declares a title.
+    "MD025": { "front_matter_title": "" },
+    "MD041": { "front_matter_title": "" }
+  },
+  "globs": ["**/*.md", "**/*.markdown"],
+  "ignores": [
+    "_site/**",
+    "vendor/**",
+    ".jekyll-cache/**",
+    "**/node_modules/**",
+    "**/charts/**"
+  ]
+}

@@ -1,13 +1,14 @@
-## SAS Viya MCP Tool Server Template
+# SAS Viya MCP Tool Server Template
 
 This README.md documents how to setup the SAS Viya MCP container from
 [sassoftware/sas-mcp-server](https://github.com/sassoftware/sas-mcp-server)
 for use in Retrieval Agent Manager.
 
-### Viya Setup
+## Viya Setup
 
 See [Register a Custom Application (OAuth Client)](https://go.documentation.sas.com/doc/en/sasadmincdc/v_076/calauthmdl/n1iyx40th7exrqn1ej8t12gfhm88.htm#n0ce1kz53qzmukn165fzrqdsws3e)
 for instructions to register a custom application.  The client should be registered with a custom group, UID, and GID.  An example client might look like this:
+
 ```json
 {
     "client_id": "client-id",
@@ -19,7 +20,7 @@ for instructions to register a custom application.  The client should be registe
 }
 ```
 
-#### Create the OAuth Client with the Example Script
+### Create the OAuth Client with the Example Script
 
 The `create_viya_oauth_client.py` script creates the OAuth client in Viya with the
 `client_credentials` grant type, along with a matching custom group. It requires
@@ -59,38 +60,38 @@ following options. Set `VIYA_URL` in every case:
    browser authenticated to Viya, then set `ACCESS_TOKEN` to the
    `access_token` value returned in the browser URL.
 
-```bash
-export VIYA_URL="https://viya.example.com"
-export ACCESS_TOKEN="<access-token>"
-python create_viya_oauth_client.py
-```
+   ```bash
+   export VIYA_URL="https://viya.example.com"
+   export ACCESS_TOKEN="<access-token>"
+   python create_viya_oauth_client.py
+   ```
 
 2. Provide an authorization code. Open the authorization-code URL printed by
    the script in a browser authenticated to Viya, then set `CODE` to the
    returned code. Authorization codes expire after approximately 10 minutes and
    can be used only once.
 
-```bash
-export VIYA_URL="https://viya.example.com"
-export CODE="<authorization-code>"
-python create_viya_oauth_client.py
-```
+   ```bash
+   export VIYA_URL="https://viya.example.com"
+   export CODE="<authorization-code>"
+   python create_viya_oauth_client.py
+   ```
 
 3. Provide Viya user credentials. If `VIYA_USERNAME` is not set, the script
    uses `sasboot`.
 
-```bash
-export VIYA_URL="https://viya.example.com"
-export VIYA_USERNAME="<username>"
-export VIYA_PASSWORD="<password>"
-python create_viya_oauth_client.py
-```
+   ```bash
+   export VIYA_URL="https://viya.example.com"
+   export VIYA_USERNAME="<username>"
+   export VIYA_PASSWORD="<password>"
+   python create_viya_oauth_client.py
+   ```
 
 The script prints the created client details. If the client already exists, it
 prints a message and does not modify it. Update an existing client using the
 [SASLogon update client API](https://developer.sas.com/rest-apis/SASLogon/updateClient).
 
-#### Clean Up with the Example Script
+### Clean Up with the Example Script
 
 The `delete_viya_oauth_client.py` script removes the group and OAuth client
 created above. It uses the same `VIYA_URL`, `CLIENT_ID`, and authentication
@@ -106,14 +107,14 @@ export VIYA_PASSWORD="<password>"
 python delete_viya_oauth_client.py
 ```
 
-### Template Settings (required fields)
+## Template Settings (required fields)
 
 - Container image: ghcr.io/sassoftware/sas-mcp-server:latest
 - Transport: HTTP
 - Port: 8134
 - Base Path: /mcp
 
-### Authentication
+## Authentication
 
 Authentication requires OAuth client credentials.
 
@@ -121,7 +122,7 @@ Authentication requires OAuth client credentials.
 - The OAuth Token URL should be set to `<Viya URL>/SASLogon/oauth/token`.
 - The OAuth Scope can be left empty.
 
-### Environment Variables
+## Environment Variables
 
 These environment variables are used by the container. You do not need to set a default value
 for them. You can set your specific Viya URL when you instantiate this template
@@ -130,7 +131,7 @@ in the **MCP Tools** view in Retrieval Agent Manager.
 - VIYA_ENDPOINT
 - ALLOW_RAW_BEARER: true
 
-### Configuration File
+## Configuration File
 
 To use a custom CA certificate bundle for the Viya TLS connection, set the
 configuration file to:
@@ -151,3 +152,19 @@ platform administrator or from the CA certificate chain used by the Viya
 ingress. If Viya uses an organization-managed private CA, the administrator
 can usually provide the CA bundle or identify the Kubernetes secret or
 certificate authority that contains it.
+
+If the CA certificate chain is supplied as separate PEM files, combine the
+root CA certificate and the required intermediate CA certificates into one
+bundle. Replace the example file names with your certificate file names:
+
+```sh
+cat root-ca.pem intermediate-ca.pem > bundle.pem
+```
+
+Keep the `-----BEGIN CERTIFICATE-----` and `-----END CERTIFICATE-----` lines
+for each certificate. Each input file must end with a newline. Do not include
+private keys. Supply the complete bundle as the tool server configuration file.
+After you update the bundle, restart the affected tool server or create a new
+tool server.
+
+This certificate bundle must also be available to the SAS Retrieval Agent Manager API deployment as well in order to establish a trusted TLS connection with the Viya platform. See details in the [Using a certificate for MCP Server](../../../helm-charts/README.md#using-a-certificate-for-mcp-server) section.

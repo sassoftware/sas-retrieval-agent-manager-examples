@@ -1,0 +1,231 @@
+suite: custom serving runtime hardening
+templates:
+  - templates/clusterservingruntimes.yaml
+# As in custom-runtimes_test.yaml: these tests assert against a single
+# remaining document, so the GPU runtime is off suite-wide. Its own hardening
+# is asserted in vllm-gpu-runtime_test.yaml.
+set:
+  clusterServingRuntimes.vllmGPU.enabled: false
+tests:
+  # Before 0.4.0 the vLLM runtime had no probes at all, so KServe reported the
+  # InferenceService Ready as soon as the process existed, long before the
+  # engine could answer. All three probes hit the same /health endpoint on the
+  # fixed serving port.
+  - it: probes the vLLM CPU runtime on its serving port
+    set:
+      clusterServingRuntimes.openVINO.enabled: false
+    asserts:
+      - equal:
+          path: spec.containers[0].startupProbe.httpGet
+          value:
+            path: /health
+            port: 8080
+      - equal:
+          path: spec.containers[0].readinessProbe.httpGet
+          value:
+            path: /health
+            port: 8080
+      - equal:
+          path: spec.containers[0].livenessProbe.httpGet
+          value:
+            path: /health
+            port: 8080
+  # A startup probe that gives up restarts the pod into the same slow model
+  # load forever, so the threshold is deliberately absurd rather than tuned.
+  - it: lets the vLLM CPU startup probe wait indefinitely for a model load
+    set:
+      clusterServingRuntimes.openVINO.enabled: false
+    asserts:
+      - equal:
+          path: spec.containers[0].startupProbe.failureThreshold
+          value: 9999
+  - it: runs the vLLM CPU runtime as a non-root user with seccomp
+    set:
+      clusterServingRuntimes.openVINO.enabled: false
+    asserts:
+      - equal:
+          path: spec.containers[0].securityContext
+          value:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: [ALL]
+            privileged: false
+            runAsNonRoot: true
+            runAsUser: 1000
+            seccompProfile:
+              type: RuntimeDefault
+  # The image has no passwd entry for uid 1000, so without one of the getpass
+  # variables (LOGNAME, USER, LNAME, USERNAME) "import vllm" dies with
+  # KeyError: 'getpwuid(): uid not found: 1000' before the server starts. This
+  # is the single assertion that keeps the hardening from shipping broken.
+  - it: gives the non-root vLLM CPU container a resolvable user name
+    set:
+      clusterServingRuntimes.openVINO.enabled: false
+    asserts:
+      - exists:
+          path: spec.containers[0].securityContext.runAsUser
+      - contains:
+          path: spec.containers[0].env
+          content:
+            name: USER
+            value: vllm
+      - contains:
+          path: spec.containers[0].env
+          content:
+            name: LOGNAME
+            value: vllm
+  - it: keeps the identity variables when an operator customises the uid
+    set:
+      clusterServingRuntimes.openVINO.enabled: false
+      clusterServingRuntimes.vllmCPU.securityContext:
+        runAsUser: 2000
+      clusterServingRuntimes.vllmCPU.env:
+        - name: VLLM_LOGGING_LEVEL
+          value: DEBUG
+    asserts:
+      - equal:
+          path: spec.containers[0].securityContext.runAsUser
+          value: 2000
+      - contains:
+          path: spec.containers[0].env
+          content:
+            name: USER
+            value: vllm
+      - contains:
+          path: spec.containers[0].env
+          content:
+            name: LOGNAME
+            value: vllm
+  # Refusing to render beats shipping a crash loop whose traceback blames torch
+  # and never mentions this chart.
+  - it: refuses a non-root uid with no getpass variable
+    set:
+      clusterServingRuntimes.openVINO.enabled: false
+      clusterServingRuntimes.vllmCPU.cacheVolume.enabled: false
+    asserts:
+      - failedTemplate:
+          errorMessage: 'model-serving: clusterServingRuntimes.vllmCPU forces a non-root user (runAsUser 1000) but no LOGNAME/USER/LNAME/USERNAME environment variable is set, so "import vllm" will fail with KeyError: ''getpwuid(): uid not found: ...'' before the server starts. Keep clusterServingRuntimes.vllmCPU.cacheVolume.enabled=true, or add one of those variables to clusterServingRuntimes.vllmCPU.env, or set clusterServingRuntimes.vllmCPU.securityContext to null.'
+  - it: accepts a non-root uid when the operator supplies the variable itself
+    set:
+      clusterServingRuntimes.openVINO.enabled: false
+      clusterServingRuntimes.vllmCPU.cacheVolume.enabled: false
+      clusterServingRuntimes.vllmCPU.env:
+        - name: USERNAME
+          value: someone
+    asserts:
+      - equal:
+          path: spec.containers[0].env
+          value:
+            - name: USERNAME
+              value: someone
+  # vLLM writes its compile, Hugging Face and engine caches under $HOME once the
+  # engine starts, and the image's $HOME belongs to root.
+  - it: gives the non-root vLLM CPU container a writable cache directory
+    set:
+      clusterServingRuntimes.openVINO.enabled: false
+    asserts:
+      - contains:
+          path: spec.containers[0].volumeMounts
+          content:
+            name: runtime-cache
+            mountPath: /home/vllm
+      - contains:
+          path: spec.volumes
+          content:
+            name: runtime-cache
+            emptyDir:
+              sizeLimit: 2Gi
+      - contains:
+          path: spec.containers[0].env
+          content:
+            name: HF_HOME
+            value: /home/vllm/.cache/huggingface
+      - contains:
+          path: spec.containers[0].env
+          content:
+            name: VLLM_CACHE_ROOT
+            value: /home/vllm/.cache/vllm
+  - it: drops the cache volume and its variables when disabled
+    set:
+      clusterServingRuntimes.openVINO.enabled: false
+      clusterServingRuntimes.vllmCPU.cacheVolume.enabled: false
+      clusterServingRuntimes.vllmCPU.securityContext: null
+    asserts:
+      - equal:
+          path: spec.containers[0].volumeMounts
+          value:
+            - name: shm
+              mountPath: /dev/shm
+      - equal:
+          path: spec.containers[0].env
+          value:
+            - name: VLLM_USE_V2_MODEL_RUNNER
+              value: "0"
+  # Helm merges maps, so overriding one field leaves the rest of the hardening
+  # in place. That is the useful behaviour here, but it also means an empty map
+  # does not clear anything; see the next test for that.
+  - it: lets an operator relax a single vLLM CPU security context field
+    set:
+      clusterServingRuntimes.openVINO.enabled: false
+      clusterServingRuntimes.vllmCPU.securityContext:
+        runAsNonRoot: false
+    asserts:
+      - equal:
+          path: spec.containers[0].securityContext.runAsNonRoot
+          value: false
+      - equal:
+          path: spec.containers[0].securityContext.runAsUser
+          value: 1000
+  - it: drops the security context entirely when set to null
+    set:
+      clusterServingRuntimes.openVINO.enabled: false
+      clusterServingRuntimes.vllmCPU.securityContext: null
+    asserts:
+      - notExists:
+          path: spec.containers[0].securityContext
+  - it: drops a single probe when set to null
+    set:
+      clusterServingRuntimes.openVINO.enabled: false
+      clusterServingRuntimes.vllmCPU.probes.liveness: null
+    asserts:
+      - exists:
+          path: spec.containers[0].startupProbe
+      - exists:
+          path: spec.containers[0].readinessProbe
+      - notExists:
+          path: spec.containers[0].livenessProbe
+  # The OpenVINO runtime keeps the probe it has always had; only seccomp was
+  # added, for parity with the vLLM runtime.
+  - it: keeps the OpenVINO startup probe and adds seccomp
+    set:
+      clusterServingRuntimes.vllmCPU.enabled: false
+    asserts:
+      - equal:
+          path: spec.containers[0].startupProbe
+          value:
+            periodSeconds: 5
+            failureThreshold: 9999
+            httpGet:
+              path: /v2/health/ready
+              port: 8080
+      - equal:
+          path: spec.containers[0].securityContext.seccompProfile.type
+          value: RuntimeDefault
+      - equal:
+          path: spec.containers[0].securityContext.runAsUser
+          value: 5000
+      - notExists:
+          path: spec.containers[0].readinessProbe
+      - notExists:
+          path: spec.containers[0].livenessProbe
+  - it: lets an operator add OpenVINO readiness and liveness probes
+    set:
+      clusterServingRuntimes.vllmCPU.enabled: false
+      clusterServingRuntimes.openVINO.probes.readiness:
+        httpGet:
+          path: /v2/health/ready
+          port: 8080
+    asserts:
+      - equal:
+          path: spec.containers[0].readinessProbe.httpGet.path
+          value: /v2/health/ready

@@ -1,6 +1,11 @@
 suite: custom serving runtimes
 templates:
   - templates/clusterservingruntimes.yaml
+# Every test below isolates one runtime by disabling the others and asserting
+# against the document that is left, so the GPU runtime is off for the whole
+# suite rather than in each `set` block. vllmGPU has its own suite.
+set:
+  clusterServingRuntimes.vllmGPU.enabled: false
 tests:
   - it: renders both custom CPU runtimes
     asserts:
@@ -35,6 +40,10 @@ tests:
             - --trust-remote-code
             - --max-model-len
             - "4096"
+            # Not a default anyone should drop: vLLM's own 0.92 reserves more
+            # memory than a busy node has free and the engine never starts.
+            - --gpu-memory-utilization
+            - "0.5"
         documentIndex: 1
   - it: appends vllmCPU args after the base args
     set:
@@ -92,6 +101,79 @@ tests:
             - --model_path=/mnt/models
             - --port=9000
             - --rest_port=8080
+  # Structured output crashes the vLLM CPU engine without this variable, so the
+  # default is load-bearing rather than cosmetic. Assert it by default, and
+  # assert that overriding it is still possible.
+  #
+  # The identity and cache variables are rendered first so that an
+  # operator-supplied env entry with the same name wins, which is why they lead
+  # the expected list.
+  - it: ships the vLLM CPU structured output workaround by default
+    set:
+      clusterServingRuntimes.openVINO.enabled: false
+    asserts:
+      - equal:
+          path: spec.containers[0].env
+          value:
+            - name: USER
+              value: vllm
+            - name: LOGNAME
+              value: vllm
+            - name: HOME
+              value: /home/vllm
+            - name: HF_HOME
+              value: /home/vllm/.cache/huggingface
+            - name: XDG_CACHE_HOME
+              value: /home/vllm/.cache
+            - name: VLLM_CACHE_ROOT
+              value: /home/vllm/.cache/vllm
+            - name: VLLM_USE_V2_MODEL_RUNNER
+              value: "0"
+  # Dropping cacheVolume also drops USER/LOGNAME, so the non-root
+  # securityContext has to go with it or the render is refused.
+  - it: replaces the vllmCPU env when the operator sets it
+    set:
+      clusterServingRuntimes.openVINO.enabled: false
+      clusterServingRuntimes.vllmCPU.cacheVolume.enabled: false
+      clusterServingRuntimes.vllmCPU.securityContext: null
+      clusterServingRuntimes.vllmCPU.env:
+        - name: VLLM_LOGGING_LEVEL
+          value: DEBUG
+    asserts:
+      - equal:
+          path: spec.containers[0].env
+          value:
+            - name: VLLM_LOGGING_LEVEL
+              value: DEBUG
+  - it: omits the vllmCPU env block when both lists are empty
+    set:
+      clusterServingRuntimes.openVINO.enabled: false
+      clusterServingRuntimes.vllmCPU.cacheVolume.enabled: false
+      clusterServingRuntimes.vllmCPU.securityContext: null
+      clusterServingRuntimes.vllmCPU.env: []
+    asserts:
+      - notExists:
+          path: spec.containers[0].env
+  # openVINO defaults to no env at all, so the block must not appear unless the
+  # operator asks for it.
+  - it: omits the openVINO env block by default
+    set:
+      clusterServingRuntimes.vllmCPU.enabled: false
+    asserts:
+      - notExists:
+          path: spec.containers[0].env
+  - it: renders openVINO env when the operator sets it
+    set:
+      clusterServingRuntimes.vllmCPU.enabled: false
+      clusterServingRuntimes.openVINO.env:
+        - name: LOG_LEVEL
+          value: DEBUG
+    asserts:
+      - equal:
+          path: spec.containers[0].env
+          value:
+            - name: LOG_LEVEL
+              value: DEBUG
   - it: allows either custom runtime to be disabled
     set:
       clusterServingRuntimes.openVINO.enabled: false

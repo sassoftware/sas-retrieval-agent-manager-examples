@@ -284,6 +284,29 @@ jobs:
       # `helm dependency build` and the lock check no-ops, so nothing here has to
       # know which charts have subcharts.
 
+      # `helm dependency build` resolves an oci:// reference on its own, but a
+      # classic HTTP repository has to be in the local repo list first or it
+      # stops with "no repository definition for ...". Derived from the chart
+      # rather than hardcoded, so a chart can take on a new subchart without
+      # this workflow having to learn about it.
+      - name: Add classic chart repositories
+        shell: bash
+        run: |
+          set -euo pipefail
+          urls="$(helm dependency list "$CHART_PATH" \
+            | awk 'NR > 1 && $3 ~ /^https?:\/\// { print $3 }' | sort -u)"
+          if [[ -z "$urls" ]]; then
+            echo "$CHART_NAME has no classic chart repositories. Nothing to add."
+            exit 0
+          fi
+          while read -r url; do
+            # Named after the URL so two subcharts sharing a repository add it
+            # once, and a rename upstream cannot collide with a stale entry.
+            helm repo add "dep-$(printf '%s' "$url" | sha1sum | cut -c1-12)" \
+              "$url" --force-update
+          done <<<"$urls"
+          helm repo update
+
       - name: Build locked dependencies
         run: helm dependency build "$CHART_PATH"
 

@@ -1,0 +1,145 @@
+suite: keycloak bootstrap
+release:
+  name: rel
+  namespace: litellm
+set:
+  routing.hosts: [llm.example.com]
+  routing.tls.enabled: true
+  routing.tls.secretName: tls
+  serverRootPath: /litellm
+  routing.path: /litellm
+  sso.enabled: true
+  sso.authorizationEndpoint: https://kc.example.com/realms/r/protocol/openid-connect/auth
+  sso.tokenEndpoint: http://kc.internal:8080/realms/r/protocol/openid-connect/token
+  sso.userinfoEndpoint: http://kc.internal:8080/realms/r/protocol/openid-connect/userinfo
+  sso.keycloakBootstrap.enabled: true
+  sso.keycloakBootstrap.url: http://kc.internal:8080
+  sso.keycloakBootstrap.realm: myrealm
+  sso.keycloakBootstrap.admin.existingSecret.name: kc-admin
+tests:
+  - it: registers the redirect URI the proxy will actually be reached on
+    templates:
+      - templates/keycloak-bootstrap-scripts.yaml
+    asserts:
+      # Includes the serverRootPath prefix. A mismatch here is the most common
+      # cause of the provider rejecting the sign-in with a redirect_uri error.
+      - matchRegex:
+          path: data["client.json"]
+          pattern: 'https://llm\.example\.com/litellm/sso/callback'
+      # LiteLLM's claim-dumping route, so an operator can debug a failing
+      # sign-in without editing the client by hand.
+      - matchRegex:
+          path: data["client.json"]
+          pattern: 'https://llm\.example\.com/litellm/sso/debug/callback'
+
+  - it: never puts the client secret in the ConfigMap
+    templates:
+      - templates/keycloak-bootstrap-scripts.yaml
+    asserts:
+      # The secret is applied separately from a mounted Secret, because a
+      # ConfigMap is readable by anything with `get configmap`.
+      - notMatchRegex:
+          path: data["client.json"]
+          pattern: '"secret"'
+
+  - it: creates a confidential client, not a public one
+    templates:
+      - templates/keycloak-bootstrap-scripts.yaml
+    asserts:
+      - matchRegex:
+          path: data["client.json"]
+          pattern: '"publicClient": false'
+      - matchRegex:
+          path: data["client.json"]
+          pattern: '"standardFlowEnabled": true'
+      # Password grant stays off: the proxy only ever uses the browser flow.
+      - matchRegex:
+          path: data["client.json"]
+          pattern: '"directAccessGrantsEnabled": false'
+
+  - it: maps client roles into the flat claim LiteLLM reads
+    templates:
+      - templates/keycloak-bootstrap-scripts.yaml
+    asserts:
+      # Keycloak puts client roles under resource_access.<client>.roles by
+      # default, which LiteLLM does not look at. Without this mapper every
+      # user signs in carrying no role at all.
+      - matchRegex:
+          path: data["mapper.json"]
+          pattern: '"claim.name": "roles"'
+      - matchRegex:
+          path: data["mapper.json"]
+          pattern: '"protocolMapper": "oidc-usermodel-client-role-mapper"'
+      - matchRegex:
+          path: data["mapper.json"]
+          pattern: '"id.token.claim": "true"'
+
+  - it: uses only tooling the Keycloak image actually ships
+    templates:
+      - templates/keycloak-bootstrap-scripts.yaml
+    asserts:
+      # quay.io/keycloak/keycloak has no python3, jq, awk or curl. A script
+      # reaching for one of those fails at runtime and nowhere earlier.
+      - notMatchRegex:
+          path: data["bootstrap.sh"]
+          pattern: '^\s*(python3|jq|curl|envsubst) '
+      - notMatchRegex:
+          path: data["bootstrap.sh"]
+          pattern: '\| *awk'
+
+  - it: repeats the mapper id when updating, which Keycloak requires
+    templates:
+      - templates/keycloak-bootstrap-scripts.yaml
+    asserts:
+      # Without the id in the payload the update fails with a bare
+      # "unknown_error", which makes every re-run of the Job fail.
+      - matchRegex:
+          path: data["bootstrap.sh"]
+          pattern: 'sed "1s\|\^\{\|\{\\"id\\":'
+
+  - it: runs after the migration Job so the proxy starts last
+    templates:
+      - templates/job-keycloak-bootstrap.yaml
+    asserts:
+      - equal:
+          path: metadata.annotations["helm.sh/hook"]
+          value: pre-install,pre-upgrade
+      - equal:
+          path: metadata.annotations["helm.sh/hook-weight"]
+          value: "2"
+
+  - it: mounts the admin credentials and both generated secrets
+    templates:
+      - templates/job-keycloak-bootstrap.yaml
+    asserts:
+      - equal:
+          path: spec.template.spec.volumes[1].secret.secretName
+          value: kc-admin
+      - equal:
+          path: spec.template.spec.volumes[2].projected.sources[0].secret.name
+          value: rel-litellm-sso
+      - equal:
+          path: spec.template.spec.volumes[2].projected.sources[1].secret.items[0].path
+          value: admin-user-password
+
+  - it: replaces the image entrypoint, which would otherwise start a server
+    templates:
+      - templates/job-keycloak-bootstrap.yaml
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].command
+          value: ["/bin/bash", "/scripts/bootstrap.sh"]
+
+  - it: drops the administrator account when it is not wanted
+    templates:
+      - templates/keycloak-bootstrap-scripts.yaml
+    set:
+      sso.keycloakBootstrap.adminUser.enabled: false
+    asserts:
+      - notMatchRegex:
+          path: data["bootstrap.sh"]
+          pattern: 'set-password'
+
+  # Rejections live in keycloak-bootstrap-validation_test.yaml: helm-unittest
+  # resolves `failedTemplate` only against suite-level `templates:`, and this
+  # suite names a template per test.

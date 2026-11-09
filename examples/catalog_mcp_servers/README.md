@@ -9,5 +9,5 @@ A Catalog MCP server is a built-in RAM template type that you select directly fr
 RAM's catalog includes the following built-in connector types:
 
 - **DB Connector** — Connects directly to a database and automatically generates MCP tools for querying it.
-- **Remote MCP Server** — Connects to an existing, externally hosted MCP server over Streamable HTTP or Server-sent events. 
-- **OpenAPI MCP Server** — Connects to an existing REST API and automatically generates MCP tools from its OpenAPI/Swagger specification. 
+- **Remote MCP Server** — Connects to an existing, externally hosted MCP server over Streamable HTTP or Server-sent events.
+- **OpenAPI MCP Server** — Connects to an existing REST API and automatically generates MCP tools from its OpenAPI/Swagger specification.

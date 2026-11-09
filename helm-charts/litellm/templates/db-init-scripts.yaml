@@ -1,0 +1,146 @@
+{{- include "litellm.validate" . -}}
+{{- if include "litellm.dbInitEnabled" . }}
+{{/*
+Scripts for the initialization Job.
+
+Nothing here interpolates a credential or an identifier into SQL through the
+shell. Values reach psql as environment variables read by \getenv, and every
+statement is assembled by format() with %I for identifiers and %L for literals,
+so a password containing a quote, or a database named with mixed case, cannot
+change the statement being run. That matters more than usual here: this session
+is authenticated as a database administrator.
+*/}}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "litellm.dbInit.fullname" . }}-scripts
+  labels:
+    {{- include "litellm.dbInit.labels" . | nindent 4 }}
+  annotations:
+    {{- include "litellm.dbInit.hookAnnotations" (dict "root" . "weight" "-10") | nindent 4 }}
+    {{- with .Values.commonAnnotations }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+data:
+  init.sh: |
+    #!/bin/sh
+    set -eu
+
+    log() { echo "[db-init] $*"; }
+
+    ADMIN_USER_FILE=/secret/admin/username
+    ADMIN_PASSWORD_FILE=/secret/admin/password
+    SVC_USER_FILE=/secret/service/username
+    SVC_PASSWORD_FILE=/secret/service/password
+
+    # The admin Secret is emptied once this Job succeeds, so a later run finds
+    # no credentials. After a successful initialization that is the steady
+    # state rather than a failure, so exit 0 and leave the database alone.
+    if [ ! -s "$ADMIN_USER_FILE" ] || [ ! -s "$ADMIN_PASSWORD_FILE" ]; then
+      log "No administrator credentials present."
+      log "The database was initialized on an earlier run and the credentials were erased. Nothing to do."
+      exit 0
+    fi
+
+    if [ ! -s "$SVC_USER_FILE" ] || [ ! -s "$SVC_PASSWORD_FILE" ]; then
+      log "ERROR: Secret {{ .Values.database.existingSecret.name }} has no usable username or password."
+      log "Those two values are the login this Job creates and the proxy then authenticates with."
+      exit 1
+    fi
+
+    PGUSER=$(cat "$ADMIN_USER_FILE")
+    PGPASSWORD=$(cat "$ADMIN_PASSWORD_FILE")
+    SVC_USER=$(cat "$SVC_USER_FILE")
+    SVC_PASSWORD=$(cat "$SVC_PASSWORD_FILE")
+    export PGUSER PGPASSWORD SVC_USER SVC_PASSWORD
+
+    log "Waiting up to ${WAIT_TIMEOUT}s for PostgreSQL at ${PGHOST}:${PGPORT} ..."
+    waited=0
+    until pg_isready -q -h "$PGHOST" -p "$PGPORT" -U "$PGUSER" -d "$PGDATABASE"; do
+      if [ "$waited" -ge "$WAIT_TIMEOUT" ]; then
+        log "ERROR: PostgreSQL did not accept connections within ${WAIT_TIMEOUT}s."
+        exit 1
+      fi
+      sleep 5
+      waited=$((waited + 5))
+    done
+    log "PostgreSQL is accepting connections."
+    {{- if .Values.database.init.createUser }}
+
+    log "Ensuring login role \"${SVC_USER}\" exists ..."
+    psql -v ON_ERROR_STOP=1 -q -d "$PGDATABASE" <<'SQL'
+    \getenv svc_user SVC_USER
+    \getenv svc_password SVC_PASSWORD
+
+    -- Create the role when absent.
+    SELECT format('CREATE ROLE %I LOGIN PASSWORD %L', :'svc_user', :'svc_password')
+    WHERE NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = :'svc_user')
+    \gexec
+
+    -- Reset the password unconditionally, so the role always matches the
+    -- Secret the proxy reads. Without this, rotating the Secret would leave
+    -- the proxy unable to log in until someone fixed the role by hand.
+    SELECT format('ALTER ROLE %I WITH LOGIN PASSWORD %L', :'svc_user', :'svc_password')
+    WHERE EXISTS (SELECT 1 FROM pg_roles WHERE rolname = :'svc_user')
+    \gexec
+    SQL
+    log "Login role is ready."
+    {{- end }}
+    {{- if .Values.database.init.createDatabase }}
+
+    log "Ensuring database \"${DB_NAME}\" exists ..."
+    psql -v ON_ERROR_STOP=1 -q -d "$PGDATABASE" <<'SQL'
+    \getenv db_name DB_NAME
+    {{- if .Values.database.init.createUser }}
+    \getenv svc_user SVC_USER
+
+    -- CREATE DATABASE cannot run inside a transaction or a DO block, which is
+    -- why this connects to the maintenance database and uses \gexec rather
+    -- than the IF NOT EXISTS pattern used for the schema below.
+    SELECT format('CREATE DATABASE %I OWNER %I', :'db_name', :'svc_user')
+    WHERE NOT EXISTS (SELECT 1 FROM pg_database WHERE datname = :'db_name')
+    \gexec
+    {{- else }}
+    SELECT format('CREATE DATABASE %I', :'db_name')
+    WHERE NOT EXISTS (SELECT 1 FROM pg_database WHERE datname = :'db_name')
+    \gexec
+    {{- end }}
+    SQL
+    log "Database is ready."
+    {{- end }}
+
+    log "Granting \"${SVC_USER}\" access to \"${DB_NAME}\" ..."
+    psql -v ON_ERROR_STOP=1 -q -d "$DB_NAME" <<'SQL'
+    \getenv svc_user SVC_USER
+
+    SELECT format('GRANT ALL PRIVILEGES ON DATABASE %I TO %I', current_database(), :'svc_user')
+    \gexec
+    SQL
+    {{- if and .Values.database.init.createSchema .Values.database.schema }}
+
+    log "Ensuring schema \"${DB_SCHEMA}\" exists in \"${DB_NAME}\" ..."
+    psql -v ON_ERROR_STOP=1 -q -d "$DB_NAME" <<'SQL'
+    \getenv db_schema DB_SCHEMA
+    \getenv svc_user SVC_USER
+
+    SELECT format('CREATE SCHEMA IF NOT EXISTS %I AUTHORIZATION %I', :'db_schema', :'svc_user')
+    \gexec
+
+    -- PostgreSQL 15 and later stop granting CREATE on `public` to everyone, so
+    -- an existing schema still needs this even when the statement above was a
+    -- no-op. The migration Job creates tables here and would otherwise fail
+    -- with "permission denied for schema".
+    SELECT format('GRANT ALL ON SCHEMA %I TO %I', :'db_schema', :'svc_user')
+    \gexec
+
+    -- Prisma selects the schema through the connection URL, so this is not
+    -- what makes the proxy work. It makes an interactive psql session as this
+    -- role land in the same schema, which is what you want when debugging.
+    SELECT format('ALTER ROLE %I IN DATABASE %I SET search_path TO %I, public', :'svc_user', current_database(), :'db_schema')
+    \gexec
+    SQL
+    log "Schema is ready."
+    {{- end }}
+
+    log "Initialization complete."
+{{- end }}
