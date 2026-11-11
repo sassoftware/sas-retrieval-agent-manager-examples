@@ -675,7 +675,7 @@ Against the maintenance database named by `admin.database` (`postgres` by defaul
 4. `CREATE SCHEMA ... AUTHORIZATION` the role, and `GRANT ALL ON SCHEMA`.
 5. `ALTER ROLE ... SET search_path`, so an interactive `psql` session as that role lands in the right schema.
 
-Each step is skipped when the object already exists, so the Job is safe to re-run. The schema `GRANT` runs even on an existing schema: PostgreSQL 15 stopped granting `CREATE` on `public` to everyone, and without it `prisma migrate deploy` fails with `permission denied for schema`.
+Each step is skipped when the object already exists, so the Job is safe to re-run. Step 4's `GRANT` runs even on an existing schema: PostgreSQL 15 stopped granting `CREATE` on `public` to everyone, and without it `prisma migrate deploy` fails with `permission denied for schema`.
 
 Turn individual steps off with `createDatabase`, `createUser`, and `createSchema` when a DBA has already done part of the work.
 
