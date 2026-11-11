@@ -1,4 +1,4 @@
-# Tool-Based Metadata and Tag Filtering
+# Tool-Based Metadata Filtering
 
 This example uses Agentic Retrieval to automatically infer metadata filters from natural-language requests.
 

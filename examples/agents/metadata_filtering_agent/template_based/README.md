@@ -1,6 +1,6 @@
-# Template-Based Metadata and Tag Filtering
+# Template-Based Metadata Filtering
 
-This example uses a code agent that applies explicit metadata and tag filters supplied by the user.
+This example uses a code agent that applies explicit metadata filters supplied by the user.
 
 The collection contains approximately 6,000 ITSM incidents, including VPN issues, phishing reports, database failures, hardware problems, and software incidents.
 

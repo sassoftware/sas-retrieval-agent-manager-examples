@@ -41,7 +41,7 @@ This section might supplement the Changelog file from the repository and only hi
 | [health news agent](/examples/agents/health_news_agent/) | A no-code agent specialized in health and medical news, with access to a news collection and search tools. |
 | [image render agent](/examples/agents/image_render_agent/) | An agent that demonstrates how to render tool-generated images in the RAM chat using base64-encoded image output. |
 | [mcp tool agent](/examples/agents/mcp_tool_agent/) | A code agent template that discovers and directly invokes MCP tools by name from user prompts, bypassing LLM-driven tool selection. |
-| [metadata and tag filtering](/examples/agents/metadata_tag_filtering_agent/) | Examples showing how to narrow retrieval metadata, either through explicit filters or Agentic Retrieval. |
+| [metadata filtering](/examples/agents/metadata_tag_filtering_agent/) | Examples showing how to narrow retrieval using custom metadata, either through explicit filters or Agentic Retrieval. |
 | [multiple llms agent](/examples/agents/multiple_llms_agent/) | An agent that routes prompts between low- and high-reasoning LLM aliases to show dynamic multi-model selection in a single agent template. |
 | [news information finder](/examples/agents/news_information_finder/) | A general-purpose news search agent with access to all news collections and web search tools. |
 | [science and tech news agent](/examples/agents/science_tech_news_agent/) | A no-code agent specialized in science and technology news, with access to a news collection and search tools. |
@@ -76,6 +76,7 @@ This section might supplement the Changelog file from the repository and only hi
 
 | Example | Description |
 | ------ | ------ |
+| [file tags](/examples/custom_sources/file_tags/) | A custom source example that generates three IT support documents and tags them by source filename, including multiple tags on one file. |
 | [financial news fetcher](/examples/custom_sources/financial_news_fetcher/) | A custom source example that fetches technology-sector financial news, generates a PDF digest, and saves the PDF into a RAM source for downstream collection ingestion. |
 | [news source](/examples/custom_sources/news_source/) | A parameterized news source that fetches from NYT, Reddit, and Yahoo Finance for a configurable news domain. |
 | [NYT front page source](/examples/custom_sources/nyt_front_page_source/) | A custom soure example that fetches the daily headlines from all 26 NYT Top Stories sections. |

@@ -1,6 +1,6 @@
-# Metadata and Tag Filtering Agent
+# Metadata Filtering Agent
 
-This example demonstrates how SAS Retrieval Agent Manager (RAM) can use source tags and custom metadata to narrow retrieval before semantic ranking.
+This example demonstrates how SAS Retrieval Agent Manager (RAM) can use custom metadata to narrow retrieval before semantic ranking.
 
 The collection contains approximately 6,000 IT service management (ITSM) incidents with the following fields:
 
@@ -11,16 +11,6 @@ The collection contains approximately 6,000 IT service management (ITSM) inciden
 - severity
 - status
 - date
-
-## Tags
-
-The source is tagged with:
-
-- year-2026
-- incident_management
-- it_operations
-
-Tags determine which sources are eligible for retrieval.
 
 ## Metadata
 
@@ -45,10 +35,10 @@ Summarize active security incidents.
 
 For each request:
 
-1. Apply tag filters.
-2. Apply metadata filters.
-3. Retrieve matching records.
-4. Rank results semantically.
-5. Return the most relevant matches.
+1. Apply metadata filters.
+2. Retrieve matching records.
+3. Rank results semantically.
+4. Return the most relevant matches.
 
-This combines structured filtering with semantic retrieval.
+This combines structured filtering with semantic retrieval. Use the
+[tag filtering example](../tag_filtering_agent/) to select among separately tagged files instead.

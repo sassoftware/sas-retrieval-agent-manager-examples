@@ -5,9 +5,11 @@ from sasram.agent import Client
 
 def _parse(text: str) -> tuple[str, dict[str, object]]:
     content = text.strip()
+    # Without a directive, use the whole prompt as an unfiltered retrieval question.
     if not content.lower().startswith("#filters:"):
         return content, {}
 
+    # Optional first line: #filters: {"priority": "high"}; the question follows below.
     directive, _, question = content.partition("\n")
     try:
         filters = json.loads(directive.split(":", 1)[1].strip())
@@ -31,9 +33,10 @@ async def exec(text: str, ram_client: Client) -> str:
 
     search_kwargs: dict[str, object] = {"k": 10}
     if filters:
+        # Keys and values must match metadata already present in the collection.
         search_kwargs["filter"] = filters
 
-    # Tags and metadata are applied together before semantic ranking.
+    # RAM retrieves up to 10 matching results and generates the answer.
     response = ram_client.post_query(
         prompt=question,
         search_kwargs=search_kwargs,
