@@ -37,4 +37,3 @@ Calculates route distance and estimated travel time using Google Routes. This is
 4. Save and publish the template, create an MCP Tool Server from it, and register the tools with an agent.
 
 The MCP server uses the Python standard library and the `sasram` runtime provided by RAM. Both tools require network access and are subject to Google Maps Platform coverage, quotas, billing, and terms. Street View imagery is available only where Google has panorama coverage.
-
