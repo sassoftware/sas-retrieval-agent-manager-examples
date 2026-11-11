@@ -44,6 +44,7 @@ This section might supplement the Changelog file from the repository and only hi
 | [multiple llms agent](/examples/agents/multiple_llms_agent/) | An agent that routes prompts between low- and high-reasoning LLM aliases to show dynamic multi-model selection in a single agent template. |
 | [news information finder](/examples/agents/news_information_finder/) | A general-purpose news search agent with access to all news collections and web search tools. |
 | [science and tech news agent](/examples/agents/science_tech_news_agent/) | A no-code agent specialized in science and technology news, with access to a news collection and search tools. |
+| [street view agent](/examples/agents/street_view_agent/) | An agent that uses Street View MCP tools to analyze images, render previews, and answer follow-up questions. |
 | [tool timeout configuration agent](/examples/agents/timeout_agent/) | A code agent template that configures tool and query timeout values through environment variables. |
 
 #### Catalog MCP Servers
@@ -60,7 +61,7 @@ This section might supplement the Changelog file from the repository and only hi
 | [finance tools](/examples/code_mcp_servers/finance_tools/) | An MCP server example that has finance and quantitative analysis tools, including market data lookup, regression, summary statistics, and arithmetic helpers. |
 | [news search tools](/examples/code_mcp_servers/news_search_tools/) | An MCP server example that has web search tools for finding news from NYT, Reddit, DuckDuckGo, and Yahoo Finance. |
 | [simple calculator](/examples/code_mcp_servers/simple_calculator/) | A minimal single-tool MCP server example that adds two integers. |
-| [street view](/examples/code_mcp_servers/street_view/) | Google Street View imagery and road or path route distance tools, with a reusable Code Agent runner for tool-driven image analysis and follow-up questions. |
+| [street view](/examples/code_mcp_servers/street_view/) | Google Street View imagery and road or path route distance tools. |
 | [skills](/examples/code_mcp_servers/skills/) | A dynamic skill execution MCP server that loads markdown procedural skills on demand and exposes an `invoke_skill` tool. |
 | [web search](/examples/code_mcp_servers/web_search/) | A lightweight web search MCP server example built on DuckDuckGo search via the `ddgs` package. |
 
