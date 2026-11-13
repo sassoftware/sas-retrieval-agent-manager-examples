@@ -1,21 +1,14 @@
-# Tool-Based Metadata Filtering
+# Tool-Based Experiment Metadata Filtering
 
-This example uses Agentic Retrieval to automatically infer metadata filters from natural-language requests.
-
-The collection contains approximately 6,000 Information Technology Service Management (ITSM) incidents with metadata fields such as:
-
-- category
-- severity
-- status
-- date
-- assigned_it_person
+This example uses the default tool-based agent with Agentic Retrieval to automatically infer metadata filters from natural-language requests.
 
 ## Configuration
 
 When creating the agent experiment:
 
-1. Add the collection.
-2. Enable **Agentic Retrieval** under Collections.
+1. Add the collection containing the IT incidents document.
+2. Enable **Agentic Retrieval** toggle under Collections.
+3. (Optional) Include instructions in the agent's system prompt on how/when to properly use the filters.
 
 ## Example
 
@@ -25,7 +18,7 @@ User:
 Show me critical security incidents that are still open.
 ```
 
-RAM can automatically infer filters such as:
+The LLM can automatically infer filters such as:
 
 ```json
 {
@@ -35,7 +28,7 @@ RAM can automatically infer filters such as:
 }
 ```
 
-before performing semantic search.
+before performing semantic search. 
 
 ## Why Use This Approach?
 
