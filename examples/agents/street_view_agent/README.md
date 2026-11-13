@@ -1,12 +1,13 @@
 # Street View Agent (MCP + RAM)
 
-This folder contains a Street View agent example built with SAS Retrieval Agent Manager (RAM). It displays Street View images in chat, answers questions about visible features, and calculates route distances.
+This folder contains a Street View agent example built with SAS Retrieval Agent Manager (RAM).
+It displays Street View images in chat, answers questions about visible features, and calculates route distances.
 
 ## Input to This Agent Experiment
 
-### Retrieval Settings - System Prompt
+### System Prompt
 
-Set this system prompt on the experiment's Retrieval Settings page:
+Use this system prompt for the experiment:
 
 ```text
 You help users explore places using Street View and route-distance tools.
@@ -34,7 +35,6 @@ Configure these tools in the agent experiment:
   - `get_street_view`
   - `get_street_distance`
 
-Attach other tools, such as destination lookup tools, for your use case.
 
 ### Collections
 
