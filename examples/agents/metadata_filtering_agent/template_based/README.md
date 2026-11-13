@@ -1,8 +1,6 @@
-# Template-Based Metadata Filtering
+# Template-Based Experiment Metadata Filtering
 
-This example uses a code agent that applies explicit metadata filters supplied by the user.
-
-The collection contains approximately 6,000 ITSM incidents, including VPN issues, phishing reports, database failures, hardware problems, and software incidents.
+This example uses a code template that applies explicit metadata filters supplied by the user.
 
 ## Supported Metadata
 
@@ -19,7 +17,7 @@ The collection contains approximately 6,000 ITSM incidents, including VPN issues
 What database issues are currently under investigation?
 ```
 
-RAM first applies the exact-match metadata filters and then performs semantic ranking on the remaining records.
+RAM first applies the exact-match metadata filters and then performs semantic retrieval on the remaining records.
 
 ## Why Use This Approach?
 
@@ -34,4 +32,5 @@ Use the template-based approach when:
 
 This approach gives the caller complete control over retrieval because filters are supplied explicitly.
 
-For many business-facing applications, a tool-based agent with Agentic Retrieval may be simpler because RAM can infer metadata filters from natural-language requests. However, explicit filters are often preferred when accuracy, repeatability, or auditability are important.
+For many business-facing applications, a tool-based agent with Agentic Retrieval may be simpler because RAM can infer metadata filters from natural-language requests.
+However, explicit filters are often preferred when accuracy, repeatability, or auditability are important.
