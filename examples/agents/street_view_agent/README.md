@@ -42,14 +42,14 @@ No collections are required for this example.
 
 ### Environment Variables (optional)
 
-No environment variables are required for this agent. Configure `GOOGLE_MAPS_API_KEY` on the MCP server.
+No environment variables are required for this agent.
 
 ## Code Agent Setup
 
-1. Create a RAM Code Agent template and copy [run.py](run.py) into its run.py.
-2. Select a vision-capable model and enable tool calling. The model must support images returned by tools, not just image display in chat.
-3. Save and publish the template and create a template-based agent experiment.
-4. Configure the experiment's system prompt and attach the tools described above.
+1. Create a RAM Code Agent template and copy [run.py](run.py) into its run.py. 
+3. Save and publish the template and create a template-based agent experiment using that template.
+4. Select a vision-capable model as the LLM for the experiment.
+5. Configure the experiment's system prompt and tools described above.
 
 Images appear as numbered previews, with relevant details included in the answer.
 You can ask follow-up questions or request a closer view. Zooming changes the view,
