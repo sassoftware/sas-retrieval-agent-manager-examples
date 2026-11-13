@@ -28,7 +28,7 @@ The LLM can automatically infer filters such as:
 }
 ```
 
-before performing semantic search. 
+before performing semantic search.
 
 ## Why Use This Approach?
 
