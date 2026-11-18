@@ -6,7 +6,7 @@ This folder contains a SAS Retrieval Agent Manager (RAM) custom source example t
 
 When executed, this source:
 
-1. Downloads the target structural diagram `.png` file from the RAM source 
+1. Downloads the target structural diagram `.png` file from the RAM source
 2. Validates the image content type and sends the PNG to the configured Gemma model endpoint
 3. Generates a structured text description/caption of the structural diagram
 4. Saves the resulting JSON caption file back to the RAM source so downstream collections can index and retrieve information from the diagram
@@ -14,10 +14,12 @@ When executed, this source:
 ## Files
 
 ### Custom Source Job Files
+
 - `run.py`: Custom source implementation executed by the RAM custom source job. Downloads the PNG from the RAM source, runs Gemma inference, and saves the JSON output.
 - `requirements.txt`: Python dependencies for this custom source.
 
 ### External Scripts
+
 > **Note:** `get_token.py` and `upload_source_file.py` are external scripts used to authenticate and upload the structural diagram `.png` file to the RAM source so it can be processed when the custom source job runs.
 
 - `get_token.py`: External utility script to retrieve the bearer token for RAM API requests.

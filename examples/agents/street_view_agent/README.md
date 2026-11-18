@@ -35,7 +35,6 @@ Configure these tools in the agent experiment:
   - `get_street_view`
   - `get_street_distance`
 
-
 ### Collections
 
 No collections are required for this example.
@@ -46,10 +45,10 @@ No environment variables are required for this agent.
 
 ## Code Agent Setup
 
-1. Create a RAM Code Agent template and copy [run.py](run.py) into its run.py. 
-3. Save and publish the template and create a template-based agent experiment using that template.
-4. Select a vision-capable model as the LLM for the experiment.
-5. Configure the experiment's system prompt and tools described above.
+1. Create a RAM Code Agent template and copy [run.py](run.py) into its run.py.
+2. Save and publish the template and create a template-based agent experiment using that template.
+3. Select a vision-capable model as the LLM for the experiment.
+4. Configure the experiment's system prompt and tools described above.
 
 Images appear as numbered previews, with relevant details included in the answer.
 You can ask follow-up questions or request a closer view. Zooming changes the view,
