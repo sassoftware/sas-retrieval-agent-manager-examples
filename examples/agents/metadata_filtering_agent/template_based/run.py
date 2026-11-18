@@ -40,6 +40,5 @@ async def exec(text: str, ram_client: Client) -> str:
     response = ram_client.post_query(
         prompt=question,
         search_kwargs=search_kwargs,
-        persistent=False,
     )
     return response.response.answer
