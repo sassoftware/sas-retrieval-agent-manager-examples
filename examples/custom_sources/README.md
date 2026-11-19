@@ -57,6 +57,7 @@ A custom source example will typically contain:
 
 | Example | Description |
 | ------- | ----------- |
+| [File Tags](./file_tags/) | A source that generates three IT support documents and tags them by source filename, including multiple tags on one file |
 | [Financial News Fetcher](./financial_news_fetcher/) | A source that fetches daily financial news articles for use in a financial news collection |
 | [News Source](./news_source/) | A parameterized news source that fetches from NYT, Reddit, and Yahoo Finance for a configurable news domain |
 | [NYT Front Page Source](./nyt_front_page_source/) | A source that fetches daily headlines from all 26 NYT Top Stories sections |
