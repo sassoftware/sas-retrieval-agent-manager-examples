@@ -1,0 +1,204 @@
+suite: replicas and node placement
+templates:
+  - templates/inferenceservices.yaml
+  - templates/llminferenceservices.yaml
+set:
+  placementProfiles:
+    cpu-inference:
+      nodeSelector:
+        node.kubernetes.io/instance-type: m6i.8xlarge
+      tolerations:
+        - key: workload
+          operator: Equal
+          value: inference
+          effect: NoSchedule
+    gpu-a100:
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                  - key: nvidia.com/gpu.present
+                    operator: In
+                    values: ["true"]
+tests:
+  # Nothing about placement is on by default, so an existing release has to
+  # render exactly as it did before 0.4.0.
+  - it: renders no placement or replica fields by default
+    template: templates/inferenceservices.yaml
+    set:
+      models:
+        - name: plain
+          storageUri: hf://org/model
+    asserts:
+      - notExists:
+          path: spec.predictor.minReplicas
+      - notExists:
+          path: spec.predictor.maxReplicas
+      - notExists:
+          path: spec.predictor.nodeSelector
+      - notExists:
+          path: spec.predictor.tolerations
+      - notExists:
+          path: spec.predictor.affinity
+  # KServe keeps a fixed pod count by pinning min and max to the same number;
+  # there is no single "replicas" field on a predictor.
+  - it: renders replicas as a fixed min and max
+    template: templates/inferenceservices.yaml
+    set:
+      models:
+        - name: fixed
+          storageUri: hf://org/model
+          replicas: 3
+    asserts:
+      - equal:
+          path: spec.predictor.minReplicas
+          value: 3
+      - equal:
+          path: spec.predictor.maxReplicas
+          value: 3
+  - it: takes replicas from modelDefaults when the model does not set them
+    template: templates/inferenceservices.yaml
+    set:
+      modelDefaults.replicas: 2
+      models:
+        - name: inherited
+          storageUri: hf://org/model
+    asserts:
+      - equal:
+          path: spec.predictor.minReplicas
+          value: 2
+  - it: applies a named placement profile to a model
+    template: templates/inferenceservices.yaml
+    set:
+      models:
+        - name: profiled
+          storageUri: hf://org/model
+          placementProfile: cpu-inference
+    asserts:
+      - equal:
+          path: spec.predictor.nodeSelector
+          value:
+            node.kubernetes.io/instance-type: m6i.8xlarge
+      - equal:
+          path: spec.predictor.tolerations
+          value:
+            - key: workload
+              operator: Equal
+              value: inference
+              effect: NoSchedule
+  # Field by field, so a model can adopt a profile and still change one thing.
+  - it: lets an explicit model field win over the profile field by field
+    template: templates/inferenceservices.yaml
+    set:
+      models:
+        - name: overridden
+          storageUri: hf://org/model
+          placementProfile: cpu-inference
+          tolerations:
+            - key: dedicated
+              operator: Exists
+              effect: NoSchedule
+    asserts:
+      - equal:
+          path: spec.predictor.nodeSelector
+          value:
+            node.kubernetes.io/instance-type: m6i.8xlarge
+      - equal:
+          path: spec.predictor.tolerations
+          value:
+            - key: dedicated
+              operator: Exists
+              effect: NoSchedule
+  - it: lets a profile win over modelDefaults
+    template: templates/inferenceservices.yaml
+    set:
+      modelDefaults.nodeSelector:
+        tier: default
+      models:
+        - name: profiled
+          storageUri: hf://org/model
+          placementProfile: cpu-inference
+    asserts:
+      - equal:
+          path: spec.predictor.nodeSelector
+          value:
+            node.kubernetes.io/instance-type: m6i.8xlarge
+  - it: falls back to modelDefaults when neither the model nor the profile sets a field
+    template: templates/inferenceservices.yaml
+    set:
+      modelDefaults.nodeSelector:
+        tier: default
+      models:
+        - name: inherited
+          storageUri: hf://org/model
+    asserts:
+      - equal:
+          path: spec.predictor.nodeSelector
+          value:
+            tier: default
+  - it: picks up a profile named on modelDefaults
+    template: templates/inferenceservices.yaml
+    set:
+      modelDefaults.placementProfile: cpu-inference
+      models:
+        - name: inherited
+          storageUri: hf://org/model
+    asserts:
+      - equal:
+          path: spec.predictor.nodeSelector
+          value:
+            node.kubernetes.io/instance-type: m6i.8xlarge
+  # A silent fallback to "schedule anywhere" is worse than a failed render: the
+  # model lands on an arbitrary node and the mistake surfaces as an eviction.
+  - it: fails the render for an unknown profile name
+    template: templates/inferenceservices.yaml
+    set:
+      models:
+        - name: typo
+          storageUri: hf://org/model
+          placementProfile: cpu-inferenc
+    asserts:
+      - failedTemplate:
+          errorMessage: 'model-serving: InferenceService "typo" references placementProfile "cpu-inferenc", which is not defined in placementProfiles (defined: cpu-inference, gpu-a100)'
+  - it: applies placement to the LLM pod template and worker
+    template: templates/llminferenceservices.yaml
+    set:
+      llmInferenceServices:
+        - name: llm
+          model:
+            uri: hf://org/llm
+          placementProfile: gpu-a100
+          worker: {}
+    asserts:
+      - equal:
+          path: spec.template.affinity.nodeAffinity.requiredDuringSchedulingIgnoredDuringExecution.nodeSelectorTerms[0].matchExpressions[0].key
+          value: nvidia.com/gpu.present
+      - equal:
+          path: spec.worker.affinity.nodeAffinity.requiredDuringSchedulingIgnoredDuringExecution.nodeSelectorTerms[0].matchExpressions[0].key
+          value: nvidia.com/gpu.present
+  - it: renders no placement on an LLM service by default
+    template: templates/llminferenceservices.yaml
+    set:
+      llmInferenceServices:
+        - name: llm
+          model:
+            uri: hf://org/llm
+    asserts:
+      - notExists:
+          path: spec.template.nodeSelector
+      - notExists:
+          path: spec.template.affinity
+      - notExists:
+          path: spec.template.tolerations
+  - it: fails the render for an unknown profile on an LLM service
+    template: templates/llminferenceservices.yaml
+    set:
+      llmInferenceServices:
+        - name: llm
+          model:
+            uri: hf://org/llm
+          placementProfile: nope
+    asserts:
+      - failedTemplate:
+          errorMessage: 'model-serving: LLMInferenceService "llm" references placementProfile "nope", which is not defined in placementProfiles (defined: cpu-inference, gpu-a100)'

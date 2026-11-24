@@ -1,0 +1,74 @@
+# Exercise every 0.4.0 feature at once: named placement profiles, per-model
+# overrides, fixed replicas, and the LocalModel cache with a node group.
+#
+# Used by ci/validate.sh, which renders it and asserts the result, so it has to
+# stay a valid values file rather than a documentation sketch.
+components:
+  localModel:
+    enabled: true
+
+placementProfiles:
+  cpu-inference:
+    nodeSelector:
+      node.kubernetes.io/instance-type: m6i.8xlarge
+    tolerations:
+      - key: workload
+        operator: Equal
+        value: inference
+        effect: NoSchedule
+  gpu-a100:
+    nodeSelector:
+      nvidia.com/gpu.product: NVIDIA-A100-SXM4-80GB
+    affinity:
+      nodeAffinity:
+        requiredDuringSchedulingIgnoredDuringExecution:
+          nodeSelectorTerms:
+            - matchExpressions:
+                - key: nvidia.com/gpu.present
+                  operator: In
+                  values: ["true"]
+
+localModelCache:
+  enabled: true
+  nodeGroups:
+    - name: inference-cache
+      size: 200Gi
+      storageClassName: local-storage
+      hostPath: /mnt/models
+      nodeAffinity:
+        required:
+          nodeSelectorTerms:
+            - matchExpressions:
+                - key: kserve/localmodel
+                  operator: In
+                  values: ["worker"]
+
+models:
+  - name: ovms-profile-only
+    storageUri: hf://OpenVINO/gemma-3-4b-it-fp16-ov
+    replicas: 2
+    placementProfile: cpu-inference
+  - name: ovms-profile-override
+    storageUri: hf://OpenVINO/gemma-4-E2B-it-fp16-ov
+    placementProfile: cpu-inference
+    tolerations:
+      - key: dedicated
+        operator: Equal
+        value: gemma
+        effect: NoSchedule
+    localCache:
+      enabled: true
+      size: 20Gi
+      nodeGroups: [inference-cache]
+
+llmInferenceServices:
+  - name: llm-profile
+    model:
+      uri: hf://org/llm
+    placementProfile: gpu-a100
+    worker: {}
+
+kserve-localmodel-resources:
+  kserve:
+    localmodel:
+      enabled: true

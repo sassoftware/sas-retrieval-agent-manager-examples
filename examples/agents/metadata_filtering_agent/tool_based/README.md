@@ -1,0 +1,39 @@
+# Tool-Based Experiment Metadata Filtering
+
+This example uses the default tool-based agent with Agentic Retrieval to automatically infer metadata filters from natural-language requests.
+
+## Configuration
+
+When creating the agent experiment:
+
+1. Add the collection containing the IT incidents document.
+2. Enable **Agentic Retrieval** toggle under Collections.
+3. (Optional) Include instructions in the agent's system prompt on how/when to properly use the filters.
+
+## Example
+
+User:
+
+```text
+Show me critical security incidents that are still open.
+```
+
+The LLM can automatically infer filters such as:
+
+```json
+{
+  "category": "Security",
+  "severity": "Critical",
+  "status": "Open"
+}
+```
+
+before performing semantic search.
+
+## Why Use This Approach?
+
+- No filter syntax required
+- Natural-language queries
+- Automatic metadata inference
+- Better experience for business users
+- Faster to configure than a custom filtering template

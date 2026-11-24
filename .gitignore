@@ -1,0 +1,9 @@
+helm-charts/*/charts/*.tgz
+helm-charts/*.tgz
+
+# Jekyll build output and caches
+_site/
+.jekyll-cache/
+.jekyll-metadata
+.sass-cache/
+vendor/bundle/

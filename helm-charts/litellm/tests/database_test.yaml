@@ -1,0 +1,156 @@
+suite: database wiring
+release:
+  name: rel
+  namespace: litellm
+chart:
+  appVersion: v9.9.9
+templates:
+  - templates/deployment.yaml
+  - templates/job-migrations.yaml
+set:
+  modelManagement.mode: database
+  database.host: pg.example.com
+  database.existingSecret.name: litellm-db
+tests:
+  - it: runs the migration Job on the same image as the proxy
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].image
+          value: ghcr.io/berriai/litellm:v9.9.9
+        template: templates/deployment.yaml
+      - equal:
+          path: spec.template.spec.containers[0].image
+          value: ghcr.io/berriai/litellm:v9.9.9
+        template: templates/job-migrations.yaml
+
+  - it: emits discrete DATABASE_ variables rather than a composed URL
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: DATABASE_HOST
+            value: "pg.example.com"
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: DATABASE_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: litellm-db
+                key: password
+      - notContains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: DATABASE_URL
+
+  - it: takes a whole connection URL from a Secret key when one is given
+    set:
+      database.existingSecret.urlKey: url
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: DATABASE_URL
+            valueFrom:
+              secretKeyRef:
+                name: litellm-db
+                key: url
+      - notContains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: DATABASE_HOST
+            value: "pg.example.com"
+
+  - it: reads no password under AWS IAM auth
+    set:
+      database.auth.mode: awsIam
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: IAM_TOKEN_DB_AUTH
+            value: "true"
+      - notContains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: DATABASE_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: litellm-db
+                key: password
+
+  - it: reads no password under Microsoft Entra auth
+    set:
+      database.auth.mode: azureEntra
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: AZURE_POSTGRESQL_AUTH
+            value: "true"
+
+  - it: wires the read replica and falls back to the writer Secret
+    set:
+      database.readReplica.enabled: true
+      database.readReplica.host: pg-reader.example.com
+      database.readReplica.existingSecret.usernameKey: username
+      database.readReplica.existingSecret.passwordKey: password
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: DATABASE_HOST_READ_REPLICA
+            value: "pg-reader.example.com"
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: DATABASE_USERNAME_READ_REPLICA
+            valueFrom:
+              secretKeyRef:
+                name: litellm-db
+                key: username
+
+  - it: turns on the in-pod connection pool
+    set:
+      database.connectionPool.enabled: true
+      database.connectionPool.maxDbConnections: 20
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: LITELLM_PGBOUNCER_ENABLED
+            value: "true"
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: LITELLM_PGBOUNCER_MAX_DB_CONNECTIONS
+            value: "20"
+
+  - it: passes TLS settings through to the proxy
+    set:
+      database.sslMode: verify-full
+      database.sslRootCert: /etc/litellm/db-ca/ca.crt
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: DATABASE_SSLMODE
+            value: "verify-full"
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: DATABASE_SSLROOTCERT
+            value: "/etc/litellm/db-ca/ca.crt"
+
+  - it: keeps the database out of the config flow
+    set:
+      modelManagement.mode: config
+      database.enabled: false
+      database.host: ""
+      database.existingSecret.name: ""
+    asserts:
+      - notContains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: DATABASE_HOST
+            value: "pg.example.com"

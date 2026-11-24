@@ -1,0 +1,66 @@
+suite: api docs
+release:
+  name: rel
+  namespace: litellm
+templates:
+  - templates/deployment.yaml
+tests:
+  # Upstream's DOCS_URL defaults to "/", which puts Swagger on the mount root
+  # so a browser opening the release lands on the API reference instead of the
+  # Admin UI. The chart moves it off the root.
+  - it: serves the docs off the mount root by default
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: DOCS_URL
+            value: /docs
+
+  - it: serves the docs on a custom path
+    set:
+      docs.path: /api-reference
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: DOCS_URL
+            value: /api-reference
+
+  - it: restores the upstream mount-root behaviour on request
+    set:
+      docs.path: /
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: DOCS_URL
+            value: /
+
+  # The schema is what Swagger reads, so dropping one without the other leaves
+  # a page that renders an error.
+  - it: removes the docs and the schema together when disabled
+    set:
+      docs.enabled: false
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: NO_DOCS
+            value: "True"
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: NO_OPENAPI
+            value: "True"
+      - notContains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: DOCS_URL
+            value: /docs
+
+  - it: rejects a docs path that would shadow the Admin UI
+    set:
+      docs.path: /ui/docs
+    asserts:
+      - failedTemplate:
+          errorPattern: would be served under the Admin UI

@@ -1,0 +1,180 @@
+suite: Langfuse tracing
+release:
+  name: rel
+  namespace: litellm
+templates:
+  - templates/deployment.yaml
+  - templates/configmap-proxy.yaml
+tests:
+  - it: wires nothing when it is off
+    asserts:
+      - notContains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: LANGFUSE_HOST
+          any: true
+        template: templates/deployment.yaml
+      - notMatchRegex:
+          path: data["config.yaml"]
+          pattern: "success_callback"
+        template: templates/configmap-proxy.yaml
+
+  - it: points the proxy at an existing Langfuse and reads both keys from the Secret
+    set:
+      langfuse.enabled: true
+      langfuse.host: http://langfuse-web.observability.svc.cluster.local:3000
+      langfuse.existingSecret.name: litellm-langfuse
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: LANGFUSE_HOST
+            value: "http://langfuse-web.observability.svc.cluster.local:3000"
+        template: templates/deployment.yaml
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: LANGFUSE_PUBLIC_KEY
+            valueFrom:
+              secretKeyRef:
+                name: litellm-langfuse
+                key: public-key
+        template: templates/deployment.yaml
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: LANGFUSE_SECRET_KEY
+            valueFrom:
+              secretKeyRef:
+                name: litellm-langfuse
+                key: secret-key
+        template: templates/deployment.yaml
+
+  - it: takes the Secret keys from the names given
+    set:
+      langfuse.enabled: true
+      langfuse.host: https://cloud.langfuse.com
+      langfuse.existingSecret.name: tracing
+      langfuse.existingSecret.publicKeyKey: LANGFUSE_PUBLIC_KEY
+      langfuse.existingSecret.secretKeyKey: LANGFUSE_SECRET_KEY
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: LANGFUSE_PUBLIC_KEY
+            valueFrom:
+              secretKeyRef:
+                name: tracing
+                key: LANGFUSE_PUBLIC_KEY
+        template: templates/deployment.yaml
+
+  - it: registers langfuse on both callback lists
+    set:
+      langfuse.enabled: true
+      langfuse.host: http://langfuse:3000
+      langfuse.existingSecret.name: litellm-langfuse
+    asserts:
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: "success_callback:\\n  - langfuse"
+        template: templates/configmap-proxy.yaml
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: "failure_callback:\\n  - langfuse"
+        template: templates/configmap-proxy.yaml
+
+  # Callbacks are a set of independent sinks: adding one must never remove
+  # another that the operator configured.
+  - it: appends to a callback list the operator already wrote
+    set:
+      langfuse.enabled: true
+      langfuse.host: http://langfuse:3000
+      langfuse.existingSecret.name: litellm-langfuse
+      proxyConfig.litellm_settings.success_callback: [datadog]
+      proxyConfig.litellm_settings.failure_callback: [datadog]
+    asserts:
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: "success_callback:\\n  - datadog\\n  - langfuse"
+        template: templates/configmap-proxy.yaml
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: "failure_callback:\\n  - datadog\\n  - langfuse"
+        template: templates/configmap-proxy.yaml
+
+  - it: does not list langfuse twice when the operator listed it already
+    set:
+      langfuse.enabled: true
+      langfuse.host: http://langfuse:3000
+      langfuse.existingSecret.name: litellm-langfuse
+      proxyConfig.litellm_settings.success_callback: [langfuse, datadog]
+    asserts:
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: "success_callback:\\n  - langfuse\\n  - datadog\\n"
+        template: templates/configmap-proxy.yaml
+
+  # The `callbacks` key is a different setting from success_callback; wiring
+  # Langfuse must leave it alone.
+  - it: leaves other litellm_settings alone
+    set:
+      langfuse.enabled: true
+      langfuse.host: http://langfuse:3000
+      langfuse.existingSecret.name: litellm-langfuse
+      proxyConfig.litellm_settings.callbacks: [prometheus]
+      proxyConfig.litellm_settings.drop_params: true
+    asserts:
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: "callbacks:\\n  - prometheus"
+        template: templates/configmap-proxy.yaml
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: "drop_params: true"
+        template: templates/configmap-proxy.yaml
+
+  - it: defaults the host to the bundled Langfuse's own Service
+    set:
+      langfuse.enabled: true
+      langfuse.deploy.enabled: true
+      langfuse.existingSecret.name: litellm-langfuse
+      langfuse.clickhouse.crdCheck: false
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: LANGFUSE_HOST
+            value: "http://rel-langfuse-web.litellm.svc.cluster.local:3000"
+        template: templates/deployment.yaml
+
+  - it: follows the subchart's naming and port overrides
+    set:
+      langfuse.enabled: true
+      langfuse.deploy.enabled: true
+      langfuse.existingSecret.name: litellm-langfuse
+      langfuse.clickhouse.crdCheck: false
+      langfuse.fullnameOverride: tracing
+      langfuse.langfuse.web.service.port: 8080
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: LANGFUSE_HOST
+            value: "http://tracing-web.litellm.svc.cluster.local:8080"
+        template: templates/deployment.yaml
+
+  - it: prefers an explicit host over the bundled Langfuse
+    set:
+      langfuse.enabled: true
+      langfuse.deploy.enabled: true
+      langfuse.existingSecret.name: litellm-langfuse
+      langfuse.clickhouse.crdCheck: false
+      langfuse.host: https://cloud.langfuse.com
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: LANGFUSE_HOST
+            value: "https://cloud.langfuse.com"
+        template: templates/deployment.yaml
+

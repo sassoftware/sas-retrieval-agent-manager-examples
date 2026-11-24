@@ -1,0 +1,63 @@
+{{- if .Values.clusterServingRuntimes.openVINO.enabled }}
+---
+apiVersion: serving.kserve.io/v1alpha1
+kind: ClusterServingRuntime
+metadata:
+  name: {{ .Values.clusterServingRuntimes.openVINO.name }}
+  labels:
+    {{- include "model-serving.labels" . | nindent 4 }}
+  {{- with .Values.commonAnnotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  annotations:
+    prometheus.kserve.io/path: /metrics
+    prometheus.kserve.io/port: "8080"
+  containers:
+    - name: kserve-container
+      image: {{ .Values.clusterServingRuntimes.openVINO.image }}
+      imagePullPolicy: {{ .Values.clusterServingRuntimes.openVINO.imagePullPolicy }}
+      args:
+        - --model_name={{ "{{" }}.Name{{ "}}" }}
+        - --model_path=/mnt/models
+        - --port=9000
+        - --rest_port=8080
+        {{- with .Values.clusterServingRuntimes.openVINO.args }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      {{- with .Values.clusterServingRuntimes.openVINO.env }}
+      env:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with (include "model-serving.runtimeProbes" .Values.clusterServingRuntimes.openVINO | trim) }}
+      {{- . | nindent 6 }}
+      {{- end }}
+      resources:
+        {{- toYaml .Values.clusterServingRuntimes.openVINO.resources | nindent 8 }}
+      {{- with .Values.clusterServingRuntimes.openVINO.securityContext }}
+      securityContext:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+  protocolVersions: [v1, v2, grpc-v2]
+  supportedModelFormats:
+    - {autoSelect: true, name: openvino, priority: 1, version: "10"}
+    - {autoSelect: true, name: onnx, priority: 2, version: "1"}
+    - {autoSelect: true, name: tensorflow, priority: 3, version: "1"}
+    - {autoSelect: true, name: huggingface}
+{{- end }}
+
+{{/*
+The two vLLM runtimes. Same server and the same arguments; they differ only in
+the image and in what the values below ask of it, so both render from one
+helper. See "model-serving.vllmRuntime" in _helpers.tpl.
+*/}}
+{{- if .Values.clusterServingRuntimes.vllmCPU.enabled }}
+---
+{{ include "model-serving.vllmRuntime" (dict "root" . "runtime" .Values.clusterServingRuntimes.vllmCPU "key" "vllmCPU") }}
+{{- end }}
+
+{{- if .Values.clusterServingRuntimes.vllmGPU.enabled }}
+---
+{{ include "model-serving.vllmRuntime" (dict "root" . "runtime" .Values.clusterServingRuntimes.vllmGPU "key" "vllmGPU") }}
+{{- end }}

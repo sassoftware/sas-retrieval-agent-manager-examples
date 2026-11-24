@@ -1,0 +1,49 @@
+{{- if .Values.routing.route.enabled }}
+{{- $fullName := include "litellm.fullname" . }}
+{{- $r := .Values.routing }}
+{{/*
+OpenShift Route. Leave routing.hosts empty to let the router generate a
+hostname from the route name, namespace, and the cluster's apps domain.
+
+A passthrough Route cannot carry a path, so the path is omitted in that mode
+and the whole host is sent to the proxy.
+*/}}
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  name: {{ $fullName }}
+  labels:
+    {{- include "litellm.labels" . | nindent 4 }}
+    {{- with $r.labels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+  {{- $annotations := merge (dict) (default dict $r.route.annotations) (default dict $r.annotations) (default dict .Values.commonAnnotations) }}
+  {{- with $annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  {{- with $r.hosts }}
+  host: {{ first . | quote }}
+  {{- end }}
+  {{- if not (and $r.tls.enabled (eq $r.route.tls.termination "passthrough")) }}
+  path: {{ $r.path }}
+  {{- end }}
+  to:
+    kind: Service
+    name: {{ $fullName }}
+    weight: 100
+  port:
+    targetPort: http
+  {{- if $r.tls.enabled }}
+  tls:
+    termination: {{ $r.route.tls.termination }}
+    {{- with $r.route.tls.insecureEdgeTerminationPolicy }}
+    insecureEdgeTerminationPolicy: {{ . }}
+    {{- end }}
+    {{- with $r.route.tls.destinationCACertificate }}
+    destinationCACertificate: {{ . | quote }}
+    {{- end }}
+  {{- end }}
+  wildcardPolicy: {{ $r.route.wildcardPolicy }}
+{{- end }}

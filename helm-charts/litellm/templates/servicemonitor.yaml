@@ -1,0 +1,40 @@
+{{- if .Values.serviceMonitor.enabled }}
+{{/*
+Scrapes the dedicated metrics Service when metricsServer is on, and the proxy
+port otherwise. The proxy port serves /metrics behind virtual-key auth and
+answers an unauthenticated scrape with 401, so enable metricsServer whenever
+Prometheus is doing the scraping.
+*/}}
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: {{ include "litellm.fullname" . }}
+  labels:
+    {{- include "litellm.labels" . | nindent 4 }}
+    {{- with .Values.serviceMonitor.labels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+  {{- $annotations := merge (dict) (default dict .Values.serviceMonitor.annotations) (default dict .Values.commonAnnotations) }}
+  {{- with $annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  selector:
+    matchLabels:
+      {{- include "litellm.selectorLabels" . | nindent 6 }}
+  {{- with .Values.serviceMonitor.namespaceSelector.matchNames }}
+  namespaceSelector:
+    matchNames:
+      {{- toYaml . | nindent 6 }}
+  {{- end }}
+  endpoints:
+    - port: {{ if .Values.metricsServer.enabled }}metrics{{ else }}http{{ end }}
+      path: /metrics
+      interval: {{ .Values.serviceMonitor.interval }}
+      scrapeTimeout: {{ .Values.serviceMonitor.scrapeTimeout }}
+      {{- with .Values.serviceMonitor.relabelings }}
+      relabelings:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+{{- end }}

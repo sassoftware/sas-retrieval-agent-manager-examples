@@ -1,0 +1,199 @@
+suite: routing implementations
+release:
+  name: sr
+  namespace: sr
+tests:
+  - it: renders nothing when no implementation is enabled
+    templates:
+      - templates/routing-ingress.yaml
+      - templates/routing-httproute.yaml
+      - templates/routing-httpproxy.yaml
+      - templates/routing-route.yaml
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: renders an Ingress with a class and TLS
+    templates:
+      - templates/routing-ingress.yaml
+    set:
+      routing.hosts: [router.example.com]
+      routing.tls.enabled: true
+      routing.tls.secretName: router-tls
+      routing.ingress.enabled: true
+      routing.ingress.className: nginx
+    asserts:
+      - isKind:
+          of: Ingress
+      - equal:
+          path: spec.ingressClassName
+          value: nginx
+      - equal:
+          path: spec.tls[0].secretName
+          value: router-tls
+      # The default prefix is /v1, not /: Envoy here serves the OpenAI surface
+      # and nothing else, and claiming the root would take the hostname.
+      - equal:
+          path: spec.rules[0].http.paths[0].path
+          value: /v1
+      - equal:
+          path: spec.rules[0].http.paths[0].backend.service.name
+          value: sr-semantic-router-envoy
+      - equal:
+          path: spec.rules[0].http.paths[0].backend.service.port.number
+          value: 8080
+
+  - it: downgrades a dotted path to ImplementationSpecific on ingress-nginx
+    templates:
+      - templates/routing-ingress.yaml
+    set:
+      routing.hosts: [router.example.com]
+      routing.path: /v1.0
+      routing.ingress.enabled: true
+      routing.ingress.className: nginx
+    asserts:
+      - equal:
+          path: spec.rules[0].http.paths[0].pathType
+          value: ImplementationSpecific
+
+  - it: keeps the declared path type on other controllers
+    templates:
+      - templates/routing-ingress.yaml
+    set:
+      routing.hosts: [router.example.com]
+      routing.path: /v1.0
+      routing.ingress.enabled: true
+      routing.ingress.className: traefik
+    asserts:
+      - equal:
+          path: spec.rules[0].http.paths[0].pathType
+          value: Prefix
+
+  - it: renders an HTTPRoute attached to a Gateway
+    templates:
+      - templates/routing-httproute.yaml
+    set:
+      routing.hosts: [router.example.com]
+      routing.httpRoute.enabled: true
+      routing.httpRoute.parentRefs:
+        - name: eg
+          namespace: envoy-gateway-system
+          sectionName: https
+      routing.httpRoute.timeouts:
+        backendRequest: 0s
+    asserts:
+      - isKind:
+          of: HTTPRoute
+      - equal:
+          path: spec.parentRefs[0].name
+          value: eg
+      - equal:
+          path: spec.hostnames[0]
+          value: router.example.com
+      - equal:
+          path: spec.rules[0].matches[0].path.value
+          value: /v1
+      - equal:
+          path: spec.rules[0].timeouts.backendRequest
+          value: 0s
+      - equal:
+          path: spec.rules[0].backendRefs[0].port
+          value: 8080
+
+  - it: renders a Contour HTTPProxy with its own timeout policy
+    templates:
+      - templates/routing-httpproxy.yaml
+    set:
+      routing.hosts: [router.example.com]
+      routing.tls.enabled: true
+      routing.tls.secretName: router-tls
+      routing.httpProxy.enabled: true
+      routing.httpProxy.ingressClassName: contour
+      routing.httpProxy.timeoutPolicy:
+        response: infinity
+    asserts:
+      - isKind:
+          of: HTTPProxy
+      - equal:
+          path: spec.virtualhost.fqdn
+          value: router.example.com
+      - equal:
+          path: spec.routes[0].conditions[0].prefix
+          value: /v1
+      - equal:
+          path: spec.routes[0].timeoutPolicy.response
+          value: infinity
+
+  # A child inherits the parent's hostname AND its condition, so repeating the
+  # prefix here would publish /v1/v1.
+  - it: renders a delegated child HTTPProxy with no virtualhost
+    templates:
+      - templates/routing-httpproxy.yaml
+    set:
+      routing.httpProxy.enabled: true
+      routing.httpProxy.delegated: true
+      routing.httpProxy.ingressClassName: contour
+    asserts:
+      - notExists:
+          path: spec.virtualhost
+      - equal:
+          path: spec.routes[0].conditions[0].prefix
+          value: /
+
+  - it: renders an OpenShift Route with edge termination
+    templates:
+      - templates/routing-route.yaml
+    set:
+      routing.hosts: [router.example.com]
+      routing.tls.enabled: true
+      routing.tls.secretName: router-tls
+      routing.route.enabled: true
+    asserts:
+      - isKind:
+          of: Route
+      - equal:
+          path: spec.host
+          value: router.example.com
+      - equal:
+          path: spec.path
+          value: /v1
+      - equal:
+          path: spec.tls.termination
+          value: edge
+      - equal:
+          path: spec.port.targetPort
+          value: http
+
+  - it: omits the path on a passthrough Route
+    templates:
+      - templates/routing-route.yaml
+    set:
+      routing.tls.enabled: true
+      routing.route.enabled: true
+      routing.route.tls.termination: passthrough
+      routing.route.tls.insecureEdgeTerminationPolicy: ""
+      routing.httpProxy.tls.passthrough: true
+    asserts:
+      - notExists:
+          path: spec.path
+      - notExists:
+          path: spec.host
+
+  - it: publishes through two implementations at once during a migration
+    templates:
+      - templates/routing-ingress.yaml
+      - templates/routing-httproute.yaml
+    set:
+      routing.hosts: [router.example.com]
+      routing.ingress.enabled: true
+      routing.ingress.className: nginx
+      routing.httpRoute.enabled: true
+      routing.httpRoute.parentRefs:
+        - name: eg
+    asserts:
+      - isKind:
+          of: Ingress
+        template: templates/routing-ingress.yaml
+      - isKind:
+          of: HTTPRoute
+        template: templates/routing-httproute.yaml
