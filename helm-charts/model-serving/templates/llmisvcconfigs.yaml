@@ -1,0 +1,51 @@
+{{- if .Values.components.llmisvcConfigs.enabled }}
+{{- /*
+The LLMInferenceServiceConfig presets, rendered where the controller looks.
+
+KServe's llmisvc controller REFUSES an LLMInferenceService it cannot combine a
+preset into, even one carrying a complete pod template of its own:
+
+    PresetsCombined=False  ConfigNotFound
+    LLMInferenceServiceConfig "kserve-config-llm-worker-data-parallel"
+    not found in namespaces [models kserve-system]
+
+It searches two namespaces and two only: the MODEL's, and its OWN.
+
+── Why these are vendored rather than taken from the subchart ────────────────
+
+kserve-runtime-configs ships them, behind `kserve.llmisvcConfigs.enabled`, and
+renders them with `namespace: kserve` HARDCODED -- its own
+`kserve-common.replaceNamespace` helper exists in _utils.tpl and is simply not
+applied to this file. Two things then go wrong, and the first hides the second:
+
+  * `kserve` does not exist on a cluster that did not install KServe there, so
+    the release fails outright with `namespaces "kserve" not found`;
+  * even where it does exist, a preset in `kserve` is created and then never
+    found, because it is neither the model's namespace nor the controller's.
+
+A parent chart cannot post-process a subchart's output, and `.Files` does not
+reach into a subchart, so correcting it in place is not possible. Hence the
+copy below, rendered into this release's namespace -- which is the
+controller's namespace, so the presets are found for a model in ANY namespace.
+
+Copied verbatim from kserve-runtime-configs v0.20.0, the version this chart
+depends on. Re-copy it when that dependency moves.
+
+── On the replacement ────────────────────────────────────────────────────────
+
+A string replacement rather than a parse. These documents are full of KServe's
+OWN template syntax -- `{{ .Spec.Model.Name }}`, `{{ .ObjectMeta.Namespace }}`
+-- which the llmisvc controller evaluates at reconcile time, long after Helm
+has finished. Parsing and re-emitting the YAML would mangle it, and `tpl`
+would try to evaluate it and fail. `.Files.Get` inserts the bytes verbatim and
+Helm does not re-parse its own output, so the controller's templating survives
+intact.
+
+Anchored on the trailing newline rather than matched loosely. There are
+exactly ten occurrences for ten presets, all of them the metadata field, and
+the anchor is what keeps that true if a future version of the file mentions
+the namespace somewhere a rewrite would break -- a container argument, say.
+*/}}
+{{- $namespace := printf "namespace: %s\n" .Release.Namespace }}
+{{ .Files.Get "files/llmisvcconfigs/resources.yaml" | replace "namespace: kserve\n" $namespace }}
+{{- end }}

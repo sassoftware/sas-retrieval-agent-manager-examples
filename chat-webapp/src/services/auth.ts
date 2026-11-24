@@ -1,5 +1,6 @@
 import { createApi, fetchBaseQuery } from "@reduxjs/toolkit/query/react";
 import { createSlice, PayloadAction } from "@reduxjs/toolkit";
+import { appPath } from "@/lib/app-path";
 
 export interface AuthState {
   access_token: string | null;
@@ -40,20 +41,20 @@ export const authApi = createApi({
   endpoints: (builder) => ({
     initiateDeviceAuth: builder.mutation<DeviceAuthResponse, void>({
       query: () => ({
-        url: "/login",
+        url: appPath("/login"),
         method: "POST",
       }),
     }),
     pollDeviceToken: builder.mutation<TokenResponse, PollTokenRequest>({
       query: (body) => ({
-        url: "/login/poll",
+        url: appPath("/login/poll"),
         method: "POST",
         body,
       }),
     }),
     refreshToken: builder.mutation<TokenResponse, { refresh_token: string }>({
       query: (body) => ({
-        url: "/login/refresh",
+        url: appPath("/login/refresh"),
         method: "POST",
         body,
       }),

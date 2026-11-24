@@ -1,0 +1,97 @@
+suite: server root path
+release:
+  name: rel
+  namespace: litellm
+templates:
+  - templates/deployment.yaml
+tests:
+  - it: mounts the proxy under /litellm by default
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: SERVER_ROOT_PATH
+            value: /litellm
+
+  # `notContains` compares the whole env entry, so matching on `name` alone
+  # would pass against any value and assert nothing. Match the default entry
+  # exactly, then confirm no other prefix took its place.
+  - it: claims the domain root when the prefix is cleared
+    set:
+      serverRootPath: ""
+      routing.path: /
+    asserts:
+      - notContains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: SERVER_ROOT_PATH
+            value: /litellm
+      - notContains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: SERVER_ROOT_PATH
+            value: ""
+
+  - it: moves the proxy under a different prefix
+    set:
+      serverRootPath: /gateway
+      routing.path: /gateway
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: SERVER_ROOT_PATH
+            value: /gateway
+
+  - it: leaves the probes on the root paths
+    set:
+      serverRootPath: /litellm
+      routing.path: /litellm
+    asserts:
+      # Verified against the image: with SERVER_ROOT_PATH set, the health
+      # endpoints answer on both the prefix and the root, while /ui moves. The
+      # probes therefore need no prefix, and adding one would be wrong for an
+      # operator who later clears serverRootPath.
+      - equal:
+          path: spec.template.spec.containers[0].livenessProbe.httpGet.path
+          value: /health/liveliness
+      - equal:
+          path: spec.template.spec.containers[0].readinessProbe.httpGet.path
+          value: /health/readiness
+
+  # A prefix with no leading slash, or with a trailing one, is rejected by the
+  # pattern on `serverRootPath` in values.schema.json before any template
+  # renders. The matching `fail` guards in _helpers.tpl remain as a backstop
+  # for callers rendering with --skip-schema-validation, but they cannot be
+  # asserted here because the schema fires first.
+
+  - it: rejects still publishing the root when a prefix is set
+    set:
+      serverRootPath: /litellm
+      routing.path: /
+      routing.hosts: [llm.example.com]
+      routing.ingress.enabled: true
+    asserts:
+      # The whole point of the prefix is to leave the root to another
+      # application, so publishing "/" anyway is almost certainly a mistake.
+      - failedTemplate:
+          errorPattern: still claims the whole host
+
+  - it: rejects a routing path that disagrees with the prefix
+    set:
+      serverRootPath: /litellm
+      routing.path: /proxy
+      routing.hosts: [llm.example.com]
+      routing.ingress.enabled: true
+    asserts:
+      - failedTemplate:
+          errorPattern: must match
+
+  - it: allows a prefix with no routing at all
+    set:
+      serverRootPath: /litellm
+    asserts:
+      # Port-forward or an externally managed route; nothing here publishes
+      # the root, so there is nothing to disagree with.
+      - isKind:
+          of: Deployment

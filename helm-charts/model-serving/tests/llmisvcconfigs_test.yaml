@@ -1,0 +1,62 @@
+suite: llmisvc presets
+templates:
+  - templates/llmisvcconfigs.yaml
+tests:
+  - it: renders nothing by default
+    # An existing release must not suddenly gain ten cluster objects, and a
+    # chart that renders its own base preset would collide on the name.
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: renders every preset when asked
+    set:
+      components.llmisvcConfigs.enabled: true
+    asserts:
+      - hasDocuments:
+          count: 10
+
+  - it: puts every preset where the controller looks
+    # KServe's llmisvc controller searches two namespaces and two only: the
+    # model's, and its own. The upstream subchart ships these with
+    # `namespace: kserve` hardcoded, so they are created and then never found
+    # -- or the release fails outright where that namespace does not exist.
+    #
+    # Asserted on all ten rather than a sample: the rewrite is a string
+    # replacement, and one document it missed would be one preset that cannot
+    # be found, reported as a model that will not start.
+    set:
+      components.llmisvcConfigs.enabled: true
+    release:
+      namespace: retagentmgrext
+    asserts:
+      - equal:
+          path: metadata.namespace
+          value: retagentmgrext
+
+  - it: includes the preset a multi-node model needs
+    # Without this one, an LLMInferenceService carrying a `worker` block is
+    # refused with PresetsCombined=False, ConfigNotFound.
+    set:
+      components.llmisvcConfigs.enabled: true
+    documentSelector:
+      path: metadata.name
+      value: kserve-config-llm-worker-data-parallel
+    asserts:
+      - isKind:
+          of: LLMInferenceServiceConfig
+
+  - it: leaves KServe's own templating alone
+    # These documents are full of KServe's template syntax, which the
+    # controller evaluates at reconcile time long after Helm has finished.
+    # Parsing and re-emitting the YAML would mangle it; the file is inserted
+    # verbatim so the controller still gets what it expects.
+    set:
+      components.llmisvcConfigs.enabled: true
+    documentSelector:
+      path: metadata.name
+      value: kserve-config-llm-template
+    asserts:
+      - matchRegex:
+          path: spec.template.containers[0].command[2]
+          pattern: \{\{.*\.Spec\.Model\.Name.*\}\}

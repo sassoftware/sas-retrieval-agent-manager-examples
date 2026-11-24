@@ -1,0 +1,190 @@
+suite: vLLM GPU runtime
+templates:
+  - templates/clusterservingruntimes.yaml
+# The other two runtimes are off so each test asserts against one document.
+set:
+  clusterServingRuntimes.openVINO.enabled: false
+  clusterServingRuntimes.vllmCPU.enabled: false
+tests:
+  # The whole reason this runtime exists. KServe's published
+  # `kserve-vllmserver` declares supportedModelFormats [vLLM], and every model
+  # this chart deploys is `huggingface`, so pairing them fails at reconcile
+  # with "specified runtime kserve-vllmserver does not support specified
+  # framework/version" and no pod is ever created.
+  - it: accepts the huggingface model format the chart actually deploys
+    asserts:
+      - equal:
+          path: metadata.name
+          value: kserve-vllm-gpu
+      - equal:
+          path: spec.supportedModelFormats
+          value:
+            - name: huggingface
+              autoSelect: false
+
+  # autoSelect is false so a model that names no runtime cannot land here: on
+  # a cluster with no GPU node that produces a pod which stays Pending with no
+  # error anywhere. It also stops two runtimes advertising the same format as
+  # auto-selectable.
+  - it: is never chosen automatically
+    asserts:
+      - equal:
+          path: spec.supportedModelFormats[0].autoSelect
+          value: false
+
+  - it: is chosen automatically on CPU instead
+    set:
+      clusterServingRuntimes.vllmCPU.enabled: true
+      clusterServingRuntimes.vllmGPU.enabled: false
+    asserts:
+      - equal:
+          path: spec.supportedModelFormats[0].autoSelect
+          value: true
+
+  # Identical base arguments to the CPU runtime. This is what lets one model
+  # move between the two by changing only the runtime name, which is the whole
+  # point of having a matched pair.
+  - it: takes the same base arguments as the CPU runtime
+    asserts:
+      - equal:
+          path: spec.containers[0].args
+          value:
+            - /mnt/models
+            - --host=0.0.0.0
+            - --port=8080
+            - --trust-remote-code
+
+  # No chart-wide caps, unlike the CPU runtime: vLLM's defaults are measured
+  # against the device on a GPU and are right for a card with room, so a
+  # default here would shrink every model on hardware that did not need it.
+  - it: adds no memory or context caps of its own
+    asserts:
+      - notContains:
+          path: spec.containers[0].args
+          content: --max-model-len
+      - notContains:
+          path: spec.containers[0].args
+          content: --gpu-memory-utilization
+
+  - it: appends operator arguments after the base arguments
+    set:
+      clusterServingRuntimes.vllmGPU.args:
+        - --gpu-memory-utilization=0.55
+        - --enforce-eager
+    asserts:
+      - equal:
+          path: spec.containers[0].args
+          value:
+            - /mnt/models
+            - --host=0.0.0.0
+            - --port=8080
+            - --trust-remote-code
+            - --gpu-memory-utilization=0.55
+            - --enforce-eager
+
+  # The CPU runtime pins VLLM_USE_V2_MODEL_RUNNER=0 to dodge a structured
+  # output path that is GPU-only and crashes on CPU. Carrying that here would
+  # give up the newer runner for a bug that cannot happen.
+  - it: does not carry the CPU structured-output workaround
+    asserts:
+      - notContains:
+          path: spec.containers[0].env
+          content:
+            name: VLLM_USE_V2_MODEL_RUNNER
+            value: "0"
+
+  - it: runs as a non-root user with seccomp
+    asserts:
+      - equal:
+          path: spec.containers[0].securityContext
+          value:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: [ALL]
+            privileged: false
+            runAsNonRoot: true
+            runAsUser: 1000
+            seccompProfile:
+              type: RuntimeDefault
+
+  # Same getpass trap as the CPU image: without one of LOGNAME/USER/LNAME/
+  # USERNAME, "import vllm" dies with KeyError: 'getpwuid(): uid not found'
+  # before the server starts.
+  - it: gives the non-root container a resolvable user name
+    asserts:
+      - contains:
+          path: spec.containers[0].env
+          content:
+            name: USER
+            value: vllm
+      - contains:
+          path: spec.containers[0].env
+          content:
+            name: LOGNAME
+            value: vllm
+
+  - it: refuses a non-root uid with no getpass variable
+    set:
+      clusterServingRuntimes.vllmGPU.cacheVolume.enabled: false
+    asserts:
+      - failedTemplate:
+          errorMessage: 'model-serving: clusterServingRuntimes.vllmGPU forces a non-root user (runAsUser 1000) but no LOGNAME/USER/LNAME/USERNAME environment variable is set, so "import vllm" will fail with KeyError: ''getpwuid(): uid not found: ...'' before the server starts. Keep clusterServingRuntimes.vllmGPU.cacheVolume.enabled=true, or add one of those variables to clusterServingRuntimes.vllmGPU.env, or set clusterServingRuntimes.vllmGPU.securityContext to null.'
+
+  # A GPU build's Triton kernel cache is larger than anything the CPU backend
+  # writes, and $HOME in the image belongs to root.
+  - it: gives the container a writable cache directory
+    asserts:
+      - contains:
+          path: spec.containers[0].volumeMounts
+          content:
+            name: runtime-cache
+            mountPath: /home/vllm
+      - contains:
+          path: spec.volumes
+          content:
+            name: runtime-cache
+            emptyDir:
+              sizeLimit: 4Gi
+
+  # The first start downloads weights and lets Triton JIT-compile its kernels,
+  # which emits nothing but compiler warnings for minutes. A tighter budget
+  # restarts the pod mid-compile, forever.
+  - it: lets the startup probe wait indefinitely for a model load
+    asserts:
+      - equal:
+          path: spec.containers[0].startupProbe.failureThreshold
+          value: 9999
+      - equal:
+          path: spec.containers[0].startupProbe.httpGet
+          value:
+            path: /health
+            port: 8080
+
+  - it: serves health on the same endpoint as the CPU runtime
+    asserts:
+      - equal:
+          path: spec.containers[0].readinessProbe.httpGet
+          value:
+            path: /health
+            port: 8080
+      - equal:
+          path: spec.containers[0].livenessProbe.httpGet
+          value:
+            path: /health
+            port: 8080
+
+  # The runtime declares no resources: a GPU model's own resources decide the
+  # accelerator count and the memory, and a runtime-level limit would cap
+  # every model served by it. KServe's kserve-vllmserver sets limits of
+  # cpu 1 / memory 2Gi, which cannot even load a 3 GiB model.
+  - it: imposes no resource limits of its own
+    asserts:
+      - notExists:
+          path: spec.containers[0].resources
+
+  - it: can be switched off
+    set:
+      clusterServingRuntimes.vllmGPU.enabled: false
+    asserts:
+      - hasDocuments:
+          count: 0

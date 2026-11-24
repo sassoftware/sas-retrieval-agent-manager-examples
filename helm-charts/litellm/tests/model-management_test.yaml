@@ -1,0 +1,165 @@
+suite: model management flows
+release:
+  name: rel
+  namespace: litellm
+tests:
+  - it: renders the model catalog into config.yaml in the config flow
+    templates:
+      - templates/configmap-proxy.yaml
+    set:
+      modelManagement.mode: config
+      models:
+        - model_name: gpt-4o
+          litellm_params:
+            model: azure/gpt-4o
+            api_key: os.environ/AZURE_OPENAI_API_KEY
+    asserts:
+      - isKind:
+          of: ConfigMap
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: "model_name: gpt-4o"
+      - notMatchRegex:
+          path: data["config.yaml"]
+          pattern: "store_model_in_db"
+
+  - it: defaults the master key to the environment reference
+    templates:
+      - templates/configmap-proxy.yaml
+    asserts:
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: "master_key: os.environ/PROXY_MASTER_KEY"
+
+  - it: lets proxyConfig override a chart default
+    templates:
+      - templates/configmap-proxy.yaml
+    set:
+      proxyConfig:
+        general_settings:
+          master_key: os.environ/MY_OWN_KEY
+    asserts:
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: "master_key: os.environ/MY_OWN_KEY"
+
+  - it: stores models in the database and omits the catalog in the database flow
+    templates:
+      - templates/configmap-proxy.yaml
+    set:
+      modelManagement.mode: database
+      database.host: pg.example.com
+      database.existingSecret.name: litellm-db
+      models:
+        - model_name: gpt-4o
+          litellm_params:
+            model: azure/gpt-4o
+    asserts:
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: "store_model_in_db: true"
+      - notMatchRegex:
+          path: data["config.yaml"]
+          pattern: "model_list"
+
+  - it: seeds the database flow from config when asked
+    templates:
+      - templates/configmap-proxy.yaml
+    set:
+      modelManagement.mode: database
+      modelManagement.seedFromConfig: true
+      database.host: pg.example.com
+      database.existingSecret.name: litellm-db
+      models:
+        - model_name: gpt-4o
+          litellm_params:
+            model: azure/gpt-4o
+    asserts:
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: "store_model_in_db: true"
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: "model_name: gpt-4o"
+
+  - it: rolls the pods when the model catalog changes
+    templates:
+      - templates/deployment.yaml
+    set:
+      models:
+        - model_name: gpt-4o
+          litellm_params:
+            model: azure/gpt-4o
+    asserts:
+      - exists:
+          path: spec.template.metadata.annotations["checksum/config"]
+
+  - it: drops the checksum when an existing ConfigMap is mounted
+    templates:
+      - templates/deployment.yaml
+    set:
+      config.existingConfigMap.name: my-litellm-config
+    asserts:
+      - notExists:
+          path: spec.template.metadata.annotations["checksum/config"]
+      - equal:
+          path: spec.template.spec.volumes[0].configMap.name
+          value: my-litellm-config
+
+  - it: renders no migration Job in the config flow
+    templates:
+      - templates/job-migrations.yaml
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: renders the migration Job in the database flow
+    templates:
+      - templates/job-migrations.yaml
+    set:
+      modelManagement.mode: database
+      database.host: pg.example.com
+      database.existingSecret.name: litellm-db
+    asserts:
+      - isKind:
+          of: Job
+      - equal:
+          path: spec.template.spec.containers[0].command
+          value: ["python", "litellm/proxy/prisma_migration.py"]
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: DISABLE_SCHEMA_UPDATE
+            value: "false"
+      - equal:
+          path: metadata.annotations["helm.sh/hook"]
+          value: pre-install,pre-upgrade
+
+  - it: keeps the proxy out of schema updates while the Job owns them
+    templates:
+      - templates/deployment.yaml
+    set:
+      modelManagement.mode: database
+      database.host: pg.example.com
+      database.existingSecret.name: litellm-db
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: DISABLE_SCHEMA_UPDATE
+            value: "true"
+
+  - it: leaves schema updates to the proxy when the Job is disabled
+    templates:
+      - templates/deployment.yaml
+    set:
+      modelManagement.mode: database
+      migrationJob.enabled: false
+      database.host: pg.example.com
+      database.existingSecret.name: litellm-db
+    asserts:
+      - notContains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: DISABLE_SCHEMA_UPDATE
+            value: "true"

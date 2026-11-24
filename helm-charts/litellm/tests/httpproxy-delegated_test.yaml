@@ -1,0 +1,133 @@
+suite: delegated HTTPProxy
+release:
+  name: rel
+  namespace: litellm
+tests:
+  # A child is distinguished from a competing root by having no virtualhost.
+  # Emitting one would make this a second root for the parent's FQDN, which
+  # Contour rejects — and it is undefined which of the two loses.
+  - it: renders a child with no virtualhost
+    templates:
+      - templates/routing-httpproxy.yaml
+    set:
+      routing.httpProxy.enabled: true
+      routing.httpProxy.delegated: true
+    asserts:
+      - isKind:
+          of: HTTPProxy
+      - notExists:
+          path: spec.virtualhost
+
+  # Contour concatenates the parent's include condition with this one, so
+  # repeating routing.path would publish /litellm/litellm.
+  - it: matches the delegated root rather than repeating the prefix
+    templates:
+      - templates/routing-httpproxy.yaml
+    set:
+      routing.httpProxy.enabled: true
+      routing.httpProxy.delegated: true
+    asserts:
+      - equal:
+          path: spec.routes[0].conditions[0].prefix
+          value: /
+      - equal:
+          path: spec.routes[0].services[0].name
+          value: rel-litellm
+      - equal:
+          path: spec.routes[0].services[0].port
+          value: 4000
+
+  - it: needs no hostname, because it inherits the parent's
+    templates:
+      - templates/deployment.yaml
+    set:
+      routing.httpProxy.enabled: true
+      routing.httpProxy.delegated: true
+    asserts:
+      # A root with no routing.hosts fails the render; a child must not.
+      - isKind:
+          of: Deployment
+
+  # TLS belongs to the parent's virtualhost. Rendering a secretName here would
+  # suggest this release controls the certificate when it does not.
+  - it: ignores TLS settings when delegated
+    templates:
+      - templates/routing-httpproxy.yaml
+    set:
+      routing.httpProxy.enabled: true
+      routing.httpProxy.delegated: true
+      routing.hosts: [litellm.example.com]
+      routing.tls.enabled: true
+      routing.tls.secretName: litellm-tls
+    asserts:
+      - notExists:
+          path: spec.virtualhost
+
+  - it: still carries its own policies
+    templates:
+      - templates/routing-httpproxy.yaml
+    set:
+      routing.httpProxy.enabled: true
+      routing.httpProxy.delegated: true
+      routing.httpProxy.timeoutPolicy:
+        response: infinity
+      routing.httpProxy.retryPolicy:
+        count: 2
+    asserts:
+      - equal:
+          path: spec.routes[0].timeoutPolicy.response
+          value: infinity
+      - equal:
+          path: spec.routes[0].retryPolicy.count
+          value: 2
+
+  # The recipe that sends the bare prefix to the Admin UI. The proxy serves a
+  # plain health string at its mount root, so without this a browser opening
+  # the release lands on nothing useful.
+  - it: accepts an extra redirect route for the mount root
+    templates:
+      - templates/routing-httpproxy.yaml
+    set:
+      routing.httpProxy.enabled: true
+      routing.httpProxy.delegated: true
+      routing.httpProxy.extraRoutes:
+        - conditions:
+            - exact: /
+          requestRedirectPolicy:
+            path: /litellm/ui/
+            statusCode: 302
+    asserts:
+      - lengthEqual:
+          path: spec.routes
+          count: 2
+      - equal:
+          path: spec.routes[1].requestRedirectPolicy.path
+          value: /litellm/ui/
+      - equal:
+          path: spec.routes[1].requestRedirectPolicy.statusCode
+          value: 302
+
+  # The two guards this mode adds — passthrough on a child, and a root with no
+  # hostname — live in validation_test.yaml, because `failedTemplate` only
+  # resolves against a suite-level template list and litellm.validate is
+  # included by deployment.yaml alone.
+
+  # A root release must keep behaving exactly as before.
+  - it: still renders a root with a virtualhost when not delegated
+    templates:
+      - templates/routing-httpproxy.yaml
+    set:
+      routing.httpProxy.enabled: true
+      routing.hosts: [litellm.example.com]
+      routing.tls.enabled: true
+      routing.tls.secretName: litellm-tls
+    asserts:
+      - equal:
+          path: spec.virtualhost.fqdn
+          value: litellm.example.com
+      - equal:
+          path: spec.virtualhost.tls.secretName
+          value: litellm-tls
+      - equal:
+          path: spec.routes[0].conditions[0].prefix
+          value: /litellm

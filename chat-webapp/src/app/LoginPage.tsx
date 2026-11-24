@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
+import { appPath } from "@/lib/app-path";
 import {
   useInitiateDeviceAuthMutation,
   usePollDeviceTokenMutation,
@@ -19,6 +20,8 @@ import {
   Divider,
   Link,
   Paper,
+  AppBar,
+  Toolbar,
 } from "@mui/material";
 import { styled } from "@mui/material/styles";
 import ContentCopyIcon from "@mui/icons-material/ContentCopy";
@@ -26,37 +29,31 @@ import CheckCircleIcon from "@mui/icons-material/CheckCircle";
 
 const GradientBackground = styled(Box)(({ theme }) => ({
   minHeight: "100vh",
-  display: "flex",
-  alignItems: "center",
-  justifyContent: "center",
-  padding: theme.spacing(2),
-  background: "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
+  backgroundColor: theme.palette.background.default,
+  color: theme.palette.text.primary,
 }));
 
 const StyledCard = styled(Card)(({ theme }) => ({
   width: "100%",
-  maxWidth: 500,
-  boxShadow: "0 10px 25px rgba(0, 0, 0, 0.1)",
-  borderRadius: theme.spacing(1.5),
-  border: `1px solid ${
-    theme.palette.mode === "dark"
-      ? "rgba(255, 255, 255, 0.1)"
-      : "rgba(255, 255, 255, 0.2)"
-  }`,
+  maxWidth: 560,
+  boxShadow: "0 3px 12px rgba(23, 58, 92, 0.12)",
+  borderRadius: theme.spacing(0.75),
+  border: "1px solid",
+  borderColor: theme.palette.divider,
 }));
 
 const GradientButton = styled(Button)(({ theme }) => ({
-  background: "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
-  color: "white",
-  padding: theme.spacing(1.75, 2),
-  fontSize: "1rem",
+  backgroundColor: theme.palette.primary.main,
+  color: theme.palette.primary.contrastText,
+  padding: theme.spacing(1.25, 2),
+  fontSize: "0.95rem",
   fontWeight: 600,
   textTransform: "none",
   transition: "transform 0.2s, box-shadow 0.2s",
   "&:hover": {
-    background: "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
+    backgroundColor: theme.palette.primary.dark,
     transform: "translateY(-1px)",
-    boxShadow: "0 4px 12px rgba(102, 126, 234, 0.4)",
+    boxShadow: "0 4px 12px rgba(0, 109, 207, 0.28)",
   },
   "&:disabled": {
     opacity: 0.6,
@@ -65,10 +62,11 @@ const GradientButton = styled(Button)(({ theme }) => ({
 }));
 
 const CodeBox = styled(Paper)(({ theme }) => ({
-  padding: theme.spacing(3),
+  padding: theme.spacing(2.5),
   textAlign: "center",
-  backgroundColor: theme.palette.mode === "dark" ? "#2d2d2d" : "#f5f5f5",
-  borderRadius: theme.spacing(1),
+  backgroundColor: "#f5f8fb",
+  border: "1px solid #dbe5ee",
+  borderRadius: theme.spacing(0.5),
 }));
 
 const LoginPage = () => {
@@ -85,6 +83,10 @@ const LoginPage = () => {
 
   const [initiateDeviceAuth] = useInitiateDeviceAuthMutation();
   const [pollDeviceToken] = usePollDeviceTokenMutation();
+
+  const startSso = () => {
+    window.location.assign(appPath("/auth/login"));
+  };
 
   const startAuth = async () => {
     setIsLoading(true);
@@ -106,6 +108,16 @@ const LoginPage = () => {
   };
 
   useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("error") === "sso_failed") {
+      setError("Single sign-on failed. Please try again, or check the server logs for details.");
+      params.delete("error");
+      const query = params.toString();
+      window.history.replaceState(null, "", `${window.location.pathname}${query ? `?${query}` : ""}`);
+    }
+  }, []);
+
+  useEffect(() => {
     if (!deviceCode || !codeVerifier) return;
 
     const poll = async () => {
@@ -120,7 +132,7 @@ const LoginPage = () => {
           if (pollingRef.current) {
             clearInterval(pollingRef.current);
           }
-          router.push("/chat");
+          router.push(appPath("/chat"));
         }
       } catch (err: unknown) {
         // Handle polling errors
@@ -184,17 +196,36 @@ const LoginPage = () => {
 
   return (
     <GradientBackground>
-      <Container maxWidth="sm">
+      <AppBar position="static" elevation={0} color="primary">
+        <Toolbar variant="dense" sx={{ minHeight: 48 }}>
+          <Typography variant="subtitle1" sx={{ fontWeight: 600, fontSize: "0.9rem" }}>
+            SAS Retrieval Agent Manager
+          </Typography>
+        </Toolbar>
+      </AppBar>
+
+      <Container maxWidth="sm" sx={{ py: { xs: 5, sm: 9 } }}>
         <StyledCard>
-          <CardContent sx={{ p: 4 }}>
-            <Box textAlign="center" mb={3}>
+          <CardContent sx={{ p: { xs: 3, sm: 5 } }}>
+            <Box mb={4}>
               <Typography
-                variant="h4"
+                variant="overline"
+                color="primary"
+                sx={{ fontWeight: 700, letterSpacing: "0.08em" }}
+              >
+                Secure access
+              </Typography>
+              <Typography
+                variant="h5"
                 component="h1"
                 fontWeight={600}
                 gutterBottom
+                sx={{ mt: 0.5 }}
               >
-                SAS® Retrieval Agent Manager Example Web App
+                Sign in to Retrieval Agent Manager
+              </Typography>
+              <Typography variant="body2" color="text.secondary" sx={{ maxWidth: 440 }}>
+                Access your collections and agents, and continue working with your chat sessions.
               </Typography>
             </Box>
 
@@ -220,13 +251,27 @@ const LoginPage = () => {
                   )}
 
                   <GradientButton
+                    onClick={startSso}
+                    fullWidth
+                    size="large"
+                  >
+                    Sign in
+                  </GradientButton>
+                  <Button
                     onClick={startAuth}
                     fullWidth
                     size="large"
+                    variant="outlined"
                     disabled={isLoading}
+                    sx={{
+                      py: 1.25,
+                      textTransform: "none",
+                      fontWeight: 600,
+                      borderColor: "primary.main",
+                    }}
                   >
-                    {isLoading ? "Initializing..." : "Sign in to your account"}
-                  </GradientButton>
+                    {isLoading ? "Initializing..." : "Sign in with device code"}
+                  </Button>
                 </Stack>
               ) : (
                 <Stack spacing={3}>
@@ -333,6 +378,15 @@ const LoginPage = () => {
             </Box>
           </CardContent>
         </StyledCard>
+        <Typography
+          variant="caption"
+          color="text.secondary"
+          display="block"
+          textAlign="center"
+          sx={{ mt: 2.5 }}
+        >
+          Authentication is managed by your organization.
+        </Typography>
       </Container>
     </GradientBackground>
   );

@@ -1,0 +1,63 @@
+{{- if .Values.routing.httpRoute.enabled }}
+{{- $fullName := include "litellm.fullname" . }}
+{{- $svcPort := .Values.service.port }}
+{{- $r := .Values.routing }}
+{{/*
+Gateway API. Works with Envoy Gateway, Contour, Istio, NGINX Gateway Fabric,
+and every other conformant implementation.
+
+routing.tls is deliberately ignored here: in Gateway API the certificate
+belongs to the Gateway's listener, not to the route attached to it. Put the
+Secret in the listener's `tls.certificateRefs` and point parentRefs at it.
+
+Long completions outlive most default timeouts. Set
+routing.httpRoute.timeouts.backendRequest (0s disables it) when streaming
+responses are being cut off.
+*/}}
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: {{ $fullName }}
+  labels:
+    {{- include "litellm.labels" . | nindent 4 }}
+    {{- with $r.labels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+  {{- $annotations := merge (dict) (default dict $r.httpRoute.annotations) (default dict $r.annotations) (default dict .Values.commonAnnotations) }}
+  {{- with $annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  parentRefs:
+    {{- toYaml $r.httpRoute.parentRefs | nindent 4 }}
+  {{- with $r.hosts }}
+  hostnames:
+    {{- range . }}
+    - {{ . | quote }}
+    {{- end }}
+  {{- end }}
+  rules:
+    - matches:
+        {{- if $r.httpRoute.matches }}
+        {{- toYaml $r.httpRoute.matches | nindent 8 }}
+        {{- else }}
+        - path:
+            type: PathPrefix
+            value: {{ $r.path | quote }}
+        {{- end }}
+      {{- with $r.httpRoute.filters }}
+      filters:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with $r.httpRoute.timeouts }}
+      timeouts:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      backendRefs:
+        - name: {{ $fullName }}
+          port: {{ $svcPort }}
+    {{- with $r.httpRoute.extraRules }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+{{- end }}

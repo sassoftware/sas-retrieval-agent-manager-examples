@@ -1,9 +1,9 @@
-## Wikepedia Tool Server Template
+# Wikipedia Tool Server Template
 
 This README.md documents how to setup the Wikipedia MCP container
 for use in RAM.
 
-### Template Settings (required fields)
+## Template Settings (required fields)
 
 - Container image: docker.io/mcp/wikipedia-mcp
 - Arguments: --transport sse --host 0.0.0.0 --port 8000
@@ -11,14 +11,14 @@ for use in RAM.
 - Port: 8000
 - Base Path: /sse
 
-### Authentication
+## Authentication
 
 None.
 
-### Environment Variables
+## Environment Variables
 
 None.
 
-### Configuration File
+## Configuration File
 
 Leave empty.

@@ -1,0 +1,294 @@
+{{- include "litellm.validate" . -}}
+{{- if include "litellm.keycloakBootstrapEnabled" . }}
+{{- $kb := .Values.sso.keycloakBootstrap }}
+{{- $base := include "litellm.proxyBaseUrl" . }}
+{{- $redirectUris := concat (list (printf "%s/sso/callback" $base) (printf "%s/sso/debug/callback" $base)) $kb.extraRedirectUris }}
+{{/*
+Makes the Keycloak realm match this release's SSO settings.
+
+Every step reads before it writes and updates in place when the object already
+exists, so a re-run is a no-op and a half-applied earlier run is repaired
+rather than duplicated.
+
+The two JSON payloads are rendered here by Helm rather than assembled in the
+script. `toJson` escapes correctly by construction, the result is reviewable in
+`helm template` output, and the script then needs no JSON tooling — which
+matters, because the Keycloak image ships no python3, jq, awk, or curl.
+Everything in the script uses only bash, grep, cut, head, sed and tr.
+
+The client secret is deliberately NOT in this ConfigMap; it is applied
+separately from a mounted Secret.
+*/}}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "litellm.keycloakBootstrap.fullname" . }}-scripts
+  labels:
+    {{- include "litellm.keycloakBootstrap.labels" . | nindent 4 }}
+  annotations:
+    {{- include "litellm.hookAnnotations" (dict "hooks" $kb.hooks "weight" "-10") | nindent 4 }}
+    {{- with .Values.commonAnnotations }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+data:
+  client.json: |
+{{- $client := dict
+      "clientId" .Values.sso.clientId
+      "name" "LiteLLM"
+      "description" "Managed by the litellm Helm chart."
+      "enabled" true
+      "protocol" "openid-connect"
+      "publicClient" false
+      "serviceAccountsEnabled" false
+      "standardFlowEnabled" true
+      "implicitFlowEnabled" false
+      "directAccessGrantsEnabled" false
+      "redirectUris" $redirectUris
+      "webOrigins" (list "+")
+      "rootUrl" $base
+      "baseUrl" $base
+      "attributes" (dict
+        "post.logout.redirect.uris" "+"
+        "pkce.code.challenge.method" (ternary "S256" "" .Values.sso.usePkce)) }}
+{{ toPrettyJson $client | indent 4 }}
+
+  mapper.json: |
+{{- /*
+  LiteLLM reads a flat `roles` claim from the id_token. Keycloak puts client
+  roles under resource_access.<client>.roles by default, which LiteLLM does not
+  look at, so without this mapper every user signs in carrying no role at all.
+*/}}
+{{- $mapper := dict
+      "name" "litellm-roles"
+      "protocol" "openid-connect"
+      "protocolMapper" "oidc-usermodel-client-role-mapper"
+      "config" (dict
+        "claim.name" "roles"
+        "jsonType.label" "String"
+        "multivalued" "true"
+        "usermodel.clientRoleMapping.clientId" .Values.sso.clientId
+        "id.token.claim" "true"
+        "access.token.claim" "true"
+        "userinfo.token.claim" "true") }}
+{{ toPrettyJson $mapper | indent 4 }}
+
+  bootstrap.sh: |
+    #!/usr/bin/env bash
+    set -euo pipefail
+
+    KC=/opt/keycloak/bin/kcadm.sh
+    CFG=/tmp/kcadm.config
+
+    log() { echo "[keycloak-bootstrap] $*"; }
+
+    # Reads the id of an object whose name matches exactly. kcadm's `-q search`
+    # is a substring match, so a lookup for "litellm-users" would also return
+    # "litellm-users-archive" and the first row is not necessarily the one
+    # asked for. Written as a bash loop because the image has no awk.
+    exact_id() { # stdin: csv of "id","name"   $1: wanted name
+      local wanted="$1" id name
+      while IFS=, read -r id name; do
+        id=${id//\"/}
+        name=${name//\"/}
+        if [ "$name" = "$wanted" ]; then
+          printf '%s' "$id"
+          return 0
+        fi
+      done
+      return 0
+    }
+
+    ADMIN_USER=$(cat /secret/admin/username)
+    ADMIN_PASSWORD=$(cat /secret/admin/password)
+    CLIENT_SECRET=$(cat /secret/sso/client-secret)
+
+    # ── Wait for Keycloak ────────────────────────────────────────────────────
+    # `config credentials` is the readiness check rather than an HTTP probe: it
+    # succeeds only once the server is up, its database is up, and the account
+    # can actually administer. An HTTP probe passes earlier and leaves the
+    # first real call to fail with a less obvious error.
+    log "Waiting up to ${WAIT_TIMEOUT}s for Keycloak at ${KEYCLOAK_URL} ..."
+    waited=0
+    until "$KC" config credentials --config "$CFG" \
+            --server "$KEYCLOAK_URL" --realm "$ADMIN_REALM" \
+            --user "$ADMIN_USER" --password "$ADMIN_PASSWORD" >/dev/null 2>&1; do
+      if [ "$waited" -ge "$WAIT_TIMEOUT" ]; then
+        log "ERROR: could not authenticate against ${KEYCLOAK_URL} within ${WAIT_TIMEOUT}s."
+        log "       Check the URL, that realm '${ADMIN_REALM}' holds the admin account, and the credentials."
+        exit 1
+      fi
+      sleep 5
+      waited=$((waited + 5))
+    done
+    log "Authenticated as '${ADMIN_USER}' against realm '${ADMIN_REALM}'."
+
+    if ! "$KC" get "realms/${REALM}" --config "$CFG" --fields realm >/dev/null 2>&1; then
+      log "ERROR: realm '${REALM}' does not exist."
+      log "       This Job configures a client inside an existing realm; it does not create realms."
+      exit 1
+    fi
+    log "Realm '${REALM}' is present."
+
+    # ── Client ───────────────────────────────────────────────────────────────
+    client_uuid=$("$KC" get clients -r "$REALM" --config "$CFG" \
+      -q "clientId=${CLIENT_ID}" --fields id,clientId --format csv 2>/dev/null | exact_id "$CLIENT_ID")
+
+    if [ -z "$client_uuid" ]; then
+      log "Creating client '${CLIENT_ID}' ..."
+      "$KC" create clients -r "$REALM" --config "$CFG" -f /scripts/client.json >/dev/null
+      client_uuid=$("$KC" get clients -r "$REALM" --config "$CFG" \
+        -q "clientId=${CLIENT_ID}" --fields id,clientId --format csv | exact_id "$CLIENT_ID")
+    else
+      # Updated unconditionally, so a changed hostname or path in the values
+      # reaches Keycloak on upgrade rather than drifting out of step with the
+      # Ingress until someone notices the redirect_uri error.
+      log "Client '${CLIENT_ID}' exists; updating it to match this release ..."
+      "$KC" update "clients/${client_uuid}" -r "$REALM" --config "$CFG" -f /scripts/client.json >/dev/null
+    fi
+
+    if [ -z "$client_uuid" ]; then
+      log "ERROR: client '${CLIENT_ID}' could not be resolved after create or update."
+      exit 1
+    fi
+
+    # Applied on its own so the secret never appears in the ConfigMap. Passed
+    # as a kcadm field rather than embedded in JSON, so the generated value
+    # needs no escaping.
+    "$KC" update "clients/${client_uuid}" -r "$REALM" --config "$CFG" -s "secret=${CLIENT_SECRET}" >/dev/null
+    log "Client '${CLIENT_ID}' is ready (${client_uuid}); its secret matches this release."
+
+    # ── Roles ────────────────────────────────────────────────────────────────
+    # Client roles rather than realm roles, so these names stay scoped to this
+    # client and cannot collide with another application in the same realm.
+    ensure_client_role() {
+      local role="$1" desc="$2"
+      if "$KC" get "clients/${client_uuid}/roles/${role}" -r "$REALM" --config "$CFG" --fields name >/dev/null 2>&1; then
+        log "  role '${role}' already present"
+      else
+        "$KC" create "clients/${client_uuid}/roles" -r "$REALM" --config "$CFG" \
+          -s "name=${role}" -s "description=${desc}" >/dev/null
+        log "  role '${role}' created"
+      fi
+    }
+
+    log "Ensuring client roles ..."
+    ensure_client_role "$ADMIN_ROLE" "LiteLLM administrator. Granted through the ${ADMIN_GROUP} group."
+    ensure_client_role "$USER_ROLE" "LiteLLM user. Granted through the ${USER_GROUP} group."
+
+    # ── Groups ───────────────────────────────────────────────────────────────
+    # Log lines go to stderr so they do not contaminate the captured id.
+    ensure_group() {
+      local group="$1" gid
+      gid=$("$KC" get groups -r "$REALM" --config "$CFG" \
+        -q "search=${group}" --fields id,name --format csv 2>/dev/null | exact_id "$group")
+      if [ -z "$gid" ]; then
+        "$KC" create groups -r "$REALM" --config "$CFG" -s "name=${group}" >/dev/null
+        gid=$("$KC" get groups -r "$REALM" --config "$CFG" \
+          -q "search=${group}" --fields id,name --format csv | exact_id "$group")
+        log "  group '${group}' created" >&2
+      else
+        log "  group '${group}' already present" >&2
+      fi
+      printf '%s' "$gid"
+    }
+
+    log "Ensuring groups ..."
+    admin_gid=$(ensure_group "$ADMIN_GROUP")
+    user_gid=$(ensure_group "$USER_GROUP")
+
+    if [ -z "$admin_gid" ] || [ -z "$user_gid" ]; then
+      log "ERROR: a group id could not be resolved after create."
+      exit 1
+    fi
+
+    # add-roles is idempotent: granting a role the group already holds is a
+    # no-op rather than an error.
+    log "Granting client roles to groups ..."
+    "$KC" add-roles -r "$REALM" --config "$CFG" \
+      --gid "$admin_gid" --cclientid "$CLIENT_ID" --rolename "$ADMIN_ROLE"
+    "$KC" add-roles -r "$REALM" --config "$CFG" \
+      --gid "$user_gid" --cclientid "$CLIENT_ID" --rolename "$USER_ROLE"
+    log "  '${ADMIN_GROUP}' -> ${ADMIN_ROLE}"
+    log "  '${USER_GROUP}' -> ${USER_ROLE}"
+
+    # ── Protocol mapper ──────────────────────────────────────────────────────
+    mapper_id=$("$KC" get "clients/${client_uuid}/protocol-mappers/models" -r "$REALM" --config "$CFG" \
+      --fields id,name --format csv 2>/dev/null | exact_id "litellm-roles")
+
+    if [ -z "$mapper_id" ]; then
+      "$KC" create "clients/${client_uuid}/protocol-mappers/models" -r "$REALM" --config "$CFG" \
+        -f /scripts/mapper.json >/dev/null
+      log "Role mapper 'litellm-roles' created."
+    else
+      # Updating a protocol mapper fails with a bare "unknown_error" unless the
+      # payload repeats the mapper's own id, so it is spliced in here. The
+      # rendered file starts with "{" on its own line, and the id is a Keycloak
+      # UUID, so this needs no escaping. The ConfigMap mount is read-only,
+      # hence the copy.
+      sed "1s|^{|{\"id\":\"${mapper_id}\",|" /scripts/mapper.json >/tmp/mapper-update.json
+      "$KC" update "clients/${client_uuid}/protocol-mappers/models/${mapper_id}" -r "$REALM" --config "$CFG" \
+        -f /tmp/mapper-update.json >/dev/null
+      log "Role mapper 'litellm-roles' updated."
+    fi
+    {{- if $kb.adminUser.enabled }}
+
+    # ── Administrator account ────────────────────────────────────────────────
+    user_id=$("$KC" get users -r "$REALM" --config "$CFG" \
+      -q "username=${LITELLM_ADMIN_USERNAME}" --fields id,username --format csv 2>/dev/null \
+      | exact_id "$LITELLM_ADMIN_USERNAME")
+
+    if [ -z "$user_id" ]; then
+      log "Creating user '${LITELLM_ADMIN_USERNAME}' ..."
+      create_args=(
+        -s "username=${LITELLM_ADMIN_USERNAME}"
+        -s "enabled=true"
+        -s "emailVerified=true"
+        -s "firstName=${LITELLM_ADMIN_FIRST_NAME}"
+        -s "lastName=${LITELLM_ADMIN_LAST_NAME}"
+      )
+      if [ -n "${LITELLM_ADMIN_EMAIL}" ]; then
+        create_args+=(-s "email=${LITELLM_ADMIN_EMAIL}")
+      fi
+      "$KC" create users -r "$REALM" --config "$CFG" "${create_args[@]}" >/dev/null
+      user_id=$("$KC" get users -r "$REALM" --config "$CFG" \
+        -q "username=${LITELLM_ADMIN_USERNAME}" --fields id,username --format csv \
+        | exact_id "$LITELLM_ADMIN_USERNAME")
+    else
+      log "User '${LITELLM_ADMIN_USERNAME}' already present."
+    fi
+
+    if [ -z "$user_id" ]; then
+      log "ERROR: user '${LITELLM_ADMIN_USERNAME}' could not be resolved after create."
+      exit 1
+    fi
+
+    # Reset on every run so the account always matches the Secret an operator
+    # can read. Without this, rotating the Secret would leave an account whose
+    # password nobody knows.
+    log "Setting the password for '${LITELLM_ADMIN_USERNAME}' ..."
+    if ! "$KC" set-password -r "$REALM" --config "$CFG" --userid "$user_id" \
+           --new-password "$(cat /secret/sso/admin-user-password)" \
+           {{ if $kb.adminUser.permanentPassword }}--temporary=false{{ else }}--temporary{{ end }}; then
+      # Realms very often carry a password policy, and Keycloak reports only
+      # the first rule that was broken. Naming the setting to change saves
+      # working back from the message to the values file.
+      log "ERROR: Keycloak rejected the password for '${LITELLM_ADMIN_USERNAME}' (see the message above)."
+      log "       The realm's password policy is stricter than the value in use."
+      log "       Inspect it with:"
+      log "         kcadm.sh get realms/${REALM} --fields passwordPolicy"
+      log "       Then set a conforming value in sso.keycloakBootstrap.adminUser.password."
+      exit 1
+    fi
+
+    # Adding a user to a group they already belong to returns 204, so this
+    # needs no existence check of its own.
+    log "Adding '${LITELLM_ADMIN_USERNAME}' to '${ADMIN_GROUP}' ..."
+    "$KC" update "users/${user_id}/groups/${admin_gid}" -r "$REALM" --config "$CFG" \
+      -s "realm=${REALM}" -s "userId=${user_id}" -s "groupId=${admin_gid}" -n
+    {{- end }}
+
+    log "Bootstrap complete."
+    log "  Admin UI: ${PROXY_BASE_URL}/ui"
+    log "  Members of '${ADMIN_GROUP}' sign in as LiteLLM administrators."
+    log "  Members of '${USER_GROUP}' sign in as LiteLLM users."
+{{- end }}

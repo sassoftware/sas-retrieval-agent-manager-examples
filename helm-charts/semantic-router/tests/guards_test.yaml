@@ -1,0 +1,124 @@
+suite: jailbreak and PII guards
+release:
+  name: sr
+  namespace: sr
+templates:
+  - charts/semantic-router/templates/configmap.yaml
+tests:
+  - it: configures no classifier at all when both guards are off
+    asserts:
+      - notMatchRegex:
+          path: data["config.yaml"]
+          pattern: "model_catalog"
+      - notMatchRegex:
+          path: data["config.yaml"]
+          pattern: "prompt_guard"
+      - notMatchRegex:
+          path: data["config.yaml"]
+          pattern: "Vela-1.0-Encoder"
+
+  # Upstream ships no model_catalog, so a module enabled without one loads
+  # nothing and scores nothing — it does not fail, it silently allows
+  # everything. The catalog entry and the module are rendered together.
+  - it: names the checkpoint in model_catalog.system when the jailbreak guard is on
+    set:
+      global.semanticRouter.guards.jailbreak.enabled: true
+    asserts:
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: "system:\n      prompt_guard: models/Vela-1.0-Encoder-307M-Guard"
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: "prompt_guard:\n        enabled: true"
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: "jailbreak_mapping_path: models/Vela-1.0-Encoder-307M-Guard/jailbreak_type_mapping.json"
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: "threshold: 0.7"
+      # An inference failure means the prompt could not be verified safe.
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: "on_error: block"
+
+  # Scoring a prompt is not rejecting it: the module produces a signal, and a
+  # decision with a fast_response plugin is what returns the refusal without
+  # ever calling a model.
+  - it: renders the signal and the blocking decision that enforce it
+    set:
+      global.semanticRouter.guards.jailbreak.enabled: true
+    asserts:
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: "jailbreak:\n    - description: Prompt-injection and jailbreak attempts."
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: "name: block_jailbreak"
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: "type: fast_response"
+      # Above the fallback decision, which sits at priority 1.
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: "priority: 1000"
+
+  - it: configures the PII classifier with windowed scanning when the PII guard is on
+    set:
+      global.semanticRouter.guards.pii.enabled: true
+    asserts:
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: "pii_classifier: models/Vela-1.0-Encoder-307M-PII"
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: "pii_mapping_path: models/Vela-1.0-Encoder-307M-PII/pii_mapping.json"
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: "max_sequence_length: 32768"
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: "name: block_pii"
+
+  - it: carries the allow-list of tolerated PII types into the signal
+    set:
+      global.semanticRouter.guards.pii.enabled: true
+      global.semanticRouter.guards.pii.allowedTypes: [EMAIL_ADDRESS]
+    asserts:
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: "pii_types_allowed:\n      - EMAIL_ADDRESS"
+
+  - it: takes a lowered threshold and a tolerant failure mode
+    set:
+      global.semanticRouter.guards.jailbreak.enabled: true
+      global.semanticRouter.guards.jailbreak.threshold: 0.45
+      global.semanticRouter.guards.jailbreak.onError: allow
+    asserts:
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: "threshold: 0.45"
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: "on_error: allow"
+
+  - it: runs both guards together
+    set:
+      global.semanticRouter.guards.jailbreak.enabled: true
+      global.semanticRouter.guards.pii.enabled: true
+    asserts:
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: "prompt_guard: models/Vela-1.0-Encoder-307M-Guard"
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: "pii_classifier: models/Vela-1.0-Encoder-307M-PII"
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: "name: block_jailbreak"
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: "name: block_pii"
+      # Still no credential, with guards on.
+      - notMatchRegex:
+          path: data["config.yaml"]
+          pattern: "access_key"
