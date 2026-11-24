@@ -13,7 +13,9 @@
     "kserve",
     "llmisvc",
     "localModel",
-    "runtimeConfigs"
+    "runtimeConfigs",
+    "lws",
+    "llmisvcConfigs"
    ],
    "properties": {
     "kserveCrd": {
@@ -35,6 +37,12 @@
      "$ref": "#/definitions/component"
     },
     "runtimeConfigs": {
+     "$ref": "#/definitions/component"
+    },
+    "lws": {
+     "$ref": "#/definitions/component"
+    },
+    "llmisvcConfigs": {
      "$ref": "#/definitions/component"
     }
    }
@@ -520,6 +528,10 @@
    "additionalProperties": true
   },
   "kserve-runtime-configs": {
+   "type": "object",
+   "additionalProperties": true
+  },
+  "lws": {
    "type": "object",
    "additionalProperties": true
   },

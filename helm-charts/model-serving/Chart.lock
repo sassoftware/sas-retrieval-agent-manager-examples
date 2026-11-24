@@ -20,5 +20,8 @@ dependencies:
 - name: kserve-runtime-configs
   repository: oci://ghcr.io/kserve/charts
   version: v0.20.0
-digest: sha256:1880a9d8556b7ef919eee7fabca54ffe730747d64114e3c413d16b028325afb6
-generated: "2026-09-15T10:56:17.4994242+02:00"
+- name: lws
+  repository: oci://registry.k8s.io/lws/charts
+  version: v0.7.0
+digest: sha256:1e8503e88729ec3660ef986568f9d90cc1367c2cbdad165b8fc60047e976c406
+generated: "2026-11-24T11:50:16.4346097+01:00"
