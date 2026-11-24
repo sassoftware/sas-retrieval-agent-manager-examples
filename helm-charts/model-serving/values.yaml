@@ -18,6 +18,25 @@ components:
     enabled: true
   runtimeConfigs:
     enabled: true
+  # LeaderWorkerSet: the CRD and controller a multi-node LLMInferenceService
+  # is reconciled into. Needed only by a model that carries a `worker` block;
+  # a single-node model never touches it.
+  #
+  # Off by default: a cluster-scoped operator with its own CRD, controller,
+  # RBAC and webhooks is a bigger thing to add than it looks, and a cluster
+  # serving single-node models never needs it.
+  lws:
+    enabled: false
+  # The LLMInferenceServiceConfig presets, rendered into a namespace the
+  # llmisvc controller actually searches. See templates/llmisvcconfigs.yaml:
+  # the upstream subchart ships them with `namespace: kserve` hardcoded, which
+  # cannot work.
+  #
+  # Off by default so an existing release does not suddenly gain ten objects.
+  # A cluster that renders its own base preset must leave this off, or the two
+  # collide on the same name.
+  llmisvcConfigs:
+    enabled: false
 
 commonLabels: {}
 commonAnnotations: {}

@@ -1,6 +1,6 @@
 # Model Serving Helm Chart
 
-This chart installs KServe and values-driven model workloads as one Helm release. It uses the seven official KServe `v0.20.0` OCI charts as locked dependencies instead of copying upstream manifests into this repository.
+This chart installs KServe and values-driven model workloads as one Helm release. It uses the seven official KServe `v0.20.0` OCI charts as locked dependencies instead of copying upstream manifests into this repository, plus the upstream LeaderWorkerSet chart for [multi-node models](#multi-node-models).
 
 ## Prerequisites
 
@@ -243,6 +243,58 @@ An empty map or list means "not set" and falls through to the next level. To
 stop a profile's `nodeSelector` from applying to one model, name a different
 profile or set the field to a value, rather than to `{}`.
 
+## Multi-node models
+
+An `LLMInferenceService` that carries a `worker` block is spread across nodes.
+KServe reconciles it into a **LeaderWorkerSet** rather than a Deployment, and
+combines it with a worker **preset**. Neither is available in a default
+install, so a multi-node model is accepted by the API and then never
+scheduled. Two switches make it work:
+
+```sh
+helm upgrade --install model-serving ./helm-charts/model-serving \
+  --set components.lws.enabled=true \
+  --set components.llmisvcConfigs.enabled=true
+```
+
+- **`components.lws.enabled`** installs the upstream LeaderWorkerSet chart: its
+  CRD, controller, RBAC and webhooks. KServe's llmisvc controller already
+  carries RBAC for `leaderworkerset.x-k8s.io`, but no KServe chart ships the
+  operator itself. Off by default because it is cluster-scoped and a
+  single-node model never touches it.
+
+- **`components.llmisvcConfigs.enabled`** renders the ten
+  `LLMInferenceServiceConfig` presets into the release namespace. Without the
+  worker preset the object reports:
+
+  ```text
+  PresetsCombined=False  ConfigNotFound
+  LLMInferenceServiceConfig "kserve-config-llm-worker-data-parallel" not found
+  ```
+
+  The presets must live where the controller searches, which is the model's
+  namespace or the controller's own. `kserve-runtime-configs` ships them with
+  `namespace: kserve` hardcoded, so enabling *its* copy either fails the
+  release outright on a cluster without that namespace, or creates presets
+  that are never found. This chart renders its own copy instead. Leave this
+  off if something else in the release already renders a preset of the same
+  name, or the two collide.
+
+### What multi-node buys, and what it does not
+
+The worker presets render `--data-parallel-size`, which is **whole copies** of
+the model across nodes for throughput. Each copy still has to fit the GPUs of
+one node, where `parallelism.tensor` shards it.
+
+For a model too large for a single node, the exception is a
+mixture-of-experts one: `parallelism.expert: true` renders
+`--enable-expert-parallel`, which shards experts across the data-parallel
+ranks.
+
+`parallelism.pipeline` is accepted by the CRD and **does nothing**. No shipped
+preset reads it, and the rendered container command carries no
+`--pipeline-parallel-size`.
+
 ## Local model cache
 
 KServe's LocalModel feature downloads model weights onto a set of nodes once and
@@ -335,9 +387,9 @@ deliberately owned by another release.
 
 ## Components
 
-Every upstream chart can be disabled under `components`. All seven are enabled by default. `kserve-resources` is the sole owner of shared resources; keep `kserve-llmisvc-resources.kserve.createSharedResources` disabled.
+Every upstream chart can be disabled under `components`. The seven KServe charts are enabled by default; `lws` and `llmisvcConfigs` are not, because only a multi-node model needs them. See [Multi-node models](#multi-node-models). `kserve-resources` is the sole owner of shared resources; keep `kserve-llmisvc-resources.kserve.createSharedResources` disabled.
 
-The dependency versions are pinned in `Chart.yaml` and `Chart.lock`. To upgrade KServe, update all seven dependency versions and `appVersion` together, then run:
+The dependency versions are pinned in `Chart.yaml` and `Chart.lock`. To upgrade KServe, update all seven KServe dependency versions and `appVersion` together, then run:
 
 ```sh
 helm dependency update helm-charts/model-serving
