@@ -1,0 +1,565 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "semantic-router chart values",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["image", "envoy", "service", "routing", "global", "semantic-router"],
+  "properties": {
+    "nameOverride": { "type": "string" },
+    "fullnameOverride": { "type": "string" },
+    "commonLabels": { "$ref": "#/definitions/stringMap" },
+    "commonAnnotations": { "$ref": "#/definitions/stringMap" },
+
+    "replicaCount": { "type": "integer", "minimum": 0 },
+    "image": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["repository", "tag"],
+      "properties": {
+        "repository": { "type": "string", "minLength": 1 },
+        "tag": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Pinned exactly. Envoy's bootstrap config is version-sensitive, so a floating tag can break a release that changed nothing."
+        },
+        "pullPolicy": { "enum": ["Always", "IfNotPresent", "Never"] }
+      }
+    },
+    "imagePullSecrets": { "$ref": "#/definitions/objectArray" },
+
+    "serviceAccount": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["create"],
+      "properties": {
+        "create": { "type": "boolean" },
+        "automount": { "type": "boolean" },
+        "annotations": { "$ref": "#/definitions/stringMap" },
+        "name": { "type": "string" }
+      }
+    },
+
+    "deploymentAnnotations": { "$ref": "#/definitions/stringMap" },
+    "deploymentLabels": { "$ref": "#/definitions/stringMap" },
+    "podAnnotations": { "$ref": "#/definitions/stringMap" },
+    "podLabels": { "$ref": "#/definitions/stringMap" },
+    "strategy": { "type": "object", "additionalProperties": true },
+    "terminationGracePeriodSeconds": { "type": "integer", "minimum": 0 },
+    "podSecurityContext": { "type": "object", "additionalProperties": true },
+    "securityContext": { "type": "object", "additionalProperties": true },
+    "resources": { "type": "object", "additionalProperties": true },
+    "nodeSelector": { "$ref": "#/definitions/stringMap" },
+    "tolerations": { "$ref": "#/definitions/objectArray" },
+    "affinity": { "type": "object", "additionalProperties": true },
+    "topologySpreadConstraints": { "$ref": "#/definitions/objectArray" },
+    "extraVolumes": { "$ref": "#/definitions/objectArray" },
+    "extraVolumeMounts": { "$ref": "#/definitions/objectArray" },
+    "extraEnv": { "$ref": "#/definitions/objectArray" },
+
+    "startupProbe": { "$ref": "#/definitions/probe" },
+    "readinessProbe": { "$ref": "#/definitions/probe" },
+    "livenessProbe": { "$ref": "#/definitions/probe" },
+
+    "envoy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["listenerPort", "statsPort", "adminPort", "extProc", "routes"],
+      "properties": {
+        "listenerPort": { "type": "integer", "minimum": 1, "maximum": 65535 },
+        "adminPort": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 65535,
+          "description": "Bound to 127.0.0.1 only. It serves /quitquitquit and a full config dump."
+        },
+        "statsPort": { "type": "integer", "minimum": 1, "maximum": 65535 },
+        "accessLog": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["enabled"],
+          "properties": { "enabled": { "type": "boolean" } }
+        },
+        "timeouts": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "route": { "$ref": "#/definitions/duration" },
+            "request": { "$ref": "#/definitions/duration" },
+            "streamIdle": { "$ref": "#/definitions/duration" },
+            "idle": { "$ref": "#/definitions/duration" }
+          }
+        },
+        "perConnectionBufferLimitBytes": { "type": "integer", "minimum": 1024 },
+        "extProc": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["failureModeAllow", "requestBodyMode", "responseBodyMode"],
+          "properties": {
+            "failureModeAllow": {
+              "type": "boolean",
+              "description": "false rejects a request the router could not process. true forwards it unrouted, which also bypasses the guards."
+            },
+            "messageTimeout": { "$ref": "#/definitions/duration" },
+            "maxMessageTimeout": { "$ref": "#/definitions/duration" },
+            "requestBodyMode": {
+              "enum": ["NONE", "STREAMED", "BUFFERED", "BUFFERED_PARTIAL", "FULL_DUPLEX_STREAMED"],
+              "description": "BUFFERED is required for classification: the prompt is in the request body."
+            },
+            "responseBodyMode": {
+              "enum": ["NONE", "STREAMED", "BUFFERED", "BUFFERED_PARTIAL", "FULL_DUPLEX_STREAMED"]
+            },
+            "allowModeOverride": { "type": "boolean" },
+            "useHeadlessService": { "type": "boolean" },
+            "connectTimeout": { "$ref": "#/definitions/duration" }
+          }
+        },
+        "routes": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["allowedPaths", "deny"],
+          "properties": {
+            "allowedPaths": {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "minProperties": 1,
+                "maxProperties": 1,
+                "properties": {
+                  "path": { "type": "string", "pattern": "^/" },
+                  "prefix": { "type": "string", "pattern": "^/" }
+                }
+              }
+            },
+            "modelsFromRouter": { "type": "boolean" },
+            "modelsPath": { "type": "string", "pattern": "^/" },
+            "extraRoutes": { "$ref": "#/definitions/objectArray" },
+            "deny": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["status"],
+              "properties": {
+                "status": { "type": "integer", "minimum": 100, "maximum": 599 },
+                "contentType": { "type": "string" },
+                "body": { "type": "string" }
+              }
+            }
+          }
+        },
+        "sanitizeResponse": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "enabled": { "type": "boolean" },
+            "fields": {
+              "type": "array",
+              "items": { "type": "string", "pattern": "^[A-Za-z0-9_]+$" }
+            }
+          }
+        },
+        "extraClusters": { "$ref": "#/definitions/objectArray" }
+      }
+    },
+
+    "service": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "port"],
+      "properties": {
+        "type": { "enum": ["ClusterIP", "NodePort", "LoadBalancer", "ExternalName"] },
+        "port": { "type": "integer", "minimum": 1, "maximum": 65535 },
+        "annotations": { "$ref": "#/definitions/stringMap" },
+        "loadBalancerClass": { "type": "string" },
+        "loadBalancerSourceRanges": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+
+    "routing": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "ingress", "httpRoute", "httpProxy", "route"],
+      "properties": {
+        "hosts": { "type": "array", "items": { "type": "string", "minLength": 1 } },
+        "path": { "type": "string", "pattern": "^/" },
+        "tls": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["enabled"],
+          "properties": {
+            "enabled": { "type": "boolean" },
+            "secretName": { "type": "string" }
+          }
+        },
+        "annotations": { "$ref": "#/definitions/stringMap" },
+        "labels": { "$ref": "#/definitions/stringMap" },
+        "ingress": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["enabled"],
+          "properties": {
+            "enabled": { "type": "boolean" },
+            "className": { "type": "string" },
+            "pathType": { "enum": ["Prefix", "Exact", "ImplementationSpecific"] },
+            "annotations": { "$ref": "#/definitions/stringMap" },
+            "extraPaths": { "$ref": "#/definitions/objectArray" }
+          }
+        },
+        "httpRoute": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["enabled"],
+          "properties": {
+            "enabled": { "type": "boolean" },
+            "parentRefs": { "$ref": "#/definitions/objectArray" },
+            "matches": { "$ref": "#/definitions/objectArray" },
+            "filters": { "$ref": "#/definitions/objectArray" },
+            "timeouts": { "type": "object", "additionalProperties": true },
+            "extraRules": { "$ref": "#/definitions/objectArray" },
+            "annotations": { "$ref": "#/definitions/stringMap" }
+          }
+        },
+        "httpProxy": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["enabled"],
+          "properties": {
+            "enabled": { "type": "boolean" },
+            "delegated": { "type": "boolean" },
+            "ingressClassName": { "type": "string" },
+            "tls": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "secretName": { "type": "string" },
+                "minimumProtocolVersion": { "type": "string" },
+                "passthrough": { "type": "boolean" }
+              }
+            },
+            "conditions": { "$ref": "#/definitions/objectArray" },
+            "loadBalancerPolicy": { "type": "object", "additionalProperties": true },
+            "timeoutPolicy": { "type": "object", "additionalProperties": true },
+            "retryPolicy": { "type": "object", "additionalProperties": true },
+            "extraRoutes": { "$ref": "#/definitions/objectArray" },
+            "includes": { "$ref": "#/definitions/objectArray" },
+            "annotations": { "$ref": "#/definitions/stringMap" }
+          }
+        },
+        "route": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["enabled"],
+          "properties": {
+            "enabled": { "type": "boolean" },
+            "wildcardPolicy": { "enum": ["None", "Subdomain"] },
+            "tls": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "termination": { "enum": ["edge", "passthrough", "reencrypt"] },
+                "insecureEdgeTerminationPolicy": { "enum": ["", "None", "Allow", "Redirect"] },
+                "destinationCACertificate": { "type": "string" }
+              }
+            },
+            "annotations": { "$ref": "#/definitions/stringMap" }
+          }
+        }
+      }
+    },
+
+    "pdb": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["enabled"],
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "minAvailable": { "type": ["integer", "string", "null"] },
+        "maxUnavailable": { "type": ["integer", "string", "null"] },
+        "annotations": { "$ref": "#/definitions/stringMap" },
+        "labels": { "$ref": "#/definitions/stringMap" }
+      }
+    },
+
+    "serviceMonitor": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["enabled"],
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "interval": { "$ref": "#/definitions/duration" },
+        "scrapeTimeout": { "$ref": "#/definitions/duration" },
+        "labels": { "$ref": "#/definitions/stringMap" },
+        "annotations": { "$ref": "#/definitions/stringMap" },
+        "namespaceSelector": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "matchNames": { "type": "array", "items": { "type": "string" } }
+          }
+        },
+        "relabelings": { "$ref": "#/definitions/objectArray" },
+        "router": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["enabled"],
+          "properties": {
+            "enabled": { "type": "boolean" },
+            "path": { "type": "string", "pattern": "^/" }
+          }
+        }
+      }
+    },
+
+    "networkPolicy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["enabled"],
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "modelController": {
+          "allOf": [{ "$ref": "#/definitions/apiClient" }],
+          "description": "The only WRITER of router config (PATCH /api/v1/config, ETag-guarded)."
+        },
+        "extensionApi": {
+          "allOf": [{ "$ref": "#/definitions/apiClient" }],
+          "description": "READ-ONLY client: GET /api/v1/config, POST /api/v1/config/validate, GET /api/v1/status, POST /api/v1/routing/preview. It serves the policy editor and never writes."
+        },
+        "allowEnvoyToManagementApi": { "type": "boolean" },
+        "metricsScrape": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["enabled"],
+          "properties": {
+            "enabled": { "type": "boolean" },
+            "podSelector": { "type": "object", "additionalProperties": true },
+            "namespaceSelector": { "type": "object", "additionalProperties": true }
+          }
+        },
+        "extraIngress": { "$ref": "#/definitions/objectArray" }
+      }
+    },
+
+    "extraResources": { "$ref": "#/definitions/objectArray" },
+
+    "global": {
+      "type": "object",
+      "additionalProperties": true,
+      "description": "Declared explicitly, and NOT omitted: Helm injects `global` into every chart's values, so a strict schema without it rejects this chart the moment anything depends on it — or the moment an operator sets a global of their own.",
+      "properties": {
+        "semanticRouter": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "Values the router config needs. They live under `global` because that is the only map both this chart and the upstream subchart can read, and Helm does not template values.",
+          "properties": {
+            "litellm": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "releaseName": { "type": "string" },
+                "serviceName": { "type": "string" },
+                "namespace": { "type": "string" },
+                "port": { "type": "integer", "minimum": 1, "maximum": 65535 },
+                "serverRootPath": {
+                  "type": "string",
+                  "pattern": "^(|/[^/].*[^/]|/[^/])$",
+                  "description": "The prefix LiteLLM is mounted under. Part of the backend URL, because that is what the proxy serves."
+                },
+                "baseUrl": {
+                  "type": "string",
+                  "pattern": "^(|https?://.*/v1)$",
+                  "description": "Must end in /v1: a backend ref's base_url replaces the OpenAI protocol's canonical base path rather than prefixing it."
+                }
+              }
+            },
+            "routerService": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "name": { "type": "string" },
+                "namespace": { "type": "string" },
+                "grpcPort": { "type": "integer", "minimum": 1, "maximum": 65535 },
+                "apiPort": { "type": "integer", "minimum": 1, "maximum": 65535 },
+                "metricsPort": { "type": "integer", "minimum": 1, "maximum": 65535 }
+              }
+            },
+            "autoModelNames": {
+              "type": "array",
+              "minItems": 1,
+              "items": { "type": "string", "minLength": 1 }
+            },
+            "managementApi": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "auth": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "mode": { "enum": ["bearer", "disabled"] },
+                    "tokenEnv": { "type": "string", "pattern": "^[A-Z_][A-Z0-9_]*$" }
+                  }
+                },
+                "token": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "create": { "type": "boolean" },
+                    "value": { "type": "string" },
+                    "existingSecret": {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "properties": {
+                        "name": { "type": "string" },
+                        "key": {
+                          "type": "string",
+                          "description": "Must equal auth.tokenEnv: envFromSecrets projects each key as an environment variable of the same name."
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            },
+            "guards": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "jailbreak": { "$ref": "#/definitions/guard" },
+                "pii": { "$ref": "#/definitions/guard" }
+              }
+            },
+            "semanticCache": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["enabled"],
+              "properties": {
+                "enabled": { "type": "boolean" },
+                "backend": { "enum": ["memory", "redis"] },
+                "similarityThreshold": { "type": "number", "exclusiveMinimum": 0, "maximum": 1 },
+                "maxEntries": { "type": "integer", "minimum": 1 },
+                "ttlSeconds": { "type": "integer", "minimum": 1 },
+                "evictionPolicy": { "enum": ["fifo", "lru", "lfu"] },
+                "embeddingModel": { "type": "string", "minLength": 1 },
+                "redis": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "address": { "type": "string" },
+                    "database": { "type": "integer", "minimum": 0 },
+                    "password": { "type": "string" },
+                    "tls": {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "properties": { "enabled": { "type": "boolean" } }
+                    }
+                  }
+                }
+              }
+            },
+            "tracing": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["enabled"],
+              "properties": {
+                "enabled": { "type": "boolean" },
+                "endpoint": { "type": "string" },
+                "samplingRate": { "type": "number", "minimum": 0, "maximum": 1 }
+              }
+            }
+          }
+        }
+      }
+    },
+
+    "semantic-router": {
+      "type": "object",
+      "additionalProperties": true,
+      "description": "Upstream chart values, validated by its own schema. Only the keys this chart reads back are constrained here.",
+      "required": ["enabled"],
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "replicaCount": { "type": "integer", "minimum": 0 },
+        "envFromSecrets": { "type": "array", "items": { "type": "string", "minLength": 1 } },
+        "persistence": {
+          "type": "object",
+          "additionalProperties": true,
+          "properties": {
+            "enabled": { "type": "boolean" },
+            "size": { "type": "string", "minLength": 1 }
+          }
+        },
+        "configOverride": { "type": ["object", "null"], "additionalProperties": true },
+        "config": { "type": ["object", "null"], "additionalProperties": true },
+        "configMap": {
+          "type": "object",
+          "additionalProperties": true,
+          "properties": { "applyValuesRevision": { "type": "string" } }
+        },
+        "safetyGuards": {
+          "type": "object",
+          "additionalProperties": true,
+          "properties": { "rejectMultiReplicaLocalLearningState": { "type": "boolean" } }
+        }
+      }
+    }
+  },
+
+  "definitions": {
+    "stringMap": {
+      "type": ["object", "null"],
+      "additionalProperties": { "type": ["string", "number", "boolean"] }
+    },
+    "objectArray": {
+      "type": "array",
+      "items": { "type": "object", "additionalProperties": true }
+    },
+    "duration": {
+      "type": "string",
+      "pattern": "^[0-9]+(\\.[0-9]+)?(ms|s|m|h)$"
+    },
+    "probe": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path"],
+      "properties": {
+        "path": { "type": "string", "pattern": "^/" },
+        "initialDelaySeconds": { "type": "integer", "minimum": 0 },
+        "periodSeconds": { "type": "integer", "minimum": 1 },
+        "timeoutSeconds": { "type": "integer", "minimum": 1 },
+        "successThreshold": { "type": "integer", "minimum": 1 },
+        "failureThreshold": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "apiClient": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["enabled"],
+      "description": "One client of the router's management API. Each is a separate ingress rule, so either can be revoked without the other. A client enabled with both selectors empty is refused at render time: that would admit every pod in the namespace.",
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "podSelector": { "type": "object", "additionalProperties": true },
+        "namespaceSelector": { "type": "object", "additionalProperties": true }
+      }
+    },
+    "guard": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["enabled"],
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "threshold": { "type": "number", "exclusiveMinimum": 0, "maximum": 1 },
+        "onError": {
+          "enum": ["allow", "block"],
+          "description": "block treats a classifier failure as a hit: content that could not be verified safe is not safe."
+        },
+        "modelPath": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Rendered into global.model_catalog.system. Upstream ships no default, and a guard with no catalog entry silently scores nothing."
+        },
+        "allowedTypes": { "type": "array", "items": { "type": "string" } },
+        "maxSequenceLength": { "type": "integer", "minimum": 1 }
+      }
+    }
+  }
+}

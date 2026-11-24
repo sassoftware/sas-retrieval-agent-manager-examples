@@ -1,0 +1,289 @@
+suite: envoy data plane
+release:
+  name: sr
+  namespace: sr
+tests:
+  - it: calls the router over ext_proc and fails closed
+    templates:
+      - templates/configmap-envoy.yaml
+    asserts:
+      - matchRegex:
+          path: data["envoy.yaml"]
+          pattern: "type.googleapis.com/envoy.extensions.filters.http.ext_proc.v3.ExternalProcessor"
+      - matchRegex:
+          path: data["envoy.yaml"]
+          pattern: "failure_mode_allow: false"
+      - matchRegex:
+          path: data["envoy.yaml"]
+          pattern: "cluster_name: semantic_router_ext_proc"
+      # The prompt is in the request body, so classification needs it whole.
+      - matchRegex:
+          path: data["envoy.yaml"]
+          pattern: "request_body_mode: BUFFERED"
+      # Tokens have to reach the client as they are produced.
+      - matchRegex:
+          path: data["envoy.yaml"]
+          pattern: "response_body_mode: STREAMED"
+      # ext_proc must run before the router filter picks a cluster.
+      - matchRegex:
+          path: data["envoy.yaml"]
+          pattern: "ext_proc[\\s\\S]*filters.http.router"
+
+  - it: can be made to fail open for a deployment where routing is only an optimisation
+    templates:
+      - templates/configmap-envoy.yaml
+    set:
+      envoy.extProc.failureModeAllow: true
+    asserts:
+      - matchRegex:
+          path: data["envoy.yaml"]
+          pattern: "failure_mode_allow: true"
+
+  - it: balances gRPC streams across router pods through the headless Service
+    templates:
+      - templates/configmap-envoy.yaml
+    asserts:
+      - matchRegex:
+          path: data["envoy.yaml"]
+          pattern: "address: sr-semantic-router-headless.sr.svc.cluster.local"
+      - matchRegex:
+          path: data["envoy.yaml"]
+          pattern: "port_value: 50051"
+      # envoy_grpc requires HTTP/2 to be configured explicitly.
+      - matchRegex:
+          path: data["envoy.yaml"]
+          pattern: "http2_protocol_options"
+
+  - it: rewrites the client's /v1 path onto LiteLLM's mount prefix
+    templates:
+      - templates/configmap-envoy.yaml
+    asserts:
+      - matchRegex:
+          path: data["envoy.yaml"]
+          pattern: 'path: "/v1/chat/completions"'
+      - matchRegex:
+          path: data["envoy.yaml"]
+          pattern: 'prefix_rewrite: "/litellm/v1/chat/completions"'
+      - matchRegex:
+          path: data["envoy.yaml"]
+          pattern: "address: litellm.sr.svc.cluster.local"
+
+  # The router rewrites the path onto its backend's base_url, which already
+  # carries the mount prefix, so a classified request comes back round as the
+  # REWRITTEN path. Publish only the client-facing one and the router's own
+  # answer falls through to the catch-all: a model is selected and Envoy then
+  # refuses the result with path_not_routed. Unrouted requests still work,
+  # which is what made it look like the router was ignored rather than broken.
+  - it: also publishes the path its own rewrite produces
+    templates:
+      - templates/configmap-envoy.yaml
+    asserts:
+      - matchRegex:
+          path: data["envoy.yaml"]
+          pattern: 'path: "/litellm/v1/chat/completions"'
+      # Once on the rewritten path there is nothing left to rewrite. Asserted
+      # as the absence of a second rewrite rather than the presence of what
+      # follows, because Go's regexp has no negative lookahead and what
+      # follows is a comment.
+      - notMatchRegex:
+          path: data["envoy.yaml"]
+          pattern: 'path: "/litellm/v1/chat/completions"\n\s+route:\n\s+cluster: litellm\n\s+timeout: [^\n]+\n\s+prefix_rewrite'
+
+  - it: sends the path through unchanged when LiteLLM claims the domain root
+    templates:
+      - templates/configmap-envoy.yaml
+    set:
+      global.semanticRouter.litellm.serverRootPath: ""
+    asserts:
+      - notMatchRegex:
+          path: data["envoy.yaml"]
+          pattern: "prefix_rewrite"
+      # Nothing rewrites, so there is no second path to publish either.
+      - notMatchRegex:
+          path: data["envoy.yaml"]
+          pattern: 'path: "/litellm'
+
+  # The router decodes responses strictly and 502s on any field outside the
+  # canonical OpenAI shape, after the model has produced the answer and been
+  # billed for it. LiteLLM always adds several.
+  - it: strips the proxy's vendor fields before the router decodes the response
+    templates:
+      - templates/configmap-envoy.yaml
+    asserts:
+      - matchRegex:
+          path: data["envoy.yaml"]
+          pattern: "type.googleapis.com/envoy.extensions.filters.http.lua.v3.Lua"
+      - matchRegex:
+          path: data["envoy.yaml"]
+          pattern: '"provider_specific_fields"'
+      - matchRegex:
+          path: data["envoy.yaml"]
+          pattern: '"latency_checkpoint"'
+      # Response filters run in REVERSE of the configured order, so the
+      # sanitiser must come AFTER ext_proc here to run BEFORE it on the way
+      # back. Configured the other way round it never sees the vendor fields.
+      - matchRegex:
+          path: data["envoy.yaml"]
+          pattern: "(?s)filters\\.http\\.ext_proc.*filters\\.http\\.lua.*filters\\.http\\.router"
+
+  - it: leaves the response alone when told the proxy is already canonical
+    templates:
+      - templates/configmap-envoy.yaml
+    set:
+      envoy.sanitizeResponse.enabled: false
+    asserts:
+      - notMatchRegex:
+          path: data["envoy.yaml"]
+          pattern: "filters.http.lua"
+
+  # The counterpart of fail-closed ext_proc: an entrypoint that publishes chat,
+  # not a general-purpose proxy in front of LiteLLM's management API and UI.
+  - it: denies every path it was not told to publish
+    templates:
+      - templates/configmap-envoy.yaml
+    asserts:
+      - matchRegex:
+          path: data["envoy.yaml"]
+          pattern: "direct_response:\\s*\\n\\s*status: 403"
+      - matchRegex:
+          path: data["envoy.yaml"]
+          pattern: "path_not_routed"
+
+  - it: can publish the router's own model list instead of LiteLLM's
+    templates:
+      - templates/configmap-envoy.yaml
+    set:
+      envoy.routes.modelsFromRouter: true
+      networkPolicy.allowEnvoyToManagementApi: true
+    asserts:
+      - matchRegex:
+          path: data["envoy.yaml"]
+          pattern: "cluster: semantic_router_api"
+      - matchRegex:
+          path: data["envoy.yaml"]
+          pattern: "cluster_name: semantic_router_api"
+
+  - it: keeps the admin interface on loopback and publishes only /ready and /stats
+    templates:
+      - templates/configmap-envoy.yaml
+    asserts:
+      - matchRegex:
+          path: data["envoy.yaml"]
+          pattern: "admin:\\s*\\n\\s*address:\\s*\\n\\s*socket_address:\\s*\\n\\s*address: 127.0.0.1"
+      - matchRegex:
+          path: data["envoy.yaml"]
+          pattern: "path: /ready"
+      - matchRegex:
+          path: data["envoy.yaml"]
+          pattern: "path: /stats/prometheus"
+
+  - it: runs non-root with a read-only root filesystem
+    templates:
+      - templates/deployment-envoy.yaml
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].securityContext.readOnlyRootFilesystem
+          value: true
+      - equal:
+          path: spec.template.spec.containers[0].securityContext.runAsNonRoot
+          value: true
+      - equal:
+          path: spec.template.spec.containers[0].securityContext.allowPrivilegeEscalation
+          value: false
+      - contains:
+          path: spec.template.spec.containers[0].securityContext.capabilities.drop
+          content: ALL
+      # Read-only root still needs somewhere to put the admin socket.
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: tmp
+            emptyDir: {}
+      - equal:
+          path: spec.template.spec.automountServiceAccountToken
+          value: false
+
+  # Envoy reads its bootstrap once, at start. Without the checksum a `helm
+  # upgrade` that changes a timeout would update the ConfigMap and nothing else.
+  - it: rolls the pods when the bootstrap changes
+    templates:
+      - templates/deployment-envoy.yaml
+    asserts:
+      - exists:
+          path: spec.template.metadata.annotations["checksum/config"]
+
+  - it: probes Envoy's own readiness on the stats listener
+    templates:
+      - templates/deployment-envoy.yaml
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].readinessProbe.httpGet.path
+          value: /ready
+      - equal:
+          path: spec.template.spec.containers[0].readinessProbe.httpGet.port
+          value: stats
+      - equal:
+          path: spec.template.spec.containers[0].startupProbe.httpGet.port
+          value: stats
+
+  - it: defaults to one replica and a pinned image
+    templates:
+      - templates/deployment-envoy.yaml
+    asserts:
+      - equal:
+          path: spec.replicas
+          value: 1
+      - matchRegex:
+          path: spec.template.spec.containers[0].image
+          pattern: "^docker.io/envoyproxy/envoy:distroless-v[0-9]"
+
+  - it: publishes the listener and keeps the stats port on a Service of its own
+    templates:
+      - templates/service.yaml
+    asserts:
+      - equal:
+          path: spec.ports[0].port
+          value: 8080
+        documentIndex: 0
+      - equal:
+          path: metadata.name
+          value: sr-semantic-router-envoy
+        documentIndex: 0
+      - equal:
+          path: metadata.name
+          value: sr-semantic-router-envoy-stats
+        documentIndex: 1
+      # The Envoy Service must not select the router's pods, whose component
+      # label is `router`.
+      - equal:
+          path: spec.selector["app.kubernetes.io/component"]
+          value: envoy
+        documentIndex: 0
+
+  # Why the router chose what it chose.
+  #
+  # These headers are the ONLY place the decision is reported: v0.4.0's
+  # management API keeps no per-query history, and the caller is RAM rather
+  # than anything this release can instrument. RESP rather than REQ, because
+  # the decision is known on the way back.
+  - it: logs the routing decision, its cost and its latency
+    templates:
+      - templates/configmap-envoy.yaml
+    asserts:
+      - matchRegex:
+          path: data["envoy.yaml"]
+          pattern: 'decision: "%RESP\(X-VSR-SELECTED-DECISION\)%"'
+      - matchRegex:
+          path: data["envoy.yaml"]
+          pattern: 'decision_algorithm: "%RESP\(X-VSR-SELECTED-ALGORITHM\)%"'
+      # Says `upstream` when a model produced the answer, so anything else
+      # means something answered without calling one.
+      - matchRegex:
+          path: data["envoy.yaml"]
+          pattern: 'response_path: "%RESP\(X-VSR-RESPONSE-PATH\)%"'
+      - matchRegex:
+          path: data["envoy.yaml"]
+          pattern: 'cost_input: "%RESP\(X-LITELLM-RESPONSE-COST-INPUT\)%"'
+      - matchRegex:
+          path: data["envoy.yaml"]
+          pattern: 'model_latency_ms: "%RESP\(X-LITELLM-RESPONSE-DURATION-MS\)%"'

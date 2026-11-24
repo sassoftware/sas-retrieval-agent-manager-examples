@@ -5,10 +5,11 @@ news document collection and web search tools to answer questions about medical 
 public health, FDA approvals, and health policy.
 
 This agent is designed to be used as a **sub-agent** of the
-[News Orchestrator](../../agent_orchestrators/news_orchestrator/), but can also be used as a 
+[News Orchestrator](../../agent_orchestrators/news_orchestrator/), but can also be used as a
 standalone agent.
 
 > **Note:** Before configuring this agent, you must set up:
+>
 > 1. The [News Search Tools](../../code_mcp_servers/news_search_tools/) MCP server.
 > 2. A **Health News** custom source and collection. See the
 >    [News Custom Source](../../custom_sources/news_source/) example (use `CATEGORY = 'health'`).

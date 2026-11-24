@@ -1,0 +1,71 @@
+suite: model workloads
+templates:
+  - templates/hf-secret.yaml
+  - templates/inferenceservices.yaml
+  - templates/llminferenceservices.yaml
+set:
+  namespace: fixture-models
+  hfSecret:
+    enabled: true
+    managed: true
+    name: fixture-hf
+    token: test-only
+  models:
+    - name: test-model
+      storageUri: hf://org/model
+  llmInferenceServices:
+    - name: test-llm
+      model:
+        uri: hf://org/llm
+      worker: {}
+tests:
+  - it: creates managed credentials and service account
+    template: templates/hf-secret.yaml
+    asserts:
+      - hasDocuments:
+          count: 2
+      - isKind:
+          of: Secret
+        documentIndex: 0
+      - equal:
+          path: metadata.namespace
+          value: fixture-models
+        documentIndex: 0
+      - equal:
+          path: stringData.HF_TOKEN
+          value: test-only
+        documentIndex: 0
+      - isKind:
+          of: ServiceAccount
+        documentIndex: 1
+  - it: renders an InferenceService with defaults and HF token
+    template: templates/inferenceservices.yaml
+    asserts:
+      - isKind:
+          of: InferenceService
+      - equal:
+          path: metadata.name
+          value: test-model
+      - equal:
+          path: spec.predictor.model.runtime
+          value: kserve-openvino
+      - equal:
+          path: spec.predictor.model.env[0].name
+          value: HF_TOKEN
+  - it: renders an LLMInferenceService with an empty worker override
+    template: templates/llminferenceservices.yaml
+    asserts:
+      - isKind:
+          of: LLMInferenceService
+      - equal:
+          path: metadata.name
+          value: test-llm
+      - equal:
+          path: spec.model.uri
+          value: hf://org/llm
+      - equal:
+          path: spec.worker.containers[0].image
+          value: vllm/vllm-openai:latest
+      - equal:
+          path: spec.worker.containers[0].env[0].name
+          value: HF_TOKEN

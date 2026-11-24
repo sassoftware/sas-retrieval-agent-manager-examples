@@ -1,0 +1,3 @@
+<link rel="icon" href="{{ '/assets/images/sas-favicon.ico' | relative_url }}" sizes="any">
+{%- assign docs_css = site.static_files | where: "path", "/assets/css/sas-documentation.css" | first -%}
+<link rel="stylesheet" href="{{ '/assets/css/sas-documentation.css' | relative_url }}?v={{ docs_css.modified_time | date: '%s' }}">

@@ -1,0 +1,16 @@
+{{- include "litellm.validate" . -}}
+{{- if not .Values.config.existingConfigMap.name }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "litellm.configMapName" . }}
+  labels:
+    {{- include "litellm.labels" . | nindent 4 }}
+  {{- with .Values.commonAnnotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+data:
+  {{ include "litellm.configMapKey" . }}: |
+    {{- include "litellm.proxyConfig" . | nindent 4 }}
+{{- end }}

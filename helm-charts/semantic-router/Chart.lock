@@ -1,0 +1,6 @@
+dependencies:
+- name: semantic-router
+  repository: oci://ghcr.io/vllm-project/charts
+  version: 0.4.0
+digest: sha256:ec935a69623c57e68732c446bf5b57272aefb9b48f54c34792e3ced4a2049b6e
+generated: "2026-10-22T15:16:23.5266399+02:00"

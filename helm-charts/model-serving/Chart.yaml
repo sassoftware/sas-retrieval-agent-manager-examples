@@ -1,0 +1,54 @@
+apiVersion: v2
+name: model-serving
+description: >
+  KServe umbrella chart. Installs the upstream KServe charts and adds OpenVINO
+  and vLLM CPU/GPU ClusterServingRuntimes plus values-driven model deployments.
+type: application
+version: 0.7.0
+appVersion: "v0.20.0"
+dependencies:
+  - name: kserve-crd
+    version: v0.20.0
+    repository: oci://ghcr.io/kserve/charts
+    condition: components.kserveCrd.enabled
+  - name: kserve-llmisvc-crd
+    version: v0.20.0
+    repository: oci://ghcr.io/kserve/charts
+    condition: components.llmisvcCrd.enabled
+  - name: kserve-localmodel-crd
+    version: v0.20.0
+    repository: oci://ghcr.io/kserve/charts
+    condition: components.localModelCrd.enabled
+  - name: kserve-resources
+    version: v0.20.0
+    repository: oci://ghcr.io/kserve/charts
+    condition: components.kserve.enabled
+  - name: kserve-llmisvc-resources
+    version: v0.20.0
+    repository: oci://ghcr.io/kserve/charts
+    condition: components.llmisvc.enabled
+  - name: kserve-localmodel-resources
+    version: v0.20.0
+    repository: oci://ghcr.io/kserve/charts
+    condition: components.localModel.enabled
+  - name: kserve-runtime-configs
+    version: v0.20.0
+    repository: oci://ghcr.io/kserve/charts
+    condition: components.runtimeConfigs.enabled
+  # LeaderWorkerSet, which is what an LLMInferenceService with a `worker`
+  # block is reconciled into. KServe's llmisvc controller already carries RBAC
+  # for leaderworkerset.x-k8s.io, but no KServe chart ships the CRD or the
+  # controller, so without this a multi-node model is accepted and then never
+  # scheduled.
+  #
+  # Off by default: it is a cluster-scoped operator -- its own CRD, controller,
+  # RBAC and admission webhooks -- and a single-node model never needs any of
+  # it. Turn it on where multi-node is wanted.
+  #
+  # Its webhooks are failurePolicy: Fail, but the pod one carries an
+  # objectSelector on leaderworkerset.sigs.k8s.io/name, so an outage affects
+  # pods belonging to a LeaderWorkerSet and nothing else.
+  - name: lws
+    version: v0.7.0
+    repository: oci://registry.k8s.io/lws/charts
+    condition: components.lws.enabled

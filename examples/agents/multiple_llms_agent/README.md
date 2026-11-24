@@ -30,14 +30,14 @@ No environment variables are required for this example.
 ### Aliases
 
 This agent uses the following LLM aliases:
-  - "high_reasoning_llm"
-  - "low_reasoning_llm"
+
+- "high_reasoning_llm"
+- "low_reasoning_llm"
 
 Edit [run.py](run.py) to configure which aliases are used:
 
 - `low_reasoning_llm`
 - `high_reasoning_llm`
-
 
 ## Runtime Behavior
 
@@ -45,7 +45,6 @@ The agent routes prompts as follows:
 
 - Prompts tagged for high reasoning are sent to `high_reasoning_llm`
 - Prompts tagged for low reasoning (or unspecified) are sent to `low_reasoning_llm`
-
 
 ## Example Prompts
 

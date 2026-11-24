@@ -1,0 +1,63 @@
+suite: semantic cache
+release:
+  name: sr
+  namespace: sr
+templates:
+  - charts/semantic-router/templates/configmap.yaml
+tests:
+  # It answers a SIMILAR prompt from a previous answer, which changes
+  # behaviour and not just latency, so it ships off.
+  - it: is off by default
+    asserts:
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: "response_cache:\n      enabled: false"
+      - notMatchRegex:
+          path: data["config.yaml"]
+          pattern: "similarity_threshold"
+
+  - it: uses the in-process store when enabled without a backend
+    set:
+      global.semanticRouter.semanticCache.enabled: true
+    asserts:
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: "backend_type: memory"
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: "similarity_threshold: 0.9"
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: "ttl_seconds: 3600"
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: "eviction_policy: fifo"
+
+  - it: wires a shared Redis when one is named
+    set:
+      global.semanticRouter.semanticCache.enabled: true
+      global.semanticRouter.semanticCache.backend: redis
+      global.semanticRouter.semanticCache.redis.address: litellm-valkey:6379
+    asserts:
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: "backend_type: redis"
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: "host: litellm-valkey"
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: "port: 6379"
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: "name: semantic_cache_idx"
+
+  - it: defaults the Redis port when the address carries none
+    set:
+      global.semanticRouter.semanticCache.enabled: true
+      global.semanticRouter.semanticCache.backend: redis
+      global.semanticRouter.semanticCache.redis.address: litellm-valkey
+    asserts:
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: "port: 6379"

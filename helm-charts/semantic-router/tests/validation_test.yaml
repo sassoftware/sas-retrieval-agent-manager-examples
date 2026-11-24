@@ -1,0 +1,188 @@
+suite: render-time validation
+release:
+  name: sr
+  namespace: sr
+templates:
+  - templates/configmap-envoy.yaml
+tests:
+  # The whole design rests on the router NOT having a credential of its own.
+  # These are the four spellings of the same mistake.
+  - it: refuses a static access key on the LiteLLM backend
+    set:
+      semantic-router.configOverride.providers.models[0].backend_refs[0].access_key: shared-key
+    asserts:
+      - failedTemplate:
+          errorPattern: "overwrites every caller's key"
+
+  - it: refuses an api_key_env on the LiteLLM backend
+    set:
+      semantic-router.configOverride.providers.models[0].backend_refs[0].api_key_env: LITELLM_KEY
+    asserts:
+      - failedTemplate:
+          errorPattern: "api_key_env"
+
+  - it: refuses an Authorization header override
+    set:
+      semantic-router.configOverride.providers.models[0].backend_refs[0].auth_header: X-Api-Key
+    asserts:
+      - failedTemplate:
+          errorPattern: "auth_header"
+
+  - it: refuses an authz provider, which flips the credential resolver's defaults
+    set:
+      semantic-router.configOverride.global.services.authz.providers[0].type: header-injection
+    asserts:
+      - failedTemplate:
+          errorPattern: "global.services.authz"
+
+  # chat_path replaces the whole path instead of being appended to base_url, so
+  # setting it drops LiteLLM's mount prefix again.
+  - it: refuses chat_path, which would undo the base URL
+    set:
+      semantic-router.configOverride.providers.models[0].backend_refs[0].chat_path: /chat/completions
+    asserts:
+      - failedTemplate:
+          errorPattern: "REPLACES the whole request path"
+
+  # A base URL that does not end in /v1 is rejected by values.schema.json
+  # before any template runs (`^(|https?://.*/v1)$`), and again by
+  # `srouter.validate` for a URL assembled from serverRootPath. The schema path
+  # is asserted in ci/validate.sh, which can observe a failing `helm template`;
+  # helm-unittest reports a schema violation as a suite error rather than a
+  # failed template.
+
+  - it: refuses default_model, which does not exist in the v0.3 config
+    set:
+      semantic-router.configOverride.default_model: gpt-4o-mini
+    asserts:
+      - failedTemplate:
+          errorPattern: "not a field in the v0.3 config"
+
+  # Helm cannot template a subchart's values, so the Secret name is written
+  # twice and checked here.
+  - it: refuses a token Secret the subchart was never told to mount
+    set:
+      global.semanticRouter.managementApi.token.existingSecret.name: other-secret
+    asserts:
+      - failedTemplate:
+          errorPattern: "semantic-router.envFromSecrets"
+
+  - it: refuses a Secret key that is not the environment variable the router reads
+    set:
+      global.semanticRouter.managementApi.token.existingSecret.key: token
+    asserts:
+      - failedTemplate:
+          errorPattern: "must equal global.semanticRouter.managementApi.auth.tokenEnv"
+
+  # A guard with no checkpoint does not fail at runtime; it scores nothing and
+  # allows everything. An empty `modelPath` is rejected by the schema
+  # (minLength), and `srouter.validate` repeats the check for a guard whose
+  # path is dropped some other way — see ci/validate.sh.
+
+  - it: refuses a guard whose classifier would be re-downloaded on every restart
+    set:
+      global.semanticRouter.guards.pii.enabled: true
+      semantic-router.persistence.enabled: false
+    asserts:
+      - failedTemplate:
+          errorPattern: "persistence.enabled is false"
+
+  # An empty allow-list would publish nothing but the catch-all deny. The
+  # schema rejects it (minItems: 1) before templating; ci/validate.sh asserts
+  # that render fails.
+
+  - it: refuses a Redis-backed cache with nowhere to connect
+    set:
+      global.semanticRouter.semanticCache.enabled: true
+      global.semanticRouter.semanticCache.backend: redis
+    asserts:
+      - failedTemplate:
+          errorPattern: "semanticCache.redis.address is empty"
+
+  # Two replicas with a per-replica cache means the same prompt is answered
+  # from cache or fresh depending on which pod took it.
+  - it: refuses an in-process cache across more than one router replica
+    set:
+      global.semanticRouter.semanticCache.enabled: true
+      semantic-router.replicaCount: 2
+    asserts:
+      - failedTemplate:
+          errorPattern: "in-process semantic cache"
+
+  # An empty selector on :8080 admits every pod in the namespace to an API
+  # that can redirect prompts to a different LiteLLM key boundary.
+  - it: refuses a management API client that admits the whole namespace
+    set:
+      networkPolicy.extensionApi.podSelector: null
+    asserts:
+      - failedTemplate:
+          errorPattern: "admits EVERY pod in this namespace"
+
+  - it: refuses a policy with no management API client left
+    set:
+      networkPolicy.modelController.enabled: false
+      networkPolicy.extensionApi.enabled: false
+    asserts:
+      - failedTemplate:
+          errorPattern: "nothing can write or read routing policy"
+
+  - it: refuses a model list route the NetworkPolicy would drop
+    set:
+      envoy.routes.modelsFromRouter: true
+    asserts:
+      - failedTemplate:
+          errorPattern: "allowEnvoyToManagementApi"
+
+  - it: refuses to put the stats listener on the public port
+    set:
+      envoy.statsPort: 8080
+    asserts:
+      - failedTemplate:
+          errorPattern: "must differ"
+
+  - it: refuses an Ingress with no hostname
+    set:
+      routing.ingress.enabled: true
+    asserts:
+      - failedTemplate:
+          errorPattern: "requires at least one entry in routing.hosts"
+
+  - it: refuses an HTTPRoute attached to no Gateway
+    set:
+      routing.httpRoute.enabled: true
+    asserts:
+      - failedTemplate:
+          errorPattern: "parentRefs"
+
+  - it: refuses a root HTTPProxy with no FQDN
+    set:
+      routing.httpProxy.enabled: true
+    asserts:
+      - failedTemplate:
+          errorPattern: "a root HTTPProxy owns an FQDN"
+
+  - it: refuses TLS with no certificate
+    set:
+      routing.hosts: [router.example.com]
+      routing.ingress.enabled: true
+      routing.tls.enabled: true
+    asserts:
+      - failedTemplate:
+          errorPattern: "routing.tls.secretName"
+
+  - it: refuses a router reference it cannot resolve
+    set:
+      semantic-router.enabled: false
+    asserts:
+      - failedTemplate:
+          errorPattern: "routerService.name"
+
+  - it: renders against an externally deployed router when one is named
+    set:
+      semantic-router.enabled: false
+      global.semanticRouter.routerService.name: shared-router
+      global.semanticRouter.routerService.namespace: platform
+    asserts:
+      - matchRegex:
+          path: data["envoy.yaml"]
+          pattern: "address: shared-router.platform.svc.cluster.local"

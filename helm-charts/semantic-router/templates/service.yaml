@@ -1,0 +1,59 @@
+{{/*
+The release's entrypoint: the Envoy listener, and nothing else. The router's
+own ports are published by the subchart's Services, which no routing object in
+this chart ever points at — :50051 is a data path for Envoy and :8080 is a
+configuration API.
+
+The stats port is deliberately NOT here. It carries /stats/prometheus and
+/ready proxied from the admin interface; it belongs on a Service of its own
+(below) that routing never publishes.
+*/}}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "srouter.envoy.fullname" . }}
+  labels:
+    {{- include "srouter.labels" . | nindent 4 }}
+  {{- $annotations := merge (dict) (default dict .Values.service.annotations) (default dict .Values.commonAnnotations) }}
+  {{- with $annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  type: {{ .Values.service.type }}
+  {{- if eq .Values.service.type "LoadBalancer" }}
+  {{- with .Values.service.loadBalancerClass }}
+  loadBalancerClass: {{ . }}
+  {{- end }}
+  {{- with .Values.service.loadBalancerSourceRanges }}
+  loadBalancerSourceRanges:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  {{- end }}
+  ports:
+    - name: http
+      port: {{ .Values.service.port }}
+      targetPort: http
+      protocol: TCP
+  selector:
+    {{- include "srouter.selectorLabels" . | nindent 4 }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "srouter.envoy.fullname" . }}-stats
+  labels:
+    {{- include "srouter.labels" . | nindent 4 }}
+  {{- with .Values.commonAnnotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  type: ClusterIP
+  ports:
+    - name: stats
+      port: {{ .Values.envoy.statsPort }}
+      targetPort: stats
+      protocol: TCP
+  selector:
+    {{- include "srouter.selectorLabels" . | nindent 4 }}

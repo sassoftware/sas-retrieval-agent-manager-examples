@@ -1,0 +1,1038 @@
+# yaml-language-server: $schema=values.schema.json
+
+nameOverride: ""
+fullnameOverride: ""
+
+# Applied to every object this chart renders.
+commonLabels: {}
+commonAnnotations: {}
+
+# ─── Data flow ───────────────────────────────────────────────────────────────
+# Which of the two supported model-management flows this release runs.
+#
+# config   Models live in this file, under `models` / `proxyConfig.model_list`,
+#          and are rendered into the proxy's config.yaml ConfigMap. No
+#          database and no migration Job are deployed. Adding or changing a
+#          model is a `helm upgrade`, which rolls the Deployment (the pod
+#          template carries a checksum of the ConfigMap). Model state is
+#          reproducible from Git; nothing can be changed at runtime.
+#
+# database Models live in PostgreSQL. The chart sets
+#          `general_settings.store_model_in_db`, runs a migration Job
+#          (`prisma migrate deploy`) ahead of the proxy, and points the proxy
+#          at the database. Models are added and edited at runtime through the
+#          Admin UI or the /model/* API, with no redeploy. config.yaml is
+#          still mounted and still owns everything that is not a model
+#          (callbacks, router settings, guardrails, general_settings).
+#
+# Virtual keys, teams, budgets, and spend tracking need `database` — they have
+# no config.yaml representation.
+modelManagement:
+  mode: config
+
+  # database mode only. When true, `models` below is rendered into config.yaml
+  # as well, so those entries load on every start regardless of what the
+  # database holds. Use it to pin a floor of always-present models. They
+  # cannot be edited from the UI, because config entries are read-only there.
+  seedFromConfig: false
+
+# ─── Model catalog (config flow) ─────────────────────────────────────────────
+# Appended to `proxyConfig.model_list`. Secrets belong in an
+# `environmentSecrets` Secret and are referenced as `os.environ/<NAME>`; never
+# put a literal API key here.
+models:
+  # Replace this entry. It exists only so that a default `helm install`
+  # produces a proxy that starts: it points at LiteLLM's public mock endpoint
+  # and serves no real model.
+  - model_name: fake-openai-endpoint
+    litellm_params:
+      model: openai/fake
+      api_key: fake-key
+      api_base: https://exampleopenaiendpoint-production.up.railway.app/
+  # - model_name: gpt-4o
+  #   litellm_params:
+  #     model: azure/gpt-4o
+  #     api_base: https://example.openai.azure.com/
+  #     api_key: os.environ/AZURE_OPENAI_API_KEY
+  #   model_info:
+  #     mode: chat
+
+# Everything else in the proxy's config.yaml. Rendered verbatim, so any key the
+# proxy understands is available here. The chart fills in `master_key` and, in
+# database mode, `store_model_in_db` only when you have not set them yourself.
+# Reference: https://docs.litellm.ai/docs/proxy/configs
+proxyConfig:
+  general_settings: {}
+  # litellm_settings:
+  #   drop_params: true
+  #   callbacks: ["prometheus"]
+  # router_settings:
+  #   routing_strategy: usage-based-routing-v2
+
+config:
+  # Mount an existing ConfigMap instead of rendering one. `models` and
+  # `proxyConfig` are ignored in that mode.
+  existingConfigMap:
+    name: ""
+    key: config.yaml
+  # Path the config file is mounted at inside the container.
+  mountPath: /etc/litellm/config.yaml
+
+# ─── Workload ────────────────────────────────────────────────────────────────
+replicaCount: 1
+# Passed as --num_workers. Leave empty to let the image decide.
+numWorkers: ""
+# Address the proxy binds to inside the pod.
+listen: "0.0.0.0"
+
+# Addresses whose `X-Forwarded-*` headers the proxy believes, as
+# FORWARDED_ALLOW_IPS.
+#
+# TLS terminates at the ingress, so the request reaching the pod is plaintext.
+# Without this the proxy takes that at face value and builds `http://` URLs:
+# the trailing-slash redirect on `/ui` sends the browser to a plaintext URL,
+# and every other URL it emits carries the wrong scheme. uvicorn already parses
+# the headers that would tell it otherwise, but ignores them unless the sender
+# is listed here — and it defaults to 127.0.0.1, which in Kubernetes is never
+# the ingress.
+#
+# `*` trusts any client that can reach the pod. The Service is ClusterIP, so
+# that means in-cluster callers rather than the internet, and the header they
+# could forge is only consulted for the client IP in logs and for LiteLLM's
+# optional `allowed_ips`. On a cluster without NetworkPolicy, narrow it to
+# whatever fronts this release:
+#
+#   trustedProxies: ["10.244.0.0/16"]   # pod CIDR
+#
+# CIDR notation needs uvicorn 0.30 or newer; the chart's pinned image has it.
+# Set to [] to leave the variable unset and keep uvicorn's own default.
+trustedProxies: ["*"]
+
+# Mount the whole proxy under a path prefix instead of the domain root, by
+# setting SERVER_ROOT_PATH. Empty means the root.
+#
+# Defaults to `/litellm` because sharing a hostname is the common case, and at
+# the root LiteLLM claims `/ui`, `/v1`, `/docs`, `/health`, and more — an
+# awkward neighbour for the application that owns the site. Under the prefix
+# the Admin UI is at `/litellm/ui` and the API base is
+# `https://<host>/litellm/v1`, leaving every root path free.
+#
+# The proxy still answers its health endpoints at the root as well, so the
+# liveness and readiness probes are unaffected either way.
+#
+# Set to "" to claim the domain root instead. `routing.path` must match this
+# prefix; the chart checks that it does, so change both together.
+serverRootPath: /litellm
+
+# The Swagger UI and the OpenAPI schema behind it.
+#
+# LiteLLM serves Swagger at its MOUNT ROOT by default — upstream's DOCS_URL
+# defaults to "/" — so a browser opening the release lands on the API reference
+# rather than the Admin UI. This chart moves it to `/docs` instead, which is
+# where FastAPI conventionally puts it and where people go looking.
+#
+# With the chart defaults that is `<host>/litellm/docs`, and the Admin UI stays
+# at `<host>/litellm/ui`.
+#
+# `path: /` restores upstream's behaviour of serving Swagger at the mount root.
+# `enabled: false` removes the docs and the schema altogether, for a release
+# that should publish no API surface description at all.
+docs:
+  enabled: true
+  path: /docs
+
+image:
+  repository: ghcr.io/berriai/litellm
+  # Leave empty. The tag then follows the chart's appVersion, which is the
+  # upstream LiteLLM release this chart was written against, and the proxy and
+  # the migration Job are guaranteed to run the same one. Set it only to pin a
+  # different release than the chart targets; `latest` and `main-latest` are
+  # rejected, because a tag that moves between a Job run and a pod restart puts
+  # a different proxy version against the schema that Job just migrated.
+  tag: ""
+  pullPolicy: IfNotPresent
+imagePullSecrets: []
+
+serviceAccount:
+  # LiteLLM never calls the Kubernetes API, so it does not need one of its own.
+  # Create one when a cloud IAM binding (IRSA, Workload Identity) must be
+  # attached for IAM database auth.
+  create: false
+  automount: true
+  annotations: {}
+  name: ""
+
+deploymentAnnotations: {}
+deploymentLabels: {}
+deploymentMinReadySeconds: 0
+podAnnotations: {}
+podLabels: {}
+
+# e.g. {type: RollingUpdate, rollingUpdate: {maxUnavailable: 0, maxSurge: 1}}
+strategy: {}
+
+# Keep this a few seconds above GRACEFUL_SHUTDOWN_TIMEOUT (30s by default) so
+# in-flight requests finish before SIGKILL.
+terminationGracePeriodSeconds: 90
+topologySpreadConstraints: []
+
+podSecurityContext: {}
+# The image writes to the filesystem on startup. With
+# readOnlyRootFilesystem: true the chart adds emptyDir volumes for /tmp,
+# /.cache, and /.npm so the proxy still starts.
+securityContext: {}
+#  readOnlyRootFilesystem: true
+#  runAsNonRoot: true
+#  runAsUser: 1000
+#  allowPrivilegeEscalation: false
+#  capabilities:
+#    drop: ["ALL"]
+
+# Unset so the chart installs on a small cluster. A worker at DB-connected
+# steady state needs roughly 1 CPU and 4Gi; scale both with numWorkers.
+resources: {}
+#  requests:
+#    cpu: "1"
+#    memory: 4Gi
+#  limits:
+#    cpu: "1"
+#    memory: 4Gi
+
+nodeSelector: {}
+tolerations: []
+affinity: {}
+
+# Prefer the proxy's own /health/drain over a fixed sleep. It needs
+# general_settings.enable_drain_endpoint: true, and a drain_endpoint_token sent
+# on the X-Drain-Token header whenever the port is reachable from other pods.
+lifecycle: {}
+
+volumes: []
+volumeMounts: []
+extraContainers: []
+extraInitContainers: []
+
+# Override the image entrypoint. Leave empty to use the image default.
+command: []
+# Override the proxy arguments. Leave empty to use --config (and --num_workers).
+args: []
+
+# ─── Environment ─────────────────────────────────────────────────────────────
+# Secrets and ConfigMaps mounted wholesale as environment variables. Their keys
+# are what `os.environ/<NAME>` in config.yaml resolves against.
+environmentSecrets: []
+environmentConfigMaps: []
+
+# Sets LITELLM_LOG. Rendered as a direct `env:` entry, which outranks any
+# `envFrom:` source — set to "" to source it from a Secret or ConfigMap instead.
+logLevel: INFO
+
+# Plain key/value pairs, rendered as `env:` entries.
+envVars: {}
+# Full Kubernetes EnvVar list, for valueFrom and friends.
+extraEnvVars: []
+
+masterKey:
+  # Leave empty to generate `sk-...` on first install. Later upgrades reuse the
+  # value already in the Secret, so upgrading never rotates the key.
+  value: ""
+  # Use a Secret you manage instead. The chart then renders no Secret of its own.
+  existingSecret:
+    name: ""
+    key: masterkey
+
+# Enterprise license, read from a Secret into LITELLM_LICENSE.
+license:
+  existingSecret:
+    name: ""
+    key: license
+
+ui:
+  # Admin UI login, read from a Secret into UI_USERNAME / UI_PASSWORD. Without
+  # it, the UI is reached with the master key.
+  credentialsSecret:
+    name: ""
+    usernameKey: username
+    passwordKey: password
+
+# ─── Single sign-on ──────────────────────────────────────────────────────────
+# Sign in to the Admin UI with an OpenID Connect provider instead of the shared
+# master key. Wired through LiteLLM's generic OIDC support, so any compliant
+# provider works; the optional bootstrap Job below automates the Keycloak side.
+#
+# NOTE: SSO is a LiteLLM enterprise feature. Since v1.76.0 it is free for up to
+# five users; beyond that it needs a licence in `license.existingSecret`.
+sso:
+  enabled: false
+
+  # Browser-facing base URL of this proxy, including the scheme, and including
+  # `serverRootPath` when one is set. The provider redirects back to
+  # `<proxyBaseUrl>/sso/callback`, so a wrong value here surfaces as the
+  # provider rejecting the redirect_uri.
+  #
+  # Left empty, the chart derives it from routing.hosts[0], routing.tls, and
+  # routing.path, which is right whenever this release publishes its own host.
+  proxyBaseUrl: ""
+
+  clientId: litellm
+  scope: "openid profile email"
+
+  # Some providers require a state parameter, and some require PKCE.
+  clientState: ""
+  usePkce: false
+
+  # Endpoints are named separately because they are not called by the same
+  # party. The browser is redirected to `authorizationEndpoint`, so it must be
+  # the provider's public address. `tokenEndpoint` and `userinfoEndpoint` are
+  # called by the proxy pod, so they may be a cluster-internal address.
+  #
+  # Those two are frequently NOT interchangeable. A provider published through
+  # a cloud load balancer is often unreachable from inside the same cluster
+  # (hairpin NAT), while still advertising its public URL in its discovery
+  # document. Splitting them is what makes that deployment work.
+  authorizationEndpoint: ""
+  tokenEndpoint: ""
+  userinfoEndpoint: ""
+
+  # Where the provider sends the browser after sign-out. Empty leaves the
+  # proxy's own default.
+  logoutUrl: ""
+
+  clientSecret:
+    # Generated on first install when empty, then reused from the Secret on
+    # every later upgrade, so an upgrade never invalidates the provider-side
+    # registration.
+    value: ""
+    # Use a Secret you manage instead. The chart then renders none of its own
+    # and the bootstrap Job reads the client secret from here.
+    existingSecret:
+      name: ""
+      key: client-secret
+
+  # ─── Keycloak bootstrap ────────────────────────────────────────────────────
+  # One-shot Job that makes the Keycloak side match the settings above: an OIDC
+  # client with the right redirect URI, two client roles carrying LiteLLM's own
+  # role names, two groups mapped to those roles, a protocol mapper that puts
+  # the roles where LiteLLM looks for them, and optionally a break-glass
+  # administrator account.
+  #
+  # Every step reads before it writes, so the Job is safe to re-run and safe to
+  # point at a realm that another application already owns: it only ever
+  # touches objects it is named to manage.
+  keycloakBootstrap:
+    enabled: false
+
+    # Admin API base URL, as reachable from inside the cluster. This is the
+    # base of the Keycloak deployment, not a realm URL — for example
+    # `http://keycloak.identity.svc.cluster.local:8080` or, when Keycloak runs
+    # under a path, `http://keycloak:8080/auth`.
+    url: ""
+    realm: ""
+
+    # A Keycloak account that may administer `realm` — normally the `master`
+    # realm admin. Used only by this Job.
+    admin:
+      existingSecret:
+        name: ""
+        usernameKey: username
+        passwordKey: password
+      # Realm to authenticate the admin account against.
+      realm: master
+
+    # Client roles created on the LiteLLM client, and the groups granted them.
+    #
+    # The role VALUES have to be names LiteLLM recognises: proxy_admin,
+    # proxy_admin_viewer, internal_user, or internal_user_viewer. The group
+    # names are yours.
+    #
+    # Client roles rather than realm roles, so nothing this chart creates
+    # appears at realm scope or collides with another application's names.
+    roles:
+      admin: proxy_admin
+      user: internal_user
+    groups:
+      admin: litellm-admins
+      user: litellm-users
+
+    # A named administrator, so the first sign-in does not need the master key
+    # and so there is a way in that does not depend on a person's directory
+    # account. Put real users in the admin group instead of sharing this one.
+    adminUser:
+      enabled: true
+      username: llmadmin
+      email: ""
+      firstName: LiteLLM
+      lastName: Administrator
+      password:
+        # Generated on first install when empty, then reused.
+        value: ""
+        existingSecret:
+          name: ""
+          key: password
+      # Leave true so the account is usable immediately. Set false to force a
+      # password change at first sign-in, which needs a reachable account
+      # console.
+      permanentPassword: true
+
+    # Extra redirect URIs, beyond `<proxyBaseUrl>/sso/callback` and the
+    # `/sso/debug/callback` route LiteLLM uses to dump received claims.
+    extraRedirectUris: []
+
+    # Needs kcadm.sh. Keep this on the same minor version as the server.
+    image:
+      repository: quay.io/keycloak/keycloak
+      tag: "26.3.2"
+      pullPolicy: IfNotPresent
+
+    # Seconds to wait for Keycloak to answer before giving up.
+    waitTimeout: 300
+
+    backoffLimit: 4
+    ttlSecondsAfterFinished: 120
+    activeDeadlineSeconds: 900
+
+    annotations: {}
+    podAnnotations: {}
+    podSecurityContext: {}
+    securityContext: {}
+    resources: {}
+    nodeSelector: {}
+    tolerations: []
+    affinity: {}
+
+    hooks:
+      # Runs after the database is ready but before the proxy starts, so the
+      # provider is configured by the time anyone can reach the UI.
+      helm:
+        enabled: true
+        weight: "2"
+      argocd:
+        enabled: false
+
+# ─── Service ─────────────────────────────────────────────────────────────────
+service:
+  type: ClusterIP
+  port: 4000
+  annotations: {}
+  # Only used when type is LoadBalancer.
+  loadBalancerClass: ""
+  loadBalancerSourceRanges: []
+
+# Serve Prometheus /metrics from a separate process and port, so a scrape never
+# lands on an inference worker. The port carries no virtual-key auth: keep it
+# off public routing. Needs image v1.101.0 or newer.
+metricsServer:
+  enabled: false
+  port: 4001
+
+serviceMonitor:
+  enabled: false
+  labels: {}
+  annotations: {}
+  interval: 15s
+  scrapeTimeout: 10s
+  relabelings: []
+  namespaceSelector:
+    matchNames: []
+
+livenessProbe:
+  path: /health/liveliness
+  initialDelaySeconds: 0
+  periodSeconds: 15
+  timeoutSeconds: 5
+  successThreshold: 1
+  failureThreshold: 5
+
+readinessProbe:
+  path: /health/readiness
+  initialDelaySeconds: 0
+  periodSeconds: 10
+  timeoutSeconds: 5
+  successThreshold: 1
+  failureThreshold: 3
+
+startupProbe:
+  path: /health/readiness
+  initialDelaySeconds: 0
+  periodSeconds: 10
+  timeoutSeconds: 5
+  successThreshold: 1
+  failureThreshold: 30
+
+# ─── Routing ─────────────────────────────────────────────────────────────────
+# Shared settings first, then one block per implementation. More than one may
+# be enabled at a time, which is how you migrate from Ingress to Gateway API
+# without a gap.
+#
+# The chart never assembles a DATABASE_URL-style connection string here: each
+# implementation is rendered as its own native object, so controller-specific
+# fields stay first-class instead of being smuggled through annotations.
+routing:
+  # Hostnames this release answers on. Required for ingress and httpProxy;
+  # optional for httpRoute (a route with no hostname matches the listener's)
+  # and for route (OpenShift generates one).
+  hosts: []
+  # - litellm.example.com
+
+  # Path prefix the proxy is published under. The proxy serves the OpenAI API,
+  # the management API, and the UI from the same port, so one prefix covers all.
+  #
+  # Must match `serverRootPath`, which the proxy actually serves under. Set
+  # both to "/" and "" respectively to publish the domain root.
+  path: /litellm
+
+  tls:
+    enabled: false
+    # Secret of type kubernetes.io/tls. Ignored by `route`, which carries its
+    # own termination settings below.
+    secretName: ""
+
+  # Merged into every routing object this chart renders.
+  annotations: {}
+  labels: {}
+
+  # networking.k8s.io/v1 Ingress. Works with ingress-nginx, HAProxy, Traefik,
+  # and any other classic controller.
+  ingress:
+    enabled: false
+    className: ""
+    pathType: Prefix
+    annotations: {}
+    # Extra paths per host, e.g. to send /metrics somewhere else.
+    extraPaths: []
+    # - path: /ui
+    #   pathType: Prefix
+    #   service:
+    #     name: other-service
+    #     port: 8080
+
+  # gateway.networking.k8s.io/v1 HTTPRoute. Envoy Gateway, Contour, Istio,
+  # NGINX Gateway Fabric, and every other Gateway API implementation.
+  httpRoute:
+    enabled: false
+    # Required. The Gateway (or Gateways) this route attaches to.
+    parentRefs: []
+    # - name: eg
+    #   namespace: envoy-gateway-system
+    #   sectionName: https
+    # Overrides the match built from routing.path.
+    matches: []
+    # Applied to the generated rule, e.g. a URLRewrite or RequestHeaderModifier.
+    filters: []
+    # e.g. {request: 0s, backendRequest: 0s} to let long completions run.
+    timeouts: {}
+    # Appended after the generated rule.
+    extraRules: []
+    annotations: {}
+
+  # projectcontour.io/v1 HTTPProxy. Use this over a plain Ingress when you want
+  # Contour's retry policy, timeouts, or per-route load balancer policy.
+  httpProxy:
+    enabled: false
+
+    # Render a CHILD proxy instead of a root one.
+    #
+    # A root HTTPProxy owns an entire hostname, and Contour allows only one per
+    # FQDN. When another application already owns the hostname this release has
+    # to answer on, a second root is rejected — so that application delegates a
+    # path prefix to this one instead, through its own `includes` block:
+    #
+    #   # in the OTHER release's root HTTPProxy
+    #   includes:
+    #     - name: litellm
+    #       namespace: litellm
+    #       conditions:
+    #         - prefix: /litellm
+    #
+    # A child declares no `virtualhost`: that is what distinguishes it from a
+    # competing root. It inherits the parent's hostname AND its TLS, so
+    # `routing.hosts` and `routing.tls` are not needed here and are ignored.
+    #
+    # Contour concatenates the parent's condition with this release's own, so
+    # the generated route matches `/` rather than `routing.path` — repeating
+    # the prefix would publish /litellm/litellm. `serverRootPath` still has to
+    # match the prefix the parent delegates, because that is what the proxy
+    # itself serves under.
+    #
+    # The child is only reachable while the parent includes it. Left
+    # undelegated it is "orphaned", and Contour ignores it entirely.
+    delegated: false
+
+    # Set this whenever Contour runs with `--ingress-class-name`, which is the
+    # common case. A proxy whose class does not match is ignored SILENTLY: the
+    # object sits at `NotReconciled`, and the delegating parent reports
+    # `IncludeNotFound` as though this object did not exist — so the error
+    # points at the wrong release. Verified against Contour 1.33.
+    ingressClassName: ""
+    tls:
+      # Defaults to routing.tls.secretName. Ignored when delegated: a child has
+      # no virtualhost to attach a certificate to.
+      secretName: ""
+      minimumProtocolVersion: "1.2"
+      passthrough: false
+    # Contour MatchConditions; overrides the prefix built from routing.path.
+    conditions: []
+    loadBalancerPolicy: {}
+    # e.g. {responseTimeout: 600s, idleConnectionTimeout: 60s}
+    timeoutPolicy: {}
+    retryPolicy: {}
+    # Appended after the generated route.
+    extraRoutes: []
+    includes: []
+    annotations: {}
+
+  # route.openshift.io/v1 Route.
+  route:
+    enabled: false
+    wildcardPolicy: None
+    tls:
+      termination: edge
+      insecureEdgeTerminationPolicy: Redirect
+      # Only needed for reencrypt or passthrough with a custom certificate.
+      destinationCACertificate: ""
+    annotations: {}
+
+# ─── Database (database flow) ────────────────────────────────────────────────
+# Forced on when modelManagement.mode is `database`. Turn it on independently to
+# get virtual keys, teams, budgets, and spend tracking while still managing
+# models from config.yaml.
+#
+# This chart deploys no database. Point it at a PostgreSQL 14 or later server
+# you already run — a managed one (Azure Database for PostgreSQL, RDS,
+# Cloud SQL) or an operator-managed cluster.
+#
+# Credentials are read from a Secret only; the chart accepts no inline password.
+# It emits the discrete DATABASE_* variables and lets the proxy assemble and
+# percent-encode the URL, so reserved characters in a password cannot corrupt it.
+database:
+  enabled: false
+
+  host: ""
+  port: 5432
+  name: litellm
+  # Postgres schema, when the proxy does not own the whole database.
+  schema: "litellm"
+
+  # Appended to the assembled URL. `verify-full` with a root cert is the
+  # setting a managed PostgreSQL service expects.
+  sslMode: ""
+  # In-container path to a CA certificate, from a Secret you mount through
+  # `volumes` / `volumeMounts`. Setting it implies sslMode verify-full.
+  sslRootCert: ""
+
+  auth:
+    # password   DATABASE_PASSWORD, read from the Secret below.
+    # awsIam     IAM_TOKEN_DB_AUTH. The proxy mints an RDS IAM token at
+    #            startup; no password is read.
+    # azureEntra AZURE_POSTGRESQL_AUTH, for Microsoft Entra ID auth.
+    # Both token modes need a ServiceAccount with the cloud IAM binding, so set
+    # serviceAccount.create and annotate it.
+    mode: password
+
+  existingSecret:
+    name: ""
+    usernameKey: username
+    passwordKey: password
+    # When set, the whole connection URL is taken from this key and the
+    # discrete host/port/name settings above are not emitted. Use it when the
+    # URL carries parameters the discrete fields cannot express.
+    urlKey: ""
+    # When set, the host is read from this key instead of `host` above.
+    hostKey: ""
+
+  # Send read-only queries to a replica. Fields left empty fall back to the
+  # writer's values.
+  readReplica:
+    enabled: false
+    host: ""
+    port: ""
+    existingSecret:
+      name: ""
+      usernameKey: ""
+      passwordKey: ""
+      urlKey: ""
+      hostKey: ""
+
+  # In-pod PgBouncer in transaction mode, shared by every worker. Without it a
+  # pod holds numWorkers x connection_limit upstream connections. A starting
+  # profile for numWorkers 4 is maxDbConnections 20.
+  connectionPool:
+    enabled: false
+    maxDbConnections: 20
+    maxClientConn: 1000
+
+  # Required in front of an external transaction-mode pooler.
+  disablePreparedStatements: false
+  # Seconds. Recycles pooled sockets before infrastructure idle timeouts drop
+  # them. The proxy defaults to 60.
+  maxIdleConnectionLifetime: ""
+
+  # ─── Initialization ────────────────────────────────────────────────────────
+  # Optional one-shot Job that creates the database, the login role, and the
+  # schema on a PostgreSQL server that is running but empty. Off by default,
+  # because the usual case is a database a DBA already provisioned.
+  #
+  # The credentials in `database.existingSecret` above are the INPUT to this
+  # Job, not something it reads back: it creates a role with that username and
+  # password, owning `database.name` and `database.schema`. The proxy then
+  # authenticates as that role. One Secret, written once, used by both.
+  #
+  # Creating a database and a role needs an administrator. Those admin
+  # credentials are separate, are used only by this Job, and are erased from
+  # the cluster as soon as it succeeds. Ordering is enforced by Helm hook
+  # weight, so this Job completes before the migration Job and long before the
+  # proxy starts.
+  #
+  # Every statement is idempotent: an existing database, role, or schema is
+  # left in place and only the role's password is reset to match the Secret.
+  init:
+    enabled: false
+
+    admin:
+      # A user that may CREATE DATABASE and CREATE ROLE. On a managed service
+      # this is the server administrator, not a superuser.
+      #
+      # Inline values are rendered into a Secret that this chart creates and
+      # then empties once the Job succeeds.
+      #
+      # NOTE: an inline password is still recorded in the Helm release secret,
+      # which `helm get values` can read. To keep it out of the release
+      # entirely, create the Secret yourself and name it under
+      # `existingSecret` below.
+      username: ""
+      password: ""
+
+      # Read the admin credentials from a Secret you manage instead. The chart
+      # then creates no Secret of its own — and erases nothing, because it
+      # only destroys what it created. Rotating or deleting that Secret after
+      # the Job has run is yours to do.
+      existingSecret:
+        name: ""
+        usernameKey: username
+        passwordKey: password
+
+      # Database to connect to in order to issue CREATE DATABASE, which cannot
+      # run inside the database being created.
+      database: postgres
+
+      # Falls back to database.sslMode when empty.
+      sslMode: ""
+
+    # Each step is skipped when the object already exists.
+    createDatabase: true
+    createUser: true
+    # Needs a non-empty database.schema.
+    createSchema: true
+
+    # Erase the admin credentials from the cluster once the Job succeeds. The
+    # Job runs a second container that patches the `username` and `password`
+    # keys out of the Secret this chart created, so they no longer sit in the
+    # namespace for anything with `get secret` to read.
+    #
+    # This applies only to the Secret the chart created. With
+    # `admin.existingSecret` there is nothing of ours to erase and this does
+    # nothing, which is why the NOTES on install tell you which case you are in.
+    cleanup: true
+
+    # Seconds to wait for the server to accept connections before giving up.
+    waitTimeout: 300
+
+    # Needs psql and pg_isready. Any PostgreSQL client image will do.
+    image:
+      repository: postgres
+      tag: "17-alpine"
+      pullPolicy: IfNotPresent
+
+    # Used only by the cleanup container.
+    kubectlImage:
+      repository: registry.k8s.io/kubectl
+      tag: "v1.34.0"
+      pullPolicy: IfNotPresent
+
+    # The cleanup container needs `get` and `patch` on exactly one Secret. The
+    # chart creates a ServiceAccount, Role, and RoleBinding scoped to that one
+    # name. Set `create: false` and name your own to supply the RBAC yourself.
+    serviceAccount:
+      create: true
+      name: ""
+      annotations: {}
+
+    backoffLimit: 4
+    ttlSecondsAfterFinished: 120
+    # Wall-clock budget for the whole Job, shared across every retry.
+    activeDeadlineSeconds: 900
+
+    annotations: {}
+    podAnnotations: {}
+    podSecurityContext: {}
+    securityContext: {}
+    resources: {}
+    nodeSelector: {}
+    tolerations: []
+    affinity: {}
+
+    hooks:
+      # Runs ahead of the migration Job, which uses weight "1". Keep this
+      # weight below that one.
+      helm:
+        enabled: true
+        weight: "-5"
+      # Turn this on and the Helm hook off under a GitOps controller. The weight
+      # above is reused as the sync wave, so this Job stays ahead of the
+      # migration Job under either controller.
+      argocd:
+        enabled: false
+
+# ─── Redis ───────────────────────────────────────────────────────────────────
+# The proxy's coordination store: cross-pod tpm/rpm limits, spend tracking, and
+# the pod lock manager. Required for correct rate limiting above one replica,
+# and the backend the response cache below is wired to.
+#
+# Point this at a Redis or Valkey you already run. Leave `host` empty and set
+# `valkey.enabled` instead to have the chart deploy one for you — see the
+# Valkey block further down.
+#
+# `host` always wins. When it is set, the bundled Valkey is not consulted for
+# the address even if it is also deployed, so pointing this chart at an
+# external server is never something the subchart can silently override.
+redis:
+  host: ""
+  port: 6379
+  existingSecret:
+    name: ""
+    passwordKey: password
+  sentinel:
+    enabled: false
+    masterSet: mymaster
+  # Render general_settings.coordination_redis from the settings above. Set to
+  # false to wire only the REDIS_* variables, e.g. for response caching alone.
+  # A coordination_redis block you write in proxyConfig always wins.
+  coordination: true
+
+# ─── Response cache ──────────────────────────────────────────────────────────
+# Cache completion responses in Redis, so an identical request is answered from
+# the cache instead of being billed and rate-limited by the provider again.
+#
+# The cache is shared by every replica, which is the point of putting it in
+# Redis: one pod's hit serves the next pod's request. It needs a Redis — either
+# one you name in `redis.host` or the bundled Valkey below — and the chart
+# fails the render rather than start a proxy whose cache silently does nothing.
+#
+# This block renders `litellm_settings.cache` and `litellm_settings.cache_params`
+# into config.yaml, and only where you have not written those keys yourself. A
+# `cache` or `cache_params` block in `proxyConfig` always wins — whole-key, not
+# merged — so any cache LiteLLM supports but this chart does not model (s3,
+# disk, qdrant-semantic, redis-semantic) is still reachable by writing
+# `cache_params` directly.
+#
+# Reference: https://docs.litellm.ai/docs/proxy/caching
+cache:
+  enabled: false
+
+  # Only `redis` is accepted. It is the one backend the chart can wire
+  # end-to-end — address, port, and password all come from the Redis settings
+  # above — and the one that behaves correctly with more than one replica.
+  # LiteLLM's in-memory cache is per worker process, so on a two-replica,
+  # four-worker deployment it would hold eight unrelated caches and hit on
+  # roughly one request in eight. Write `cache_params` yourself for anything
+  # else; the chart then renders none of this.
+  type: redis
+
+  # Seconds a cached response stays valid. Empty leaves LiteLLM's own default,
+  # which never expires entries and relies on Redis eviction instead.
+  ttl: ""
+
+  # Key prefix, so several releases can share one Redis without reading each
+  # other's entries. Empty leaves LiteLLM's default prefix.
+  namespace: ""
+
+  # Which call types are cached. Empty leaves LiteLLM's default, which is every
+  # type it knows. Narrow it when only some of them are worth caching:
+  #
+  #   supportedCallTypes: ["acompletion", "completion", "aembedding", "embedding"]
+  #
+  # Embeddings are the usual reason to turn caching on at all: the same
+  # document chunk is embedded identically every time it is re-indexed.
+  supportedCallTypes: []
+
+# ─── Bundled Valkey ──────────────────────────────────────────────────────────
+# Deploy a Valkey (the Redis fork, same wire protocol) alongside this release,
+# through the Valkey project's own chart, and point `redis.*` at it
+# automatically. Off by default: a cluster that already runs Redis should use
+# it, and this chart's long-standing position is that stateful infrastructure
+# belongs to whoever backs it up.
+#
+# Switching it on is appropriate for a response cache specifically, because
+# cache contents are reconstructible: losing the StatefulSet costs latency and
+# provider spend, never data. Do not put spend records behind it without
+# enabling persistence (`valkey.replica.persistence`, or a primary volume) and
+# treating it like any other database.
+#
+# When enabled and `redis.host` is empty the chart derives, from this subchart's
+# own values so the two can never drift:
+#   REDIS_HOST       the Valkey primary Service, fully qualified
+#   REDIS_PORT       valkey.service.port
+#   REDIS_PASSWORD   the Secret the subchart reads the `default` user's
+#                    password from, when valkey.auth.enabled is true
+# and renders `general_settings.coordination_redis` as well, unless
+# `redis.coordination` is false.
+#
+# Every other key under `valkey` is passed through to the subchart untouched;
+# see https://github.com/valkey-io/valkey-helm for its full values reference.
+# The chart's own schema accepts them without listing them, which is the one
+# place it is not strict about unknown keys — it cannot be, because the
+# subchart's value surface is not ours to enumerate.
+#
+# Authentication is off in the subchart's defaults, which means any pod that
+# can reach the Service can read the cache. Turn it on for a shared cluster:
+#
+#   valkey:
+#     enabled: true
+#     auth:
+#       enabled: true
+#       usersExistingSecret: litellm-valkey-acl   # key `default`
+#       aclUsers:
+#         default:
+#           permissions: "~* &* +@all"
+#
+# With `usersExistingSecret` the password is yours to create and rotate. With
+# an inline `aclUsers.default.password` the subchart writes it into its own
+# `<release>-valkey-auth` Secret — and into the Helm release secret, which
+# `helm get values` can read — and this chart reads `default-password` from
+# there. Either way the proxy gets the password from a Secret reference, never
+# an inline environment value.
+valkey:
+  enabled: false
+
+# ─── Langfuse tracing ────────────────────────────────────────────────────────
+# Send every request the proxy handles to Langfuse: prompt, response, model,
+# latency, token counts, and cost, grouped into traces.
+#
+# `enabled` only wires this release to a Langfuse. It appends `langfuse` to
+# `litellm_settings.success_callback` and `failure_callback` — appends, so a
+# callback list you already wrote in `proxyConfig` keeps every entry it has —
+# and sets LANGFUSE_HOST, LANGFUSE_PUBLIC_KEY, and LANGFUSE_SECRET_KEY on the
+# proxy.
+#
+# The keys are project keys (`pk-lf-...` / `sk-lf-...`), created in the Langfuse
+# UI under Settings → API keys, and they come from a Secret in both modes. This
+# chart accepts no inline Langfuse key, for the same reason it accepts no
+# inline database password.
+#
+#   kubectl -n litellm create secret generic litellm-langfuse \
+#     --from-literal=public-key=pk-lf-... \
+#     --from-literal=secret-key=sk-lf-...
+#
+# NOTE: callbacks are a hot path. A Langfuse that is unreachable costs every
+# request the callback's timeout, so point `host` at an address in the same
+# cluster or region where you can.
+langfuse:
+  enabled: false
+
+  # Base URL of the Langfuse server, including the scheme — the proxy posts to
+  # it from inside the pod, so a cluster-internal address is both allowed and
+  # preferred. Leave empty with `deploy.enabled` on to use the bundled
+  # instance's own Service.
+  host: ""
+
+  existingSecret:
+    name: ""
+    publicKeyKey: public-key
+    secretKeyKey: secret-key
+
+  # ─── Deploying Langfuse itself ─────────────────────────────────────────────
+  # Off by default, and the default is the recommendation.
+  #
+  # Langfuse is a platform, not a sidecar. Turning this on adds, in this one
+  # release: the Langfuse web and worker Deployments, PostgreSQL (its
+  # transactional store), a ClickHouse cluster (its analytics store),
+  # another Valkey (its queue), and SeaweedFS for S3-compatible blob storage.
+  # That is roughly ten workloads and several PersistentVolumeClaims next to a
+  # proxy that is itself stateless.
+  #
+  # It also has cluster-level prerequisites that this chart cannot install and
+  # does not check for you:
+  #   - the Altinity ClickHouse operator (clickhouse.com/v1alpha1), and
+  #   - cert-manager, which that operator requires.
+  # Without them the subchart fails its own render with a message naming the
+  # missing CRD. For an offline render — `helm template`, or a GitOps diff
+  # against a cluster whose CRDs are not visible — set
+  # `langfuse.clickhouse.crdCheck: false`.
+  #
+  # Use it for an evaluation cluster, or where Langfuse genuinely has no other
+  # home. For anything you intend to keep, run Langfuse as its own release with
+  # its own lifecycle and point `host` at it: an upgrade of this proxy should
+  # not be able to take the observability stack down with it.
+  #
+  # Project keys are not created by deploying the server. Sign in, create an
+  # organization and a project, issue a key pair, and put it in the Secret
+  # above. `existingSecret.name` is required either way.
+  #
+  # Every other key under `langfuse` is passed through to the subchart
+  # untouched (`langfuse.postgresql`, `langfuse.clickhouse`, `langfuse.s3`,
+  # `langfuse.langfuse`, and so on); see
+  # https://github.com/langfuse/langfuse-k8s for its values reference.
+  deploy:
+    enabled: false
+
+# ─── Migration Job (database flow) ───────────────────────────────────────────
+# Runs `prisma migrate deploy` once, ahead of the proxy, so N replicas do not
+# race one database on every rollout. While it is enabled the proxy starts with
+# DISABLE_SCHEMA_UPDATE=true.
+migrationJob:
+  enabled: true
+  backoffLimit: 4
+  ttlSecondsAfterFinished: 120
+  # Wall-clock budget for the whole Job, shared across every retry. Without it
+  # a migration blocked on the database never fails, and a Helm hook release
+  # waits on it forever. Set to null to opt out.
+  activeDeadlineSeconds: 1800
+  annotations: {}
+  podAnnotations: {}
+  # Needed when the Job requires its own cloud IAM identity for token auth.
+  serviceAccountName: ""
+  resources: {}
+  extraContainers: []
+  extraInitContainers: []
+  hooks:
+    # A Job's pod template is immutable, so a stable-named Job cannot be
+    # updated in place: the first `helm upgrade` that changes the image tag or
+    # an env var is rejected. The Helm hook deletes and recreates the Job
+    # ahead of each install and upgrade, which is what makes repeated upgrades
+    # work. Leave it on for plain Helm.
+    helm:
+      enabled: true
+      weight: "1"
+    # Turn this on and the Helm hook off when a GitOps controller runs the Job
+    # as a PreSync hook. Running both at once migrates twice.
+    argocd:
+      enabled: false
+
+# ─── Scaling ─────────────────────────────────────────────────────────────────
+autoscaling:
+  enabled: false
+  minReplicas: 1
+  maxReplicas: 100
+  targetCPUUtilizationPercentage: 60
+  # Deliberately unset. The prisma query engine's resident memory is a
+  # high-water mark that never comes back down, so a memory target reads the
+  # largest write a pod ever did rather than its current load, and replicas
+  # ratchet up without ever scaling back in. Size memory under `resources`.
+  targetMemoryUtilizationPercentage: ""
+  # autoscaling/v2 Pods metrics on the proxy's own counters. Both need a
+  # Prometheus Adapter serving these names on custom.metrics.k8s.io.
+  targetRequestsPerSecond: ""
+  targetTokensPerSecond: ""
+  behavior: {}
+
+pdb:
+  enabled: false
+  # Set exactly one of the two.
+  minAvailable: null
+  maxUnavailable: null
+  annotations: {}
+  labels: {}
+
+# Arbitrary manifests rendered alongside the release, e.g. an ExternalSecret or
+# a NetworkPolicy. Each entry is a complete object and is run through `tpl`.
+extraResources: []

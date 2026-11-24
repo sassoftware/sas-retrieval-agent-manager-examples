@@ -1,0 +1,86 @@
+suite: install notes
+release:
+  name: rel
+  namespace: litellm
+# NOTES.txt is rendered by `helm install` and by nothing else: `helm template`
+# skips it entirely, and so therefore does ci/validate.sh. A broken reference
+# in it is invisible until an operator installs the chart, which makes this
+# suite the only thing standing between that and a release.
+#
+# Its own suite because helm-unittest resolves a template only against the
+# suite-level list, so NOTES.txt cannot be asserted from a suite that also
+# names manifests.
+templates:
+  - templates/NOTES.txt
+tests:
+  - it: names the bundled cache and warns that it is unauthenticated
+    set:
+      cache.enabled: true
+      valkey.enabled: true
+    asserts:
+      - matchRegexRaw:
+          pattern: "Response cache: rel-valkey\\.litellm\\.svc\\.cluster\\.local:6379"
+      - matchRegexRaw:
+          pattern: "Deployed by this release, as rel-valkey\\."
+      - matchRegexRaw:
+          pattern: "valkey\\.auth\\.enabled is false"
+
+  - it: drops the unauthenticated warning once authentication is on
+    set:
+      cache.enabled: true
+      valkey.enabled: true
+      valkey.auth.enabled: true
+      valkey.auth.usersExistingSecret: valkey-acl
+      valkey.auth.aclUsers.default.permissions: "~* &* +@all"
+    asserts:
+      - notMatchRegexRaw:
+          pattern: "valkey\\.auth\\.enabled is false"
+
+  - it: names an external cache without claiming the chart deployed it
+    set:
+      cache.enabled: true
+      redis.host: redis.example.com
+    asserts:
+      - matchRegexRaw:
+          pattern: "Response cache: redis\\.example\\.com:6379"
+      - notMatchRegexRaw:
+          pattern: "Deployed by this release"
+
+  # The keys are the one thing deploying the server does not give you, so the
+  # notes have to say so.
+  - it: tells the operator the Langfuse keys are still theirs to create
+    set:
+      langfuse.enabled: true
+      langfuse.deploy.enabled: true
+      langfuse.existingSecret.name: litellm-langfuse
+      langfuse.clickhouse.crdCheck: false
+    asserts:
+      - matchRegexRaw:
+          pattern: "Tracing: http://rel-langfuse-web\\.litellm\\.svc\\.cluster\\.local:3000"
+      - matchRegexRaw:
+          pattern: "the keys are not"
+
+  - it: says nothing about either feature when both are off
+    asserts:
+      - notMatchRegexRaw:
+          pattern: "Response cache:"
+      - notMatchRegexRaw:
+          pattern: "Tracing:"
+
+  # The multi-replica warning follows the Redis this release actually resolved
+  # to, so deploying a Valkey silences it exactly as naming an external server
+  # does.
+  - it: warns about per-pod rate limits with no Redis at all
+    set:
+      replicaCount: 3
+    asserts:
+      - matchRegexRaw:
+          pattern: "replicaCount is 3 but this release has no Redis"
+
+  - it: drops that warning once the bundled Valkey is deployed
+    set:
+      replicaCount: 3
+      valkey.enabled: true
+    asserts:
+      - notMatchRegexRaw:
+          pattern: "this release has no Redis"
