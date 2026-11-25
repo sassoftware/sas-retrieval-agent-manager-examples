@@ -45,7 +45,17 @@ Anchored on the trailing newline rather than matched loosely. There are
 exactly ten occurrences for ten presets, all of them the metadata field, and
 the anchor is what keeps that true if a future version of the file mentions
 the namespace somewhere a rewrite would break -- a container argument, say.
+
+Line endings are normalised FIRST, and that is load-bearing rather than
+tidiness. An anchor ending in "\n" matches nothing at all in a file checked
+out with CRLF, which is what a Windows clone gets by default, and the failure
+is silent: all ten presets keep `namespace: kserve`, Helm reports success, and
+the first symptom is a model accepted by the API and then never scheduled --
+precisely what this file exists to prevent. Worse, it survives packaging, so a
+chart published from such a clone carries the broken presets to every cluster
+that installs it.
 */}}
 {{- $namespace := printf "namespace: %s\n" .Release.Namespace }}
-{{ .Files.Get "files/llmisvcconfigs/resources.yaml" | replace "namespace: kserve\n" $namespace }}
+{{- $presets := .Files.Get "files/llmisvcconfigs/resources.yaml" | replace "\r\n" "\n" }}
+{{ $presets | replace "namespace: kserve\n" $namespace }}
 {{- end }}
