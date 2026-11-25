@@ -1,0 +1,11 @@
+# Keep the files whose CONTENT is matched byte for byte on LF, whatever the
+# clone's core.autocrlf says.
+#
+# helm-charts/model-serving/templates/llmisvcconfigs.yaml rewrites the vendored
+# KServe presets with a string replacement anchored on "namespace: kserve\n".
+# Checked out with CRLF that anchor matches nothing, every preset keeps
+# `namespace: kserve`, and Helm still reports success -- the first symptom is a
+# multi-node model accepted by the API and then never scheduled. The template
+# normalises line endings itself as well; this is the other half, so the
+# working tree a chart is packaged from is the same bytes CI sees.
+helm-charts/model-serving/files/llmisvcconfigs/*.yaml text eol=lf

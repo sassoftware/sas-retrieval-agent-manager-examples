@@ -263,6 +263,29 @@ helm upgrade --install model-serving ./helm-charts/model-serving \
   operator itself. Off by default because it is cluster-scoped and a
   single-node model never touches it.
 
+  Consider lowering `--history-max` when you turn this on. The LeaderWorkerSet
+  CRD is 1.2 MB, which adds roughly 250 KB to every stored revision --
+  measured on one release, 441 KB per revision before and 698 KB after. Helm
+  keeps each revision as a gzipped Secret and reads them all back with a
+  single label-selected list, so its default of ten revisions turns that list
+  into a multi-megabyte response. Over a constrained path it does not arrive:
+
+  ```text
+  Error: list: failed to list: stream error when reading response body,
+  may be caused by closed connection. Please retry. Original error:
+  stream error: stream ID 3; NO_ERROR; received from peer
+  ```
+
+  Every `helm list` and every upgrade fails together, which reads like a
+  cluster fault. It is not: fetching the same Secrets one at a time, or with
+  `-o name`, still works. `helm upgrade --history-max 3` keeps the list small
+  enough and still leaves a rollback target.
+
+  Helm itself has no trouble *owning* a CRD this size. The 262144-byte ceiling
+  that forces `kubectl apply --server-side` on the larger KServe CRDs is
+  kubectl's `last-applied-configuration` annotation, and Helm 3 does not use
+  it.
+
 - **`components.llmisvcConfigs.enabled`** renders the ten
   `LLMInferenceServiceConfig` presets into the release namespace. Without the
   worker preset the object reports:
