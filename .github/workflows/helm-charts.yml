@@ -48,7 +48,7 @@ jobs:
       publish_charts: ${{ steps.detect.outputs.publish_charts }}
       any_validate: ${{ steps.detect.outputs.any_validate }}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           # fetch-depth: 0 fetches the complete history of every branch and tag.
           # Without it the runner makes a shallow clone of one commit, and no
@@ -233,7 +233,7 @@ jobs:
       # chart is validated but never republished.
       CHART_PUBLISHABLE: ${{ contains(fromJSON(needs.discover.outputs.publish_charts), matrix.chart) }}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
           # The default GITHUB_TOKEN is kept so the commit-back step can push.
