@@ -49,7 +49,7 @@ jobs:
       # failure locally with `npx markdownlint-cli2` and fix the mechanical
       # ones with `npx markdownlint-cli2 --fix`.
       - name: Lint Markdown
-        uses: DavidAnson/markdownlint-cli2-action@v20
+        uses: DavidAnson/markdownlint-cli2-action@v25
 
   validate:
     needs: lint
